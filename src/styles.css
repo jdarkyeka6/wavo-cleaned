@@ -1399,3 +1399,21 @@ body::before {
   opacity: 0.6;
 }
 .va-bubble .msg-image { max-width: 220px; border-radius: 10px; }
+
+/* remove-strike (undo) button */
+.unstrike-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid #34d399;
+  color: #34d399;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 5px 9px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.unstrike-btn:hover { background: #34d399; color: #04110b; }

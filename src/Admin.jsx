@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Lock,
+  Minus,
 } from "lucide-react";
 
 export default function Admin({ me, onBack }) {
@@ -191,6 +192,22 @@ export default function Admin({ me, onBack }) {
     loadUsers();
   }
 
+  async function removeStrike(userId) {
+    if (!userId) return;
+    // remove this user's most recent strike
+    const theirs = strikes
+      .filter((s) => s.user_id === userId)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    if (theirs.length === 0) return;
+    const { error } = await supabase.from("strikes").delete().eq("id", theirs[0].id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    loadStrikes();
+    loadUsers();
+  }
+
   async function applyBan(userId, choice) {
     if (!userId) return;
     let banned_until;
@@ -269,6 +286,15 @@ export default function Admin({ me, onBack }) {
         <button className="strike-btn" onClick={() => issueStrike(userId)} title="Give a strike">
           <AlertTriangle size={14} /> Strike{sc ? ` (${sc})` : ""}
         </button>
+        {sc > 0 && (
+          <button
+            className="unstrike-btn"
+            onClick={() => removeStrike(userId)}
+            title="Remove their most recent strike"
+          >
+            <Minus size={14} /> Strike
+          </button>
+        )}
         {banned ? (
           <button className="lift-btn" onClick={() => applyBan(userId, "lift")} title="Lift the ban">
             Unban
