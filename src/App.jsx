@@ -469,6 +469,18 @@ export default function App() {
     else alert("Reported — an admin will review it.");
   }
 
+  async function reportUser(user) {
+    const reason = window.prompt(`Report ${user.username}? Add a reason (optional):`);
+    if (reason === null) return; // cancelled
+    const { error } = await supabase.from("flags").insert({
+      reported_user_id: user.id,
+      reporter_id: currentUser.id,
+      reason: reason.trim() || null,
+    });
+    if (error) alert(error.message);
+    else alert(`Reported ${user.username} — an admin will review it.`);
+  }
+
   // --- ACTIONS ---
   function openChat(user) {
     setSelectedUser(user);
@@ -850,7 +862,16 @@ export default function App() {
           <>
             <header className="chat-header">
               <h3>{selectedUser.username}</h3>
-              <div className="status-pill">Live</div>
+              <div className="chat-header-right">
+                <button
+                  className="report-user-btn"
+                  onClick={() => reportUser(selectedUser)}
+                  title={`Report ${selectedUser.username}`}
+                >
+                  <Flag size={14} /> Report
+                </button>
+                <div className="status-pill">Live</div>
+              </div>
             </header>
             <div className="messages">
               {messages.map((msg) => {

@@ -12,6 +12,7 @@ import {
   Search,
   CheckCircle2,
   AlertTriangle,
+  Lock,
 } from "lucide-react";
 
 export default function Admin({ me, onBack }) {
@@ -25,6 +26,12 @@ export default function Admin({ me, onBack }) {
 
   const [viewerId, setViewerId] = useState("");
   const [viewerMessages, setViewerMessages] = useState([]);
+
+  // "view as user" — read-only one-way mirror
+  const [viewAs, setViewAs] = useState(null);
+  const [vaFriends, setVaFriends] = useState([]);
+  const [vaSelected, setVaSelected] = useState(null);
+  const [vaMessages, setVaMessages] = useState([]);
 
   // --- LOAD ---
   useEffect(() => {
@@ -124,11 +131,53 @@ export default function Admin({ me, onBack }) {
     setViewerMessages(data || []);
   }
 
+  // --- VIEW AS USER (read-only) ---
+  async function openViewAs(user) {
+    if (!user) return;
+    setViewAs(user);
+    setVaSelected(null);
+    setVaMessages([]);
+    const { data: rows } = await supabase
+      .from("friend_requests")
+      .select("sender_id, receiver_id")
+      .eq("status", "accepted")
+      .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
+    const otherIds = (rows || []).map((r) =>
+      r.sender_id === user.id ? r.receiver_id : r.sender_id
+    );
+    if (otherIds.length) {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, username")
+        .in("id", otherIds);
+      setVaFriends(profs || []);
+    } else {
+      setVaFriends([]);
+    }
+  }
+
+  async function openVaThread(friend) {
+    setVaSelected(friend);
+    const chatId = [viewAs.id, friend.id].sort().join("_");
+    const { data } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("chat_id", chatId)
+      .order("created_at", { ascending: true });
+    setVaMessages(data || []);
+  }
+
+  function closeViewAs() {
+    setViewAs(null);
+    setVaSelected(null);
+    setVaMessages([]);
+  }
+
   // --- MODERATION ACTIONS ---
   async function issueStrike(userId) {
     if (!userId) return;
     const reason = window.prompt("Reason for this strike? (optional)");
-    if (reason === null) return; // cancelled
+    if (reason === null) return;
     const { error } = await supabase.from("strikes").insert({
       user_id: userId,
       reason: reason.trim() || null,
@@ -139,7 +188,7 @@ export default function Admin({ me, onBack }) {
       return;
     }
     loadStrikes();
-    loadUsers(); // a 3rd strike may have auto-banned them
+    loadUsers();
   }
 
   async function applyBan(userId, choice) {
@@ -208,13 +257,15 @@ export default function Admin({ me, onBack }) {
   );
   const fmt = (ts) => new Date(ts).toLocaleString();
 
-  // shared strike + ban controls for a given user
   function modActions(userId) {
     const u = userById[userId];
     const banned = isBanned(u);
     const sc = strikeCount[userId] || 0;
     return (
       <div className="mod-actions">
+        <button className="va-btn" onClick={() => openViewAs(u)} title="View as this user (read-only)">
+          <Eye size={14} /> View as
+        </button>
         <button className="strike-btn" onClick={() => issueStrike(userId)} title="Give a strike">
           <AlertTriangle size={14} /> Strike{sc ? ` (${sc})` : ""}
         </button>
@@ -241,6 +292,68 @@ export default function Admin({ me, onBack }) {
           </select>
         )}
       </div>
+    );
+  }
+
+  // --- VIEW AS PANEL ---
+  if (viewAs) {
+    return (
+      <main className="admin-shell">
+        <header className="admin-top">
+          <button className="admin-back" onClick={closeViewAs}>
+            <ArrowLeft size={16} /> Back to dashboard
+          </button>
+          <div className="admin-title">
+            <Eye size={18} /> Viewing as {viewAs.username}
+          </div>
+          <div className="admin-me">{me?.username}</div>
+        </header>
+
+        <div className="viewas-banner">
+          <Lock size={14} />
+          Read-only — you're seeing Wavo exactly as <strong>{viewAs.username}</strong> sees it. You
+          can look, but you can't send anything.
+        </div>
+
+        <div className="viewas-body">
+          <div className="viewas-friends">
+            <div className="viewas-friends-head">{viewAs.username}'s friends</div>
+            {vaFriends.length === 0 && <div className="admin-empty">No friends.</div>}
+            {vaFriends.map((f) => (
+              <button
+                key={f.id}
+                className={`viewas-friend ${vaSelected?.id === f.id ? "active" : ""}`}
+                onClick={() => openVaThread(f)}
+              >
+                <div className="admin-avatar sm">{(f.username?.[0] || "?").toUpperCase()}</div>
+                {f.username}
+              </button>
+            ))}
+          </div>
+          <div className="viewas-thread">
+            {!vaSelected && <div className="admin-empty">Pick a friend to read their chat.</div>}
+            {vaSelected && vaMessages.length === 0 && (
+              <div className="admin-empty">No messages in this chat yet.</div>
+            )}
+            {vaSelected &&
+              vaMessages.map((m) => {
+                const mine = m.sender_id === viewAs.id;
+                return (
+                  <div key={m.id} className={`va-bubble-wrap ${mine ? "mine" : "theirs"}`}>
+                    <div className="va-bubble">
+                      {m.type === "image" ? (
+                        <img className="msg-image" src={m.content} alt="GIF" loading="lazy" />
+                      ) : (
+                        <p>{m.content}</p>
+                      )}
+                      <span className="va-time">{fmt(m.created_at)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      </main>
     );
   }
 
@@ -345,40 +458,62 @@ export default function Admin({ me, onBack }) {
         {tab === "reports" && (
           <div className="admin-table">
             {flags.length === 0 && <div className="admin-empty">No reports.</div>}
-            {flags.map((f) => (
-              <div key={f.id} className={`flag-row ${f.resolved ? "done" : ""}`}>
-                <div className="flag-main">
-                  <div className="flag-meta">
-                    Reported by <strong>{f.reporter}</strong>
-                    {f.message && (
-                      <> · sender <strong>{nameById[f.message.sender_id] || "?"}</strong></>
+            {flags.map((f) => {
+              const isUserReport = !!f.reported_user_id;
+              const reportedUser = isUserReport ? userById[f.reported_user_id] : null;
+              return (
+                <div key={f.id} className={`flag-row ${f.resolved ? "done" : ""}`}>
+                  <div className="flag-main">
+                    <div className="flag-meta">
+                      {isUserReport ? (
+                        <>
+                          <span className="flag-type">USER</span> Reported by{" "}
+                          <strong>{f.reporter}</strong> · target{" "}
+                          <strong>{nameById[f.reported_user_id] || "?"}</strong>
+                        </>
+                      ) : (
+                        <>
+                          <span className="flag-type msg">MSG</span> Reported by{" "}
+                          <strong>{f.reporter}</strong>
+                          {f.message && (
+                            <> · sender <strong>{nameById[f.message.sender_id] || "?"}</strong></>
+                          )}
+                        </>
+                      )}
+                      {f.resolved && <span className="role-tag">resolved</span>}
+                    </div>
+                    {f.reason && <div className="flag-reason">“{f.reason}”</div>}
+                    {!isUserReport && (
+                      <div className="flag-content">
+                        {f.message
+                          ? f.message.type === "image"
+                            ? "[GIF / image]"
+                            : f.message.content
+                          : "[message deleted]"}
+                      </div>
                     )}
-                    {f.resolved && <span className="role-tag">resolved</span>}
+                    {isUserReport && reportedUser && (
+                      <div className="flag-mod">{modActions(f.reported_user_id)}</div>
+                    )}
+                    {!isUserReport && f.message && (
+                      <div className="flag-mod">{modActions(f.message.sender_id)}</div>
+                    )}
                   </div>
-                  {f.reason && <div className="flag-reason">“{f.reason}”</div>}
-                  <div className="flag-content">
-                    {f.message
-                      ? f.message.type === "image"
-                        ? "[GIF / image]"
-                        : f.message.content
-                      : "[message deleted]"}
+                  <div className="flag-actions">
+                    {!f.resolved && (
+                      <button className="resolve" onClick={() => resolveFlag(f.id)} title="Mark resolved">
+                        <CheckCircle2 size={15} />
+                      </button>
+                    )}
+                    {!isUserReport && f.message && (
+                      <button className="danger" onClick={() => deleteMessage(f.message.id)} title="Delete message">
+                        <Trash2 size={15} />
+                      </button>
+                    )}
                   </div>
-                  {f.message && <div className="flag-mod">{modActions(f.message.sender_id)}</div>}
                 </div>
-                <div className="flag-actions">
-                  {!f.resolved && (
-                    <button className="resolve" onClick={() => resolveFlag(f.id)} title="Mark resolved">
-                      <CheckCircle2 size={15} />
-                    </button>
-                  )}
-                  {f.message && (
-                    <button className="danger" onClick={() => deleteMessage(f.message.id)} title="Delete message">
-                      <Trash2 size={15} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
