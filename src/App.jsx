@@ -10,6 +10,8 @@ import {
   Flag,
   ShieldCheck,
   Camera,
+  Palette,
+  Settings,
 } from "lucide-react";
 import {
   registerServiceWorker,
@@ -21,11 +23,28 @@ import "./styles.css";
 
 const GIPHY_API_KEY = import.meta.env.VITE_GIPHY_API_KEY;
 
+const THEMES = [
+  { id: "dusk", name: "Warm Dusk", color: "#FF6B5B" },
+  { id: "midnight", name: "Midnight", color: "#6C7CFF" },
+  { id: "ocean", name: "Ocean", color: "#2DD4BF" },
+  { id: "forest", name: "Forest", color: "#4ADE80" },
+  { id: "grape", name: "Grape", color: "#C084FC" },
+  { id: "rose", name: "Rose", color: "#FB7185" },
+  { id: "daylight", name: "Daylight", color: "#F59E0B" },
+];
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
   const [mode, setMode] = useState("login");
-  const [auth, setAuth] = useState({ username: "", password: "" });
+  const [auth, setAuth] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    age: "",
+    username: "",
+    password: "",
+  });
   const [authLoading, setAuthLoading] = useState(false);
   const [view, setView] = useState("chat"); // chat | admin
 
@@ -43,6 +62,28 @@ export default function App() {
 
   // avatar upload
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  // theme
+  const [theme, setTheme] = useState(
+    () => localStorage.getItem("wavo-theme") || "dusk"
+  );
+  const [themeOpen, setThemeOpen] = useState(false);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === "dusk") root.removeAttribute("data-theme");
+    else root.setAttribute("data-theme", theme);
+    localStorage.setItem("wavo-theme", theme);
+  }, [theme]);
+
+  // settings panel
+  const [showSettings, setShowSettings] = useState(false);
+  const [usernameDraft, setUsernameDraft] = useState("");
+  const [savingName, setSavingName] = useState(false);
+  const [nameMsg, setNameMsg] = useState("");
+  const [desktopNotifs, setDesktopNotifs] = useState(
+    () => localStorage.getItem("wavo-desktop-notifs") === "on"
+  );
 
   // add-friend search
   const [searchQuery, setSearchQuery] = useState("");
@@ -110,6 +151,7 @@ export default function App() {
   };
 
   const triggerNotification = (msg, fromName) => {
+    if (localStorage.getItem("wavo-desktop-notifs") === "off") return;
     if (Notification.permission === "granted") {
       new Notification(`Wavo: ${fromName || "New Message"}`, {
         body: msg.content,
@@ -493,6 +535,55 @@ export default function App() {
     e.target.value = "";
   }
 
+  // --- SETTINGS ---
+  function openSettings() {
+    setUsernameDraft(profile?.username || "");
+    setNameMsg("");
+    setShowSettings(true);
+  }
+
+  async function saveUsername() {
+    const clean = usernameDraft.trim();
+    if (!clean || clean === profile?.username) return;
+    setSavingName(true);
+    setNameMsg("");
+    const { error } = await supabase.rpc("set_username", { new_name: clean });
+    if (error) {
+      setNameMsg(error.message);
+    } else {
+      setNameMsg("Saved!");
+      await loadProfile();
+      await loadFriends();
+    }
+    setSavingName(false);
+  }
+
+  async function removeAvatar() {
+    const { error } = await supabase.rpc("set_avatar", { url: null });
+    if (!error) {
+      await loadProfile();
+      await loadFriends();
+    }
+  }
+
+  function toggleDesktopNotifs() {
+    if (!desktopNotifs) {
+      if ("Notification" in window && Notification.permission !== "granted") {
+        Notification.requestPermission().then((perm) => {
+          const on = perm === "granted";
+          setDesktopNotifs(on);
+          localStorage.setItem("wavo-desktop-notifs", on ? "on" : "off");
+        });
+        return;
+      }
+      setDesktopNotifs(true);
+      localStorage.setItem("wavo-desktop-notifs", "on");
+    } else {
+      setDesktopNotifs(false);
+      localStorage.setItem("wavo-desktop-notifs", "off");
+    }
+  }
+
   // --- FRIEND ACTIONS ---
   // search live as you type (debounced) — no need to press Enter
   useEffect(() => {
@@ -652,8 +743,33 @@ export default function App() {
 
   async function handleAuth(e) {
     e.preventDefault();
+    const email = `${auth.username.trim()}@wavo.app`;
+
+    // extra validation for sign-up
+    if (mode === "signup") {
+      if (
+        !auth.firstName.trim() ||
+        !auth.lastName.trim() ||
+        !auth.email.trim() ||
+        !auth.age ||
+        !auth.username.trim() ||
+        !auth.password
+      ) {
+        alert("Please fill in every field.");
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(auth.email.trim())) {
+        alert("Please enter a valid email address.");
+        return;
+      }
+      const ageNum = parseInt(auth.age, 10);
+      if (isNaN(ageNum) || ageNum < 1 || ageNum > 120) {
+        alert("Please enter a valid age.");
+        return;
+      }
+    }
+
     setAuthLoading(true);
-    const email = `${auth.username}@wavo.app`;
     try {
       if (mode === "login") {
         const { error } = await supabase.auth.signInWithPassword({
@@ -667,7 +783,14 @@ export default function App() {
           password: auth.password,
         });
         if (error) throw error;
-        await supabase.from("profiles").insert({ id: data.user.id, username: auth.username });
+        await supabase.from("profiles").insert({
+          id: data.user.id,
+          username: auth.username.trim(),
+          first_name: auth.firstName.trim(),
+          last_name: auth.lastName.trim(),
+          email: auth.email.trim(),
+          age: parseInt(auth.age, 10),
+        });
         setMode("login");
       }
     } catch (err) {
@@ -706,7 +829,49 @@ export default function App() {
         <div className="auth-card">
           <div className="logo-mark">W</div>
           <h1>Wavo</h1>
+          <p className="auth-tagline">
+            {mode === "login" ? "Welcome back" : "Create your account"}
+          </p>
           <form onSubmit={handleAuth} className="auth-form">
+            {mode === "signup" && (
+              <>
+                <div className="auth-row">
+                  <input
+                    type="text"
+                    placeholder="First name"
+                    value={auth.firstName}
+                    onChange={(e) =>
+                      setAuth({ ...auth, firstName: e.target.value })
+                    }
+                  />
+                  <input
+                    type="text"
+                    placeholder="Last name"
+                    value={auth.lastName}
+                    onChange={(e) =>
+                      setAuth({ ...auth, lastName: e.target.value })
+                    }
+                  />
+                </div>
+                <input
+                  type="email"
+                  placeholder="Email"
+                  value={auth.email}
+                  onChange={(e) => setAuth({ ...auth, email: e.target.value })}
+                />
+                <input
+                  type="number"
+                  placeholder="Age"
+                  min="1"
+                  max="120"
+                  value={auth.age}
+                  onChange={(e) => setAuth({ ...auth, age: e.target.value })}
+                />
+                <div className="auth-divider">
+                  <span>Choose your login</span>
+                </div>
+              </>
+            )}
             <input
               type="text"
               placeholder="Username"
@@ -720,7 +885,11 @@ export default function App() {
               onChange={(e) => setAuth({ ...auth, password: e.target.value })}
             />
             <button disabled={authLoading}>
-              {authLoading ? "Please wait…" : mode === "login" ? "Login" : "Sign Up"}
+              {authLoading
+                ? "Please wait…"
+                : mode === "login"
+                ? "Login"
+                : "Create account"}
             </button>
           </form>
           <button
@@ -867,6 +1036,7 @@ export default function App() {
                 </div>
               )}
             </div>
+
             {profile?.is_admin && (
               <button
                 className="icon-btn"
@@ -887,30 +1057,153 @@ export default function App() {
           </div>
         </div>
 
-        {/* Your own profile + photo upload */}
-        <div className="me-strip">
-          <button
-            className="me-avatar"
-            onClick={() => avatarInputRef.current?.click()}
-            title="Change your photo"
-          >
-            <Avatar url={profile?.avatar_url} name={profile?.username} />
-            <span className="me-cam">
-              <Camera size={11} />
-            </span>
-          </button>
+        {/* Your own profile → opens settings */}
+        <button className="me-strip" onClick={openSettings} title="Profile & settings">
+          <Avatar url={profile?.avatar_url} name={profile?.username} />
           <div className="me-name">
             <strong>{profile?.username}</strong>
-            <span>{uploadingAvatar ? "Uploading…" : "Tap photo to change"}</span>
+            <span>Profile &amp; settings</span>
           </div>
-          <input
-            ref={avatarInputRef}
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={uploadAvatar}
-          />
-        </div>
+          <Settings size={17} className="me-gear" />
+        </button>
+        <input
+          ref={avatarInputRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={uploadAvatar}
+        />
+
+        {showSettings && (
+          <div className="settings-overlay" onClick={() => setShowSettings(false)}>
+            <div className="settings-card" onClick={(e) => e.stopPropagation()}>
+              <header className="settings-head">
+                <h3>Settings</h3>
+                <button
+                  className="icon-btn"
+                  onClick={() => setShowSettings(false)}
+                  aria-label="Close settings"
+                >
+                  <X size={18} />
+                </button>
+              </header>
+
+              <div className="settings-body">
+                {/* PROFILE */}
+                <section className="settings-section">
+                  <h4>Profile</h4>
+                  <div className="settings-pfp-row">
+                    <Avatar url={profile?.avatar_url} name={profile?.username} />
+                    <div className="settings-pfp-actions">
+                      <button
+                        className="mini-btn"
+                        onClick={() => avatarInputRef.current?.click()}
+                        disabled={uploadingAvatar}
+                      >
+                        <Camera size={14} />
+                        {uploadingAvatar ? "Uploading…" : "Change photo"}
+                      </button>
+                      {profile?.avatar_url && (
+                        <button className="mini-btn ghost" onClick={removeAvatar}>
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <label className="settings-label">Username</label>
+                  <div className="settings-name-row">
+                    <input
+                      className="settings-input"
+                      value={usernameDraft}
+                      onChange={(e) => setUsernameDraft(e.target.value)}
+                      maxLength={20}
+                    />
+                    <button
+                      className="mini-btn"
+                      onClick={saveUsername}
+                      disabled={
+                        savingName || usernameDraft.trim() === profile?.username
+                      }
+                    >
+                      {savingName ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                  {nameMsg && (
+                    <p
+                      className={`settings-msg ${
+                        nameMsg === "Saved!" ? "ok" : "err"
+                      }`}
+                    >
+                      {nameMsg}
+                    </p>
+                  )}
+                </section>
+
+                {/* APPEARANCE */}
+                <section className="settings-section">
+                  <h4>Appearance</h4>
+                  <div className="theme-grid">
+                    {THEMES.map((t) => (
+                      <button
+                        key={t.id}
+                        className={`theme-option ${theme === t.id ? "active" : ""}`}
+                        onClick={() => setTheme(t.id)}
+                      >
+                        <span
+                          className="theme-swatch"
+                          style={{ background: t.color }}
+                        />
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                {/* NOTIFICATIONS */}
+                <section className="settings-section">
+                  <h4>Notifications</h4>
+                  <button className="settings-toggle" onClick={toggleDesktopNotifs}>
+                    <span>Desktop notifications</span>
+                    <span className={`switch ${desktopNotifs ? "on" : ""}`}>
+                      <span className="knob" />
+                    </span>
+                  </button>
+                  <p className="settings-hint">
+                    Popup alerts when a message arrives and Wavo isn't focused.
+                  </p>
+                </section>
+
+                {/* ACCOUNT */}
+                <section className="settings-section">
+                  <h4>Account</h4>
+                  <div className="settings-info">
+                    <span>Username</span>
+                    <strong>{profile?.username}</strong>
+                  </div>
+                  {profile?.created_at && (
+                    <div className="settings-info">
+                      <span>Member since</span>
+                      <strong>
+                        {new Date(profile.created_at).toLocaleDateString()}
+                      </strong>
+                    </div>
+                  )}
+                  <div className="settings-info">
+                    <span>Role</span>
+                    <strong>{profile?.is_admin ? "Admin" : "Member"}</strong>
+                  </div>
+                  <button
+                    className="settings-signout"
+                    onClick={() => supabase.auth.signOut()}
+                  >
+                    Sign out
+                  </button>
+                </section>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Add-a-friend search */}
         <form className="add-search" onSubmit={runSearch}>

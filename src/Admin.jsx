@@ -468,6 +468,21 @@ export default function Admin({ me, onBack }) {
                       {msgCountByUser[u.id] || 0} msgs · joined {fmt(u.created_at)}
                       {banText(u) ? ` · ${banText(u)}` : ""}
                     </span>
+                    {(u.first_name || u.last_name || u.email || u.age) && (
+                      <span className="admin-row-personal">
+                        {[u.first_name, u.last_name].filter(Boolean).join(" ") ||
+                          "—"}
+                        {u.age ? ` · age ${u.age}` : ""}
+                        {u.email ? (
+                          <>
+                            {" · "}
+                            <a href={`mailto:${u.email}`}>{u.email}</a>
+                          </>
+                        ) : (
+                          ""
+                        )}
+                      </span>
+                    )}
                   </div>
                   <div className="admin-row-actions">
                     <button onClick={() => toggleAdmin(u)} title="Toggle admin">

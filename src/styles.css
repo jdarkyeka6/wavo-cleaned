@@ -7,6 +7,7 @@
   /* surfaces */
   --bg:         #14131f;
   --bg-deep:    #0d0c15;
+  --on-accent:  #0d0c15;
   --panel:      #1c1a29;
   --panel-2:    #232032;
   --card:       #272336;
@@ -97,7 +98,7 @@ body::before {
   font-family: var(--display);
   font-weight: 800;
   font-size: 28px;
-  color: var(--bg-deep);
+  color: var(--on-accent);
   background: linear-gradient(135deg, var(--coral), var(--amber));
   border-radius: 16px;
   box-shadow: 0 8px 24px -6px rgba(255, 107, 91, 0.5);
@@ -263,7 +264,7 @@ body::before {
   font-family: var(--display);
   font-weight: 700;
   font-size: 1rem;
-  color: var(--bg-deep);
+  color: var(--on-accent);
   background: linear-gradient(135deg, var(--amber), var(--coral));
 }
 
@@ -1533,3 +1534,322 @@ body::before {
 }
 .react-chip:hover { border-color: var(--coral); }
 .react-chip.mine { background: var(--coral-soft); border-color: var(--coral); }
+
+/* ============================================================
+   STEP 8 — THEMES
+   Each theme just swaps the palette; every component re-paints.
+   Default (no attribute / "dusk") = the original warm-dusk look.
+   ============================================================ */
+
+/* ── MIDNIGHT · deep navy + indigo ── */
+[data-theme="midnight"] {
+  --bg:#0e1124; --bg-deep:#080a18; --on-accent:#080a18;
+  --panel:#151a33; --panel-2:#1d2440; --card:#222a4a;
+  --coral:#6C7CFF; --coral-soft:rgba(108,124,255,.16); --amber:#9D7BFF;
+  --read:#4FB8FF; --online:#4ADE80;
+}
+
+/* ── OCEAN · slate + teal ── */
+[data-theme="ocean"] {
+  --bg:#0c1a1e; --bg-deep:#071215; --on-accent:#071215;
+  --panel:#11262b; --panel-2:#173238; --card:#1b3a41;
+  --coral:#2DD4BF; --coral-soft:rgba(45,212,191,.15); --amber:#38BDF8;
+  --read:#38BDF8; --online:#4ADE80;
+}
+
+/* ── FOREST · deep green ── */
+[data-theme="forest"] {
+  --bg:#101a12; --bg-deep:#0a120c; --on-accent:#0a120c;
+  --panel:#16241a; --panel-2:#1d2f22; --card:#22392a;
+  --coral:#4ADE80; --coral-soft:rgba(74,222,128,.15); --amber:#A3E635;
+  --read:#4FB8FF; --online:#34D399;
+}
+
+/* ── GRAPE · violet ── */
+[data-theme="grape"] {
+  --bg:#171025; --bg-deep:#0f0a18; --on-accent:#0f0a18;
+  --panel:#22182f; --panel-2:#2c2040; --card:#33274a;
+  --coral:#C084FC; --coral-soft:rgba(192,132,252,.16); --amber:#F0ABFC;
+  --read:#4FB8FF; --online:#4ADE80;
+}
+
+/* ── ROSE · warm pink ── */
+[data-theme="rose"] {
+  --bg:#1e1018; --bg-deep:#150a11; --on-accent:#150a11;
+  --panel:#2a1722; --panel-2:#361d2c; --card:#412334;
+  --coral:#FB7185; --coral-soft:rgba(251,113,133,.16); --amber:#FDA4AF;
+  --read:#4FB8FF; --online:#4ADE80;
+}
+
+/* ── DAYLIGHT · light mode ── */
+[data-theme="daylight"] {
+  --bg:#F4F1F7; --bg-deep:#FFFFFF; --on-accent:#1b0f0c;
+  --panel:#FFFFFF; --panel-2:#F3F0F8; --card:#FBFAFD;
+  --line:rgba(20,15,30,.10); --line-soft:rgba(20,15,30,.05);
+  --text:#221E2E; --text-dim:#6B6680; --text-faint:#9A95A8;
+  --coral:#F0533F; --coral-soft:rgba(240,83,63,.12); --amber:#F59E0B;
+  --read:#2A93E0; --online:#1FA463;
+  --shadow-lg:0 24px 48px -12px rgba(60,40,90,.18);
+  --shadow-sm:0 4px 16px -4px rgba(60,40,90,.12);
+}
+
+/* theme picker UI */
+.theme-menu-wrap { position: relative; }
+.theme-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 230px;
+  padding: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 60;
+}
+.theme-dropdown-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  padding: 4px 6px 8px;
+}
+.theme-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 9px;
+  background: var(--panel);
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: all 0.14s;
+}
+.theme-option:hover { color: var(--text); border-color: var(--text-faint); }
+.theme-option.active { border-color: var(--coral); color: var(--text); }
+.theme-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+
+/* ============================================================
+   STEP 9 — SETTINGS PANEL
+   ============================================================ */
+
+/* profile strip is now a button that opens settings */
+.me-strip {
+  width: auto;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color .14s, background .14s;
+}
+.me-strip:hover { border-color: var(--text-faint); }
+.me-strip .me-name span { color: var(--text-faint); }
+.me-gear { margin-left: auto; color: var(--text-faint); flex-shrink: 0; }
+.me-strip:hover .me-gear { color: var(--coral); }
+
+/* modal shell */
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  z-index: 100;
+}
+.settings-card {
+  width: 100%;
+  max-width: 440px;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+}
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 1;
+}
+.settings-head h3 { margin: 0; font-family: var(--display); }
+.settings-body { padding: 8px 20px 20px; }
+.settings-section { padding: 16px 0; border-bottom: 1px solid var(--line-soft); }
+.settings-section:last-child { border-bottom: none; }
+.settings-section h4 {
+  margin: 0 0 12px;
+  font-size: .74rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-faint);
+}
+
+/* profile bits */
+.settings-pfp-row { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.settings-pfp-actions { display: flex; flex-direction: column; gap: 6px; }
+.settings-label { display: block; font-size: .8rem; color: var(--text-dim); margin-bottom: 6px; }
+.settings-name-row { display: flex; gap: 8px; }
+.settings-input {
+  flex: 1;
+  background: var(--bg-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  padding: 9px 12px;
+  font: inherit;
+  font-size: .9rem;
+}
+.settings-input:focus {
+  outline: none;
+  border-color: var(--coral);
+  box-shadow: 0 0 0 3px var(--coral-soft);
+}
+.settings-msg { margin: 8px 0 0; font-size: .8rem; }
+.settings-msg.ok { color: var(--online); }
+.settings-msg.err { color: var(--coral); }
+
+/* small buttons */
+.mini-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 13px;
+  background: var(--coral-soft);
+  color: var(--coral);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-size: .82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .14s;
+}
+.mini-btn:hover:not(:disabled) { background: var(--coral); color: var(--on-accent); }
+.mini-btn:disabled { opacity: .5; cursor: default; }
+.mini-btn.ghost { background: none; color: var(--text-dim); border-color: var(--line); }
+.mini-btn.ghost:hover { color: var(--text); border-color: var(--text-faint); background: none; }
+
+/* toggle switch */
+.settings-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  font-size: .9rem;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.switch {
+  width: 42px; height: 24px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  position: relative;
+  transition: background .16s;
+  flex-shrink: 0;
+}
+.switch .knob {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: transform .16s, background .16s;
+}
+.switch.on { background: var(--coral); border-color: var(--coral); }
+.switch.on .knob { transform: translateX(18px); background: #fff; }
+.settings-hint { margin: 8px 0 0; font-size: .76rem; color: var(--text-faint); }
+
+/* account info */
+.settings-info {
+  display: flex;
+  justify-content: space-between;
+  padding: 7px 0;
+  font-size: .86rem;
+}
+.settings-info span { color: var(--text-dim); }
+.settings-signout {
+  margin-top: 14px;
+  width: 100%;
+  padding: 10px;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--coral);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .14s;
+}
+.settings-signout:hover { background: var(--coral-soft); border-color: var(--coral); }
+
+/* ============================================================
+   STEP 9 — Professional sign-up + admin personal info
+   ============================================================ */
+.auth-tagline {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  margin: -6px 0 6px;
+}
+.auth-row { display: flex; gap: 8px; }
+.auth-row input { flex: 1; min-width: 0; }
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 2px;
+  color: var(--text-faint);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+/* hide number input spinners for a cleaner look */
+.auth-form input[type="number"]::-webkit-outer-spin-button,
+.auth-form input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.auth-form input[type="number"] { -moz-appearance: textfield; }
+
+.admin-row-personal {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin-top: 1px;
+}
+.admin-row-personal a { color: var(--coral); text-decoration: none; }
+.admin-row-personal a:hover { text-decoration: underline; }
