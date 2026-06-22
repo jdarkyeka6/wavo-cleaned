@@ -23,6 +23,11 @@ import "./styles.css";
 
 const GIPHY_API_KEY = import.meta.env.VITE_GIPHY_API_KEY;
 
+// Usernames allowed to use fast account-switching. Only these accounts get
+// remembered on the device — everyone else's password is never stored.
+// Add your own usernames here (e.g. "admin", "jake").
+const SWITCHER_USERS = ["admin"];
+
 const THEMES = [
   { id: "dusk", name: "Warm Dusk", color: "#FF6B5B" },
   { id: "midnight", name: "Midnight", color: "#6C7CFF" },
@@ -547,6 +552,8 @@ export default function App() {
   // --- SETTINGS ---
   // --- ACCOUNT SWITCHER ---
   function rememberAccount(username, password) {
+    // Only store credentials for accounts you've explicitly allowed.
+    if (!SWITCHER_USERS.includes(username)) return;
     try {
       const list = JSON.parse(localStorage.getItem("wavo-accounts") || "[]");
       const next = list.filter((a) => a.username !== username);
@@ -1225,7 +1232,7 @@ export default function App() {
                 </section>
 
                 {/* SWITCH ACCOUNTS */}
-                {(profile?.is_admin || accounts.length > 1) && (
+                {SWITCHER_USERS.includes(profile?.username) && (
                   <section className="settings-section">
                     <h4>Accounts</h4>
                     <div className="acct-list">
