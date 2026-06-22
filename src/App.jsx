@@ -9,6 +9,7 @@ import {
   Check,
   Flag,
   ShieldCheck,
+  Camera,
 } from "lucide-react";
 import {
   registerServiceWorker,
@@ -36,6 +37,13 @@ export default function App() {
   // my own strikes (each user sees only their own)
   const [myStrikes, setMyStrikes] = useState([]);
 
+  // message reactions
+  const [reactions, setReactions] = useState([]);
+  const [reactPickerMsg, setReactPickerMsg] = useState(null);
+
+  // avatar upload
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
   // add-friend search
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -61,6 +69,8 @@ export default function App() {
   const bottomRef = useRef(null);
   const selectedUserRef = useRef(null);
   const isFocusedRef = useRef(true);
+  const avatarInputRef = useRef(null);
+  const longPressRef = useRef(null);
 
   const currentUser = session?.user;
 
@@ -261,6 +271,7 @@ export default function App() {
   useEffect(() => {
     if (!chatId) return;
     loadMessages();
+    loadReactions();
 
     const channel = supabase
       .channel(`chat:${chatId}`)
@@ -294,6 +305,16 @@ export default function App() {
             prev.map((m) => (m.id === payload.new.id ? payload.new : m))
           );
         }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "reactions",
+          filter: `chat_id=eq.${chatId}`,
+        },
+        () => loadReactions()
       )
       .subscribe();
 
@@ -402,7 +423,88 @@ export default function App() {
     setLoadingChat(false);
   }
 
+  // --- REACTIONS ---
+  async function loadReactions() {
+    if (!chatId) return;
+    const { data } = await supabase.from("reactions").select("*").eq("chat_id", chatId);
+    if (data) setReactions(data);
+  }
+
+  function reactionsFor(msgId) {
+    const grouped = {};
+    reactions
+      .filter((r) => r.message_id === msgId)
+      .forEach((r) => {
+        if (!grouped[r.emoji]) grouped[r.emoji] = { count: 0, mine: false };
+        grouped[r.emoji].count += 1;
+        if (r.user_id === currentUser.id) grouped[r.emoji].mine = true;
+      });
+    return grouped;
+  }
+
+  async function addReaction(msg, emoji) {
+    setReactPickerMsg(null);
+    const existing = reactions.find(
+      (r) => r.message_id === msg.id && r.user_id === currentUser.id && r.emoji === emoji
+    );
+    if (existing) {
+      await supabase.from("reactions").delete().eq("id", existing.id);
+    } else {
+      await supabase.from("reactions").insert({
+        message_id: msg.id,
+        chat_id: chatId,
+        user_id: currentUser.id,
+        emoji,
+      });
+    }
+    loadReactions();
+  }
+
+  function startPress(msg) {
+    clearTimeout(longPressRef.current);
+    longPressRef.current = setTimeout(() => setReactPickerMsg(msg.id), 450);
+  }
+  function endPress() {
+    clearTimeout(longPressRef.current);
+  }
+
+  // --- AVATAR UPLOAD ---
+  async function uploadAvatar(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingAvatar(true);
+    try {
+      const ext = (file.name.split(".").pop() || "png").toLowerCase();
+      const path = `${currentUser.id}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("avatars")
+        .upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
+      const url = `${pub.publicUrl}?t=${Date.now()}`;
+      const { error: rpcErr } = await supabase.rpc("set_avatar", { url });
+      if (rpcErr) throw rpcErr;
+      await loadProfile();
+      await loadFriends();
+    } catch (err) {
+      alert("Couldn't upload picture: " + err.message);
+    }
+    setUploadingAvatar(false);
+    e.target.value = "";
+  }
+
   // --- FRIEND ACTIONS ---
+  // search live as you type (debounced) — no need to press Enter
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults([]);
+      return;
+    }
+    const t = setTimeout(() => runSearch(), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
   async function runSearch(e) {
     e?.preventDefault();
     const q = searchQuery.trim();
@@ -413,7 +515,7 @@ export default function App() {
     setSearching(true);
     const { data } = await supabase
       .from("profiles")
-      .select("id, username")
+      .select("id, username, avatar_url")
       .ilike("username", `%${q}%`)
       .neq("id", currentUser.id)
       .limit(10);
@@ -587,6 +689,15 @@ export default function App() {
     if (hrs < 24) return `${hrs}h ago`;
     return `${Math.floor(hrs / 24)}d ago`;
   };
+
+  // avatar = picture if they have one, otherwise their initial
+  function Avatar({ url, name, size }) {
+    return (
+      <div className={`avatar ${size === "sm" ? "sm" : ""}`}>
+        {url ? <img className="avatar-img" src={url} alt="" /> : initial(name)}
+      </div>
+    );
+  }
 
   // --- AUTH SCREEN ---
   if (!session) {
@@ -776,6 +887,31 @@ export default function App() {
           </div>
         </div>
 
+        {/* Your own profile + photo upload */}
+        <div className="me-strip">
+          <button
+            className="me-avatar"
+            onClick={() => avatarInputRef.current?.click()}
+            title="Change your photo"
+          >
+            <Avatar url={profile?.avatar_url} name={profile?.username} />
+            <span className="me-cam">
+              <Camera size={11} />
+            </span>
+          </button>
+          <div className="me-name">
+            <strong>{profile?.username}</strong>
+            <span>{uploadingAvatar ? "Uploading…" : "Tap photo to change"}</span>
+          </div>
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={uploadAvatar}
+          />
+        </div>
+
         {/* Add-a-friend search */}
         <form className="add-search" onSubmit={runSearch}>
           <Search size={15} />
@@ -800,7 +936,7 @@ export default function App() {
               const incoming = incomingRequests.some((r) => r.sender_id === u.id);
               return (
                 <div key={u.id} className="search-row">
-                  <div className="avatar sm">{initial(u.username)}</div>
+                  <Avatar url={u.avatar_url} name={u.username} size="sm" />
                   <strong>{u.username}</strong>
                   {u.isFriend ? (
                     <span className="tag-friend">Friends</span>
@@ -847,7 +983,7 @@ export default function App() {
               onClick={() => openChat(u)}
               title={`Open chat with ${u.username}`}
             >
-              <div className="avatar">{initial(u.username)}</div>
+              <Avatar url={u.avatar_url} name={u.username} />
               <strong>{u.username}</strong>
               {unreadByUser[u.id] > 0 && (
                 <span className="user-badge">{unreadByUser[u.id]}</span>
@@ -861,7 +997,10 @@ export default function App() {
         {selectedUser ? (
           <>
             <header className="chat-header">
-              <h3>{selectedUser.username}</h3>
+              <div className="chat-header-left">
+                <Avatar url={selectedUser.avatar_url} name={selectedUser.username} size="sm" />
+                <h3>{selectedUser.username}</h3>
+              </div>
               <div className="chat-header-right">
                 <button
                   className="report-user-btn"
@@ -877,9 +1016,18 @@ export default function App() {
               {messages.map((msg) => {
                 const mine = msg.sender_id === currentUser.id;
                 const isImage = msg.type === "image";
+                const chips = reactionsFor(msg.id);
                 return (
                   <div key={msg.id} className={`bubble-wrap ${mine ? "mine" : "theirs"}`}>
-                    <div className={`bubble ${isImage ? "bubble-image" : ""}`}>
+                    <div
+                      className={`bubble ${isImage ? "bubble-image" : ""}`}
+                      onTouchStart={() => startPress(msg)}
+                      onTouchEnd={endPress}
+                      onTouchMove={endPress}
+                      onMouseDown={() => startPress(msg)}
+                      onMouseUp={endPress}
+                      onMouseLeave={endPress}
+                    >
                       {isImage ? (
                         <img
                           className="msg-image"
@@ -910,11 +1058,38 @@ export default function App() {
                           </button>
                         )}
                       </div>
+
+                      {reactPickerMsg === msg.id && (
+                        <div className="react-picker">
+                          {["👍", "❤️", "😂", "😮", "😢", "🔥"].map((em) => (
+                            <button key={em} onClick={() => addReaction(msg, em)}>
+                              {em}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
+
+                    {Object.keys(chips).length > 0 && (
+                      <div className="react-chips">
+                        {Object.entries(chips).map(([em, info]) => (
+                          <button
+                            key={em}
+                            className={`react-chip ${info.mine ? "mine" : ""}`}
+                            onClick={() => addReaction(msg, em)}
+                          >
+                            {em} {info.count}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
               <div ref={bottomRef} />
+              {reactPickerMsg && (
+                <div className="react-overlay" onClick={() => setReactPickerMsg(null)} />
+              )}
             </div>
 
             {showGiphy && (
