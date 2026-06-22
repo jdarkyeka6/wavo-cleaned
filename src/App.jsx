@@ -69,6 +69,15 @@ export default function App() {
   );
   const [themeOpen, setThemeOpen] = useState(false);
 
+  // saved accounts for quick switching (stored on this device only)
+  const [accounts, setAccounts] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("wavo-accounts") || "[]");
+    } catch {
+      return [];
+    }
+  });
+
   useEffect(() => {
     const root = document.documentElement;
     if (theme === "dusk") root.removeAttribute("data-theme");
@@ -536,6 +545,45 @@ export default function App() {
   }
 
   // --- SETTINGS ---
+  // --- ACCOUNT SWITCHER ---
+  function rememberAccount(username, password) {
+    try {
+      const list = JSON.parse(localStorage.getItem("wavo-accounts") || "[]");
+      const next = list.filter((a) => a.username !== username);
+      next.push({ username, password });
+      localStorage.setItem("wavo-accounts", JSON.stringify(next));
+      setAccounts(next);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function removeAccount(username) {
+    const next = accounts.filter((a) => a.username !== username);
+    localStorage.setItem("wavo-accounts", JSON.stringify(next));
+    setAccounts(next);
+  }
+
+  async function switchTo(account) {
+    if (account.username === profile?.username) return;
+    try {
+      await supabase.auth.signOut();
+      const { error } = await supabase.auth.signInWithPassword({
+        email: `${account.username}@wavo.app`,
+        password: account.password,
+      });
+      if (error) throw error;
+      window.location.reload();
+    } catch (err) {
+      alert(`Couldn't switch to ${account.username}: ${err.message}`);
+    }
+  }
+
+  async function addAccount() {
+    setShowSettings(false);
+    await supabase.auth.signOut();
+  }
+
   function openSettings() {
     setUsernameDraft(profile?.username || "");
     setNameMsg("");
@@ -777,6 +825,7 @@ export default function App() {
           password: auth.password,
         });
         if (error) throw error;
+        rememberAccount(auth.username.trim(), auth.password);
       } else {
         const { data, error } = await supabase.auth.signUp({
           email,
@@ -791,6 +840,7 @@ export default function App() {
           email: auth.email.trim(),
           age: parseInt(auth.age, 10),
         });
+        rememberAccount(auth.username.trim(), auth.password);
         setMode("login");
       }
     } catch (err) {
@@ -1173,6 +1223,63 @@ export default function App() {
                     Popup alerts when a message arrives and Wavo isn't focused.
                   </p>
                 </section>
+
+                {/* SWITCH ACCOUNTS */}
+                {(profile?.is_admin || accounts.length > 1) && (
+                  <section className="settings-section">
+                    <h4>Accounts</h4>
+                    <div className="acct-list">
+                      {accounts.map((a) => {
+                        const active = a.username === profile?.username;
+                        return (
+                          <div
+                            key={a.username}
+                            className={`acct-row ${active ? "active" : ""}`}
+                          >
+                            <Avatar
+                              url={active ? profile?.avatar_url : undefined}
+                              name={a.username}
+                              size="sm"
+                            />
+                            <div className="acct-info">
+                              <strong>{a.username}</strong>
+                              <span>{active ? "Active now" : "Saved account"}</span>
+                            </div>
+                            {active ? (
+                              <span
+                                className="acct-active-dot"
+                                title="Current account"
+                              />
+                            ) : (
+                              <>
+                                <button
+                                  className="mini-btn"
+                                  onClick={() => switchTo(a)}
+                                >
+                                  Switch
+                                </button>
+                                <button
+                                  className="acct-remove"
+                                  onClick={() => removeAccount(a.username)}
+                                  title="Forget this account"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button className="mini-btn ghost" onClick={addAccount}>
+                      + Add another account
+                    </button>
+                    <p className="settings-hint">
+                      Switching signs you straight into the saved account. Accounts
+                      are stored on this device only.
+                    </p>
+                  </section>
+                )}
 
                 {/* ACCOUNT */}
                 <section className="settings-section">
