@@ -33,6 +33,9 @@ export default function App() {
   const [incomingRequests, setIncomingRequests] = useState([]);
   const [outgoingIds, setOutgoingIds] = useState(new Set());
 
+  // my own strikes (each user sees only their own)
+  const [myStrikes, setMyStrikes] = useState([]);
+
   // add-friend search
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -162,6 +165,7 @@ export default function App() {
     loadFriends();
     loadRequests();
     loadNotifications();
+    loadMyStrikes();
   }, [currentUser]);
 
   // --- PUSH SUBSCRIPTION (post-login) ---
@@ -310,6 +314,15 @@ export default function App() {
       .eq("id", currentUser.id)
       .single();
     if (data) setProfile(data);
+  }
+
+  async function loadMyStrikes() {
+    const { data } = await supabase
+      .from("strikes")
+      .select("*")
+      .eq("user_id", currentUser.id)
+      .order("created_at", { ascending: false });
+    if (data) setMyStrikes(data);
   }
 
   async function loadFriends() {
@@ -599,14 +612,19 @@ export default function App() {
   }
 
   // --- BANNED SCREEN ---
-  if (profile?.banned) {
+  const bannedUntil = profile?.banned_until ? new Date(profile.banned_until) : null;
+  const isBanned = bannedUntil && bannedUntil > new Date();
+  if (isBanned) {
+    const permanent = bannedUntil.getFullYear() > 2900;
     return (
       <main className="auth-page">
         <div className="auth-card">
           <div className="logo-mark" style={{ background: "var(--line)" }}>!</div>
           <h1>Account suspended</h1>
           <p style={{ color: "var(--text-dim)", textAlign: "center", margin: "8px 0 20px" }}>
-            Your account has been banned from Wavo.
+            {permanent
+              ? "Your account has been permanently banned from Wavo."
+              : `Your account is banned until ${bannedUntil.toLocaleString()}.`}
           </p>
           <button className="link-btn" onClick={() => supabase.auth.signOut()}>
             Log out
@@ -633,6 +651,7 @@ export default function App() {
                 className="icon-btn"
                 onClick={() => setShowNotifs((s) => !s)}
                 aria-label="Notifications"
+                title="Notifications & friend requests"
               >
                 <Bell size={18} />
                 {bellCount > 0 && (
@@ -705,6 +724,7 @@ export default function App() {
                               className="req-accept"
                               onClick={() => acceptRequest(r.id)}
                               aria-label="Accept"
+                              title="Accept friend request"
                             >
                               <Check size={15} />
                             </button>
@@ -712,6 +732,7 @@ export default function App() {
                               className="req-decline"
                               onClick={() => declineRequest(r.id)}
                               aria-label="Decline"
+                              title="Decline friend request"
                             >
                               <X size={15} />
                             </button>
@@ -733,7 +754,11 @@ export default function App() {
                 <ShieldCheck size={18} />
               </button>
             )}
-            <button className="ghost-btn" onClick={() => supabase.auth.signOut()}>
+            <button
+              className="ghost-btn"
+              onClick={() => supabase.auth.signOut()}
+              title="Sign out of Wavo"
+            >
               Logout
             </button>
           </div>
@@ -770,7 +795,11 @@ export default function App() {
                   ) : pending ? (
                     <span className="tag-pending">Requested</span>
                   ) : (
-                    <button className="add-btn" onClick={() => sendRequest(u.id)}>
+                    <button
+                      className="add-btn"
+                      onClick={() => sendRequest(u.id)}
+                      title={incoming ? "Accept their friend request" : "Send a friend request"}
+                    >
                       <UserPlus size={14} />
                       {incoming ? "Accept" : "Add"}
                     </button>
@@ -778,6 +807,18 @@ export default function App() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {myStrikes.length > 0 && (
+          <div className="strike-warning">
+            ⚠️ You have {myStrikes.length} strike{myStrikes.length > 1 ? "s" : ""} (of 3).
+            {myStrikes.length % 3 === 0
+              ? " You've been temporarily banned."
+              : " Reach 3 and you'll be banned for 3 days."}
+            {myStrikes[0]?.reason && (
+              <span className="strike-reason">Most recent: “{myStrikes[0].reason}”</span>
+            )}
           </div>
         )}
 
@@ -792,6 +833,7 @@ export default function App() {
               key={u.id}
               className={`user-row ${selectedUser?.id === u.id ? "active" : ""}`}
               onClick={() => openChat(u)}
+              title={`Open chat with ${u.username}`}
             >
               <div className="avatar">{initial(u.username)}</div>
               <strong>{u.username}</strong>
@@ -897,6 +939,7 @@ export default function App() {
                 className={`composer-icon ${showGiphy ? "active" : ""}`}
                 onClick={toggleGiphy}
                 aria-label="Send a GIF"
+                title={showGiphy ? "Close GIF picker" : "Send a GIF"}
               >
                 {showGiphy ? <X size={18} /> : <ImageIcon size={18} />}
               </button>

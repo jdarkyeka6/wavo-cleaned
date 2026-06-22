@@ -1181,3 +1181,83 @@ body::before {
 .viewer-dir { font-size: 0.72rem; color: var(--text-faint); }
 .viewer-text { font-size: 0.9rem; word-break: break-word; }
 .viewer-time { font-size: 0.68rem; color: var(--text-faint); }
+
+/* ============================================================
+   STEP 5 — Strikes + timed bans
+   ============================================================ */
+
+/* moderator action cluster (strike + ban) */
+.mod-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.strike-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid #f59e0b;
+  color: #f59e0b;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 5px 9px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.strike-btn:hover { background: #f59e0b; color: #1a1305; }
+.ban-select {
+  background: var(--panel-2);
+  border: 1px solid #ef4444;
+  color: #ef4444;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 5px 7px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.ban-select option { background: var(--panel); color: var(--text); }
+.lift-btn {
+  background: transparent;
+  border: 1px solid #34d399;
+  color: #34d399;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 5px 9px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.lift-btn:hover { background: #34d399; color: #04110b; }
+
+.role-tag.strike { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+
+/* moderation row under a report */
+.flag-mod {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+
+/* the strike warning the user sees about themselves */
+.strike-warning {
+  margin: 12px 12px 0;
+  padding: 11px 13px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid #f59e0b;
+  border-radius: var(--r-md);
+  color: #fbbf24;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.strike-reason {
+  color: var(--text-dim);
+  font-size: 0.76rem;
+  font-style: italic;
+}

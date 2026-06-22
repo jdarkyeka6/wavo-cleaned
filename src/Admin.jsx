@@ -6,12 +6,12 @@ import {
   Users,
   Flag,
   Eye,
-  Ban,
   ShieldCheck,
   Shield,
   Trash2,
   Search,
   CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 
 export default function Admin({ me, onBack }) {
@@ -20,6 +20,7 @@ export default function Admin({ me, onBack }) {
   const [messages, setMessages] = useState([]);
   const [friendCount, setFriendCount] = useState(0);
   const [flags, setFlags] = useState([]);
+  const [strikes, setStrikes] = useState([]);
   const [userSearch, setUserSearch] = useState("");
 
   const [viewerId, setViewerId] = useState("");
@@ -31,13 +32,16 @@ export default function Admin({ me, onBack }) {
     loadMessages();
     loadFriendCount();
     loadFlags();
+    loadStrikes();
 
     const channel = supabase
       .channel("admin")
       .on("postgres_changes", { event: "*", schema: "public", table: "flags" }, loadFlags)
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => {
-        loadMessages();
+      .on("postgres_changes", { event: "*", schema: "public", table: "strikes" }, () => {
+        loadStrikes();
+        loadUsers();
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, loadMessages)
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, []);
@@ -67,6 +71,11 @@ export default function Admin({ me, onBack }) {
     setFriendCount(count || 0);
   }
 
+  async function loadStrikes() {
+    const { data } = await supabase.from("strikes").select("*");
+    if (data) setStrikes(data);
+  }
+
   async function loadFlags() {
     const { data: rows } = await supabase
       .from("flags")
@@ -76,7 +85,6 @@ export default function Admin({ me, onBack }) {
       setFlags([]);
       return;
     }
-    // two-step hydrate: pull the flagged messages + reporter names
     const msgIds = rows.map((f) => f.message_id).filter(Boolean);
     const reporterIds = rows.map((f) => f.reporter_id).filter(Boolean);
 
@@ -90,13 +98,13 @@ export default function Admin({ me, onBack }) {
     ]);
 
     const msgById = Object.fromEntries((msgs || []).map((m) => [m.id, m]));
-    const nameById = Object.fromEntries((profs || []).map((p) => [p.id, p.username]));
+    const nameMap = Object.fromEntries((profs || []).map((p) => [p.id, p.username]));
 
     setFlags(
       rows.map((f) => ({
         ...f,
         message: msgById[f.message_id] || null,
-        reporter: nameById[f.reporter_id] || "Unknown",
+        reporter: nameMap[f.reporter_id] || "Unknown",
       }))
     );
   }
@@ -116,35 +124,67 @@ export default function Admin({ me, onBack }) {
     setViewerMessages(data || []);
   }
 
-  // --- ACTIONS ---
-  async function toggleBan(u) {
-    await supabase.from("profiles").update({ banned: !u.banned }).eq("id", u.id);
+  // --- MODERATION ACTIONS ---
+  async function issueStrike(userId) {
+    if (!userId) return;
+    const reason = window.prompt("Reason for this strike? (optional)");
+    if (reason === null) return; // cancelled
+    const { error } = await supabase.from("strikes").insert({
+      user_id: userId,
+      reason: reason.trim() || null,
+      issued_by: me.id,
+    });
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    loadStrikes();
+    loadUsers(); // a 3rd strike may have auto-banned them
+  }
+
+  async function applyBan(userId, choice) {
+    if (!userId) return;
+    let banned_until;
+    if (choice === "lift") banned_until = null;
+    else if (choice === "permanent") banned_until = new Date("2999-01-01").toISOString();
+    else banned_until = new Date(Date.now() + Number(choice) * 86400000).toISOString();
+    await supabase.from("profiles").update({ banned_until }).eq("id", userId);
     loadUsers();
   }
+
   async function toggleAdmin(u) {
     await supabase.from("profiles").update({ is_admin: !u.is_admin }).eq("id", u.id);
     loadUsers();
   }
+
   async function deleteMessage(id) {
     await supabase.from("messages").delete().eq("id", id);
     loadMessages();
     loadFlags();
     if (viewerId) loadViewer(viewerId);
   }
+
   async function resolveFlag(id) {
     await supabase.from("flags").update({ resolved: true }).eq("id", id);
     loadFlags();
   }
 
   // --- DERIVED ---
+  const userById = useMemo(
+    () => Object.fromEntries(users.map((u) => [u.id, u])),
+    [users]
+  );
   const nameById = useMemo(
     () => Object.fromEntries(users.map((u) => [u.id, u.username])),
     [users]
   );
-  const openFlags = flags.filter((f) => !f.resolved);
-  const filteredUsers = users.filter((u) =>
-    u.username?.toLowerCase().includes(userSearch.toLowerCase())
-  );
+  const strikeCount = useMemo(() => {
+    const m = {};
+    strikes.forEach((s) => {
+      m[s.user_id] = (m[s.user_id] || 0) + 1;
+    });
+    return m;
+  }, [strikes]);
   const msgCountByUser = useMemo(() => {
     const m = {};
     messages.forEach((x) => {
@@ -153,7 +193,56 @@ export default function Admin({ me, onBack }) {
     return m;
   }, [messages]);
 
+  const isBanned = (u) => u?.banned_until && new Date(u.banned_until) > new Date();
+  const banText = (u) => {
+    if (!isBanned(u)) return null;
+    const until = new Date(u.banned_until);
+    if (until.getFullYear() > 2900) return "Banned permanently";
+    return "Banned until " + until.toLocaleString();
+  };
+
+  const openFlags = flags.filter((f) => !f.resolved);
+  const bannedCount = users.filter(isBanned).length;
+  const filteredUsers = users.filter((u) =>
+    u.username?.toLowerCase().includes(userSearch.toLowerCase())
+  );
   const fmt = (ts) => new Date(ts).toLocaleString();
+
+  // shared strike + ban controls for a given user
+  function modActions(userId) {
+    const u = userById[userId];
+    const banned = isBanned(u);
+    const sc = strikeCount[userId] || 0;
+    return (
+      <div className="mod-actions">
+        <button className="strike-btn" onClick={() => issueStrike(userId)} title="Give a strike">
+          <AlertTriangle size={14} /> Strike{sc ? ` (${sc})` : ""}
+        </button>
+        {banned ? (
+          <button className="lift-btn" onClick={() => applyBan(userId, "lift")} title="Lift the ban">
+            Unban
+          </button>
+        ) : (
+          <select
+            className="ban-select"
+            defaultValue=""
+            title="Ban for…"
+            onChange={(e) => {
+              const v = e.target.value;
+              e.target.value = "";
+              if (v) applyBan(userId, v);
+            }}
+          >
+            <option value="">Ban…</option>
+            <option value="3">3 days</option>
+            <option value="7">7 days</option>
+            <option value="30">30 days</option>
+            <option value="permanent">Permanent</option>
+          </select>
+        )}
+      </div>
+    );
+  }
 
   return (
     <main className="admin-shell">
@@ -191,8 +280,12 @@ export default function Admin({ me, onBack }) {
               <span className="stat-label">Users</span>
             </div>
             <div className="stat-card">
-              <span className="stat-num">{users.filter((u) => u.banned).length}</span>
-              <span className="stat-label">Banned</span>
+              <span className="stat-num">{bannedCount}</span>
+              <span className="stat-label">Currently banned</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-num">{strikes.length}</span>
+              <span className="stat-label">Strikes issued</span>
             </div>
             <div className="stat-card">
               <span className="stat-num">{messages.length}</span>
@@ -221,27 +314,27 @@ export default function Admin({ me, onBack }) {
             </div>
             <div className="admin-table">
               {filteredUsers.map((u) => (
-                <div key={u.id} className={`admin-row ${u.banned ? "is-banned" : ""}`}>
+                <div key={u.id} className={`admin-row ${isBanned(u) ? "is-banned" : ""}`}>
                   <div className="admin-avatar">{(u.username?.[0] || "?").toUpperCase()}</div>
                   <div className="admin-row-main">
                     <strong>
                       {u.username}
                       {u.is_admin && <span className="role-tag">admin</span>}
-                      {u.banned && <span className="role-tag ban">banned</span>}
+                      {strikeCount[u.id] > 0 && (
+                        <span className="role-tag strike">{strikeCount[u.id]}/3 strikes</span>
+                      )}
+                      {isBanned(u) && <span className="role-tag ban">banned</span>}
                     </strong>
-                    <span>{msgCountByUser[u.id] || 0} msgs · joined {fmt(u.created_at)}</span>
+                    <span>
+                      {msgCountByUser[u.id] || 0} msgs · joined {fmt(u.created_at)}
+                      {banText(u) ? ` · ${banText(u)}` : ""}
+                    </span>
                   </div>
                   <div className="admin-row-actions">
                     <button onClick={() => toggleAdmin(u)} title="Toggle admin">
                       {u.is_admin ? <Shield size={15} /> : <ShieldCheck size={15} />}
                     </button>
-                    <button
-                      className={u.banned ? "unban" : "ban"}
-                      onClick={() => toggleBan(u)}
-                      title={u.banned ? "Unban" : "Ban"}
-                    >
-                      <Ban size={15} />
-                    </button>
+                    {modActions(u.id)}
                   </div>
                 </div>
               ))}
@@ -257,7 +350,9 @@ export default function Admin({ me, onBack }) {
                 <div className="flag-main">
                   <div className="flag-meta">
                     Reported by <strong>{f.reporter}</strong>
-                    {f.message && <> · sender <strong>{nameById[f.message.sender_id] || "?"}</strong></>}
+                    {f.message && (
+                      <> · sender <strong>{nameById[f.message.sender_id] || "?"}</strong></>
+                    )}
                     {f.resolved && <span className="role-tag">resolved</span>}
                   </div>
                   {f.reason && <div className="flag-reason">“{f.reason}”</div>}
@@ -268,6 +363,7 @@ export default function Admin({ me, onBack }) {
                         : f.message.content
                       : "[message deleted]"}
                   </div>
+                  {f.message && <div className="flag-mod">{modActions(f.message.sender_id)}</div>}
                 </div>
                 <div className="flag-actions">
                   {!f.resolved && (
