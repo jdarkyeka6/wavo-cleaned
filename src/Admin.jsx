@@ -334,6 +334,19 @@ export default function Admin({ me, onBack }) {
     return m;
   }, [messages]);
 
+  const ageOf = (u) => {
+    if (u?.birthday) {
+      const bd = new Date(u.birthday);
+      if (!isNaN(bd.getTime())) {
+        const t = new Date();
+        let a = t.getFullYear() - bd.getFullYear();
+        const m = t.getMonth() - bd.getMonth();
+        if (m < 0 || (m === 0 && t.getDate() < bd.getDate())) a--;
+        return a;
+      }
+    }
+    return u?.age ?? null;
+  };
   const isBanned = (u) => u?.banned_until && new Date(u.banned_until) > new Date();
   const banText = (u) => {
     if (!isBanned(u)) return null;
@@ -552,11 +565,14 @@ export default function Admin({ me, onBack }) {
                       {msgCountByUser[u.id] || 0} msgs · joined {fmt(u.created_at)}
                       {banText(u) ? ` · ${banText(u)}` : ""}
                     </span>
-                    {(u.first_name || u.last_name || u.email || u.age) && (
+                    {(u.first_name || u.last_name || u.email || u.age || u.birthday) && (
                       <span className="admin-row-personal">
                         {[u.first_name, u.last_name].filter(Boolean).join(" ") ||
                           "—"}
-                        {u.age ? ` · age ${u.age}` : ""}
+                        {ageOf(u) != null ? ` · age ${ageOf(u)}` : ""}
+                        {u.birthday
+                          ? ` · 🎂 ${new Date(u.birthday).toLocaleDateString()}`
+                          : ""}
                         {u.email ? (
                           <>
                             {" · "}

@@ -2438,3 +2438,16 @@ body::before {
   flex-shrink: 0;
 }
 .unban-btn:hover { background: rgba(74, 222, 128, 0.2); }
+
+/* ============================================================
+   STEP 15 — Sign-up: birthday field
+   ============================================================ */
+.auth-field-label {
+  font-size: 0.74rem;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 2px 0 -4px 4px;
+}
+.auth-date { color-scheme: dark; }
+[data-theme="daylight"] .auth-date { color-scheme: light; }

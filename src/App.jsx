@@ -35,6 +35,48 @@ const GIPHY_API_KEY = import.meta.env.VITE_GIPHY_API_KEY;
 // Add your own usernames here (e.g. "admin", "jake").
 const SWITCHER_USERS = ["admin"];
 
+// Reject keyboard-mash / junk names while allowing real ones.
+const NAME_BLOCKLIST = [
+  "test", "testing", "asdf", "asdfgh", "qwer", "qwerty", "zxcv", "wasd",
+  "hjkl", "lkjh", "poiu", "mnbv", "abc", "abcd", "xyz", "blah", "name",
+  "firstname", "lastname", "user", "admin", "null", "undefined",
+];
+
+function isPronounceablePart(w) {
+  if (w.length <= 1) return true; // initials like "J" are fine
+  if (NAME_BLOCKLIST.includes(w)) return false;
+  const vowels = (w.match(/[aeiouyà-ÿ]/gi) || []).length;
+  if (vowels === 0) return false; // needs a vowel
+  const ratio = vowels / w.length;
+  if (ratio < 0.25 || ratio > 0.85) return false; // sensible vowel balance
+  if (/(.)\1\1/.test(w)) return false; // no 3+ identical in a row (aaa)
+  if (/[bcdfghjklmnpqrstvwxz]{4,}/i.test(w)) return false; // no 4+ consonant pile-up
+  if (/[aeiou]{4,}/i.test(w)) return false; // no 4+ vowel pile-up
+  return true;
+}
+
+function looksLikeName(s) {
+  const v = (s || "").trim().toLowerCase();
+  if (v.length < 2 || v.length > 30) return false;
+  if (!/^[a-zà-ÿ' -]+$/i.test(v)) return false; // letters, spaces, ' and - only
+  // validate each word so "Anne-Marie" / "Mary Jane" / "de la Cruz" pass
+  const parts = v.split(/[ '-]+/).filter(Boolean);
+  if (parts.length === 0) return false;
+  return parts.every(isPronounceablePart);
+}
+
+// Whole years between a YYYY-MM-DD birthday and today.
+function ageFromBirthday(birthday) {
+  if (!birthday) return null;
+  const bd = new Date(birthday);
+  if (isNaN(bd.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - bd.getFullYear();
+  const m = today.getMonth() - bd.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < bd.getDate())) age--;
+  return age;
+}
+
 const THEMES = [
   { id: "dusk", name: "Warm Dusk", color: "#FF6B5B" },
   { id: "midnight", name: "Midnight", color: "#6C7CFF" },
@@ -53,7 +95,7 @@ export default function App() {
     firstName: "",
     lastName: "",
     email: "",
-    age: "",
+    birthday: "",
     username: "",
     password: "",
   });
@@ -1309,20 +1351,33 @@ export default function App() {
         !auth.firstName.trim() ||
         !auth.lastName.trim() ||
         !auth.email.trim() ||
-        !auth.age ||
+        !auth.birthday ||
         !auth.username.trim() ||
         !auth.password
       ) {
         alert("Please fill in every field.");
         return;
       }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(auth.email.trim())) {
-        alert("Please enter a valid email address.");
+      if (!looksLikeName(auth.firstName)) {
+        alert("Please enter a real first name.");
         return;
       }
-      const ageNum = parseInt(auth.age, 10);
-      if (isNaN(ageNum) || ageNum < 1 || ageNum > 120) {
-        alert("Please enter a valid age.");
+      if (!looksLikeName(auth.lastName)) {
+        alert("Please enter a real last name.");
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(auth.email.trim())) {
+        alert("Please enter a valid email address (like name@example.com).");
+        return;
+      }
+      const bd = new Date(auth.birthday);
+      const age = ageFromBirthday(auth.birthday);
+      if (isNaN(bd.getTime()) || bd > new Date()) {
+        alert("Please enter a valid birthday.");
+        return;
+      }
+      if (age === null || age < 1 || age > 120) {
+        alert("Please enter a valid birthday.");
         return;
       }
     }
@@ -1348,7 +1403,8 @@ export default function App() {
           first_name: auth.firstName.trim(),
           last_name: auth.lastName.trim(),
           email: auth.email.trim(),
-          age: parseInt(auth.age, 10),
+          birthday: auth.birthday,
+          age: ageFromBirthday(auth.birthday),
         });
         rememberAccount(auth.username.trim(), auth.password);
         setMode("login");
@@ -1419,13 +1475,13 @@ export default function App() {
                   value={auth.email}
                   onChange={(e) => setAuth({ ...auth, email: e.target.value })}
                 />
+                <label className="auth-field-label">Birthday</label>
                 <input
-                  type="number"
-                  placeholder="Age"
-                  min="1"
-                  max="120"
-                  value={auth.age}
-                  onChange={(e) => setAuth({ ...auth, age: e.target.value })}
+                  type="date"
+                  className="auth-date"
+                  value={auth.birthday}
+                  max={new Date().toISOString().split("T")[0]}
+                  onChange={(e) => setAuth({ ...auth, birthday: e.target.value })}
                 />
                 <div className="auth-divider">
                   <span>Choose your login</span>
