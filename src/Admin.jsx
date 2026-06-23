@@ -16,6 +16,7 @@ import {
   Minus,
   Megaphone,
   ScrollText,
+  Ban,
 } from "lucide-react";
 
 export default function Admin({ me, onBack }) {
@@ -486,6 +487,9 @@ export default function Admin({ me, onBack }) {
         <button className={tab === "announce" ? "active" : ""} onClick={() => setTab("announce")}>
           <Megaphone size={15} /> Announce
         </button>
+        <button className={tab === "banned" ? "active" : ""} onClick={() => setTab("banned")}>
+          <Ban size={15} /> Banned{bannedCount > 0 ? ` (${bannedCount})` : ""}
+        </button>
         <button className={tab === "audit" ? "active" : ""} onClick={() => setTab("audit")}>
           <ScrollText size={15} /> Audit
         </button>
@@ -721,6 +725,28 @@ export default function Admin({ me, onBack }) {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {tab === "banned" && (
+          <div className="admin-table">
+            {users.filter(isBanned).length === 0 && (
+              <div className="admin-empty">No one is banned right now. 🎉</div>
+            )}
+            {users.filter(isBanned).map((u) => (
+              <div key={u.id} className="banned-row">
+                <div className="banned-row-main">
+                  <strong>{u.username}</strong>
+                  <span className="banned-until">{banText(u)}</span>
+                </div>
+                <button
+                  className="unban-btn"
+                  onClick={() => applyBan(u.id, "lift")}
+                >
+                  <CheckCircle2 size={15} /> Unban
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
