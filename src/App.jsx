@@ -12,6 +12,13 @@ import {
   Camera,
   Palette,
   Settings,
+  Smile,
+  Pencil,
+  Megaphone,
+  Paperclip,
+  File as FileIcon,
+  Download,
+  Users,
 } from "lucide-react";
 import {
   registerServiceWorker,
@@ -65,6 +72,14 @@ export default function App() {
   const [reactions, setReactions] = useState([]);
   const [reactPickerMsg, setReactPickerMsg] = useState(null);
 
+  // batch 1: typing, edit, reply, emoji, search
+  const [theirTyping, setTheirTyping] = useState(false);
+  const [editingMsg, setEditingMsg] = useState(null);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [msgSearch, setMsgSearch] = useState("");
+
   // avatar upload
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
@@ -95,6 +110,14 @@ export default function App() {
   const [usernameDraft, setUsernameDraft] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [nameMsg, setNameMsg] = useState("");
+  // batch 2: status + nicknames
+  const [statusDraft, setStatusDraft] = useState("");
+  const [savingStatus, setSavingStatus] = useState(false);
+  const [nicknames, setNicknames] = useState({});
+  // batch 3: latest announcement banner
+  const [announcement, setAnnouncement] = useState(null);
+  // batch 4: file upload
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [desktopNotifs, setDesktopNotifs] = useState(
     () => localStorage.getItem("wavo-desktop-notifs") === "on"
   );
@@ -109,6 +132,17 @@ export default function App() {
   const [messageText, setMessageText] = useState("");
   const [loadingChat, setLoadingChat] = useState(false);
   const [isFocused, setIsFocused] = useState(true);
+
+  // batch 5: group chats
+  const [groups, setGroups] = useState([]);
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [groupMessages, setGroupMessages] = useState([]);
+  const [groupMembers, setGroupMembers] = useState({}); // userId -> profile
+  const [showNewGroup, setShowNewGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupMembers, setNewGroupMembers] = useState([]); // friend ids
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [groupTyping, setGroupTyping] = useState(null); // name of who's typing
 
   // notifications dropdown
   const [notifications, setNotifications] = useState([]);
@@ -126,6 +160,11 @@ export default function App() {
   const isFocusedRef = useRef(true);
   const avatarInputRef = useRef(null);
   const longPressRef = useRef(null);
+  const chatChannelRef = useRef(null);
+  const typingTimerRef = useRef(null);
+  const lastTypingSentRef = useRef(0);
+  const chatFileInputRef = useRef(null);
+  const groupChannelRef = useRef(null);
 
   const currentUser = session?.user;
 
@@ -232,6 +271,55 @@ export default function App() {
     loadRequests();
     loadNotifications();
     loadMyStrikes();
+    loadNicknames();
+    loadAnnouncement();
+    loadGroups();
+  }, [currentUser]);
+
+  // --- ANNOUNCEMENTS banner ---
+  async function loadAnnouncement() {
+    const { data } = await supabase
+      .from("announcements")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const latest = data?.[0];
+    if (latest && localStorage.getItem("wavo-seen-announce") !== latest.id) {
+      setAnnouncement(latest);
+    } else {
+      setAnnouncement(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const channel = supabase
+      .channel("announce")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "announcements" },
+        (payload) => setAnnouncement(payload.new)
+      )
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [currentUser]);
+
+  function dismissAnnouncement() {
+    if (announcement) localStorage.setItem("wavo-seen-announce", announcement.id);
+    setAnnouncement(null);
+  }
+
+  // --- LAST ONLINE heartbeat ---
+  useEffect(() => {
+    if (!currentUser) return;
+    const ping = () => supabase.rpc("touch_last_active");
+    ping();
+    const interval = setInterval(ping, 60000);
+    window.addEventListener("focus", ping);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", ping);
+    };
   }, [currentUser]);
 
   // --- PUSH SUBSCRIPTION (post-login) ---
@@ -372,9 +460,21 @@ export default function App() {
         },
         () => loadReactions()
       )
+      .on("broadcast", { event: "typing" }, ({ payload }) => {
+        if (payload?.userId && payload.userId !== currentUser.id) {
+          setTheirTyping(true);
+          clearTimeout(typingTimerRef.current);
+          typingTimerRef.current = setTimeout(() => setTheirTyping(false), 2500);
+        }
+      })
       .subscribe();
 
+    chatChannelRef.current = channel;
+    setTheirTyping(false);
+
     return () => {
+      chatChannelRef.current = null;
+      clearTimeout(typingTimerRef.current);
       supabase.removeChannel(channel);
     };
   }, [chatId, isFocused]);
@@ -382,6 +482,59 @@ export default function App() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // --- GROUP CHAT REALTIME ---
+  useEffect(() => {
+    if (!selectedGroup) return;
+    const gid = selectedGroup.id;
+    loadGroupMessages(gid);
+    loadGroupMembers(gid);
+    setGroupTyping(null);
+
+    const channel = supabase
+      .channel(`group:${gid}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "group_messages",
+          filter: `group_id=eq.${gid}`,
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setGroupMessages((prev) => [
+              ...prev.filter((m) => m.id !== payload.new.id),
+              payload.new,
+            ]);
+          } else if (payload.eventType === "UPDATE") {
+            setGroupMessages((prev) =>
+              prev.map((m) => (m.id === payload.new.id ? payload.new : m))
+            );
+          }
+        }
+      )
+      .on("broadcast", { event: "typing" }, ({ payload }) => {
+        if (payload?.userId && payload.userId !== currentUser.id) {
+          setGroupTyping(payload.name || "Someone");
+          clearTimeout(typingTimerRef.current);
+          typingTimerRef.current = setTimeout(() => setGroupTyping(null), 2500);
+        }
+      })
+      .subscribe();
+
+    groupChannelRef.current = channel;
+
+    return () => {
+      groupChannelRef.current = null;
+      clearTimeout(typingTimerRef.current);
+      supabase.removeChannel(channel);
+    };
+  }, [selectedGroup]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [groupMessages]);
 
   // --- DATA FETCHING ---
   async function loadProfile() {
@@ -593,6 +746,7 @@ export default function App() {
 
   function openSettings() {
     setUsernameDraft(profile?.username || "");
+    setStatusDraft(profile?.status || "");
     setNameMsg("");
     setShowSettings(true);
   }
@@ -611,6 +765,66 @@ export default function App() {
       await loadFriends();
     }
     setSavingName(false);
+  }
+
+  async function saveStatus() {
+    setSavingStatus(true);
+    const { error } = await supabase.rpc("set_status", {
+      new_status: statusDraft.trim(),
+    });
+    if (!error) {
+      await loadProfile();
+      await loadFriends();
+    } else {
+      alert(error.message);
+    }
+    setSavingStatus(false);
+  }
+
+  // --- NICKNAMES (private, only you see them) ---
+  async function loadNicknames() {
+    const { data } = await supabase
+      .from("nicknames")
+      .select("target_id, nickname")
+      .eq("owner_id", currentUser.id);
+    if (data) {
+      const map = {};
+      data.forEach((n) => (map[n.target_id] = n.nickname));
+      setNicknames(map);
+    }
+  }
+
+  async function setNickname(targetUser) {
+    const current = nicknames[targetUser.id] || "";
+    const input = window.prompt(
+      `Nickname for ${targetUser.username} (only you see this). Leave blank to clear:`,
+      current
+    );
+    if (input === null) return; // cancelled
+    const clean = input.trim();
+    if (clean) {
+      await supabase.from("nicknames").upsert(
+        {
+          owner_id: currentUser.id,
+          target_id: targetUser.id,
+          nickname: clean,
+        },
+        { onConflict: "owner_id,target_id" }
+      );
+    } else {
+      await supabase
+        .from("nicknames")
+        .delete()
+        .eq("owner_id", currentUser.id)
+        .eq("target_id", targetUser.id);
+    }
+    loadNicknames();
+  }
+
+  // nickname if you set one, otherwise their real username
+  function displayName(user) {
+    if (!user) return "";
+    return nicknames[user.id] || user.username;
   }
 
   async function removeAvatar() {
@@ -731,12 +945,171 @@ export default function App() {
 
   // --- ACTIONS ---
   function openChat(user) {
+    setSelectedGroup(null);
+    setEditingMsg(null);
+    setReplyingTo(null);
+    setMessageText("");
     setSelectedUser(user);
     setShowGiphy(false);
     clearNotifsFromSender(user.id);
   }
 
-  async function insertMessage(content, type) {
+  // --- GROUPS ---
+  async function loadGroups() {
+    // groups I'm a member of
+    const { data: mem } = await supabase
+      .from("group_members")
+      .select("group_id")
+      .eq("user_id", currentUser.id);
+    const ids = (mem || []).map((m) => m.group_id);
+    if (ids.length === 0) {
+      setGroups([]);
+      return;
+    }
+    const { data } = await supabase
+      .from("groups")
+      .select("*")
+      .in("id", ids)
+      .order("created_at", { ascending: true });
+    if (data) setGroups(data);
+  }
+
+  async function loadGroupMessages(gid) {
+    setLoadingChat(true);
+    const { data } = await supabase
+      .from("group_messages")
+      .select("*")
+      .eq("group_id", gid)
+      .order("created_at", { ascending: true });
+    if (data) setGroupMessages(data);
+    setLoadingChat(false);
+  }
+
+  async function loadGroupMembers(gid) {
+    const { data } = await supabase
+      .from("group_members")
+      .select("user_id, profiles(id, username, avatar_url)")
+      .eq("group_id", gid);
+    if (data) {
+      const map = {};
+      data.forEach((row) => {
+        if (row.profiles) map[row.profiles.id] = row.profiles;
+      });
+      setGroupMembers(map);
+    }
+  }
+
+  function openGroup(group) {
+    setSelectedUser(null);
+    setEditingMsg(null);
+    setReplyingTo(null);
+    setMessageText("");
+    setShowGiphy(false);
+    setShowEmoji(false);
+    setGroupMessages([]);
+    setSelectedGroup(group);
+  }
+
+  async function createGroup() {
+    const name = newGroupName.trim();
+    if (!name || newGroupMembers.length === 0) {
+      alert("Give your group a name and pick at least one friend.");
+      return;
+    }
+    setCreatingGroup(true);
+    try {
+      const { data: group, error } = await supabase
+        .from("groups")
+        .insert({ name, created_by: currentUser.id })
+        .select()
+        .single();
+      if (error) throw error;
+      const rows = [currentUser.id, ...newGroupMembers].map((uid) => ({
+        group_id: group.id,
+        user_id: uid,
+      }));
+      const { error: memErr } = await supabase
+        .from("group_members")
+        .insert(rows);
+      if (memErr) throw memErr;
+      setShowNewGroup(false);
+      setNewGroupName("");
+      setNewGroupMembers([]);
+      await loadGroups();
+      openGroup(group);
+    } catch (err) {
+      alert("Couldn't create group: " + err.message);
+    }
+    setCreatingGroup(false);
+  }
+
+  async function insertGroupMessage(content, type, fileName = null) {
+    if (!selectedGroup) return;
+    const { error } = await supabase.from("group_messages").insert({
+      group_id: selectedGroup.id,
+      sender_id: currentUser.id,
+      content,
+      type,
+      file_name: fileName,
+      reply_to: replyingTo?.id || null,
+    });
+    if (error) alert(error.message);
+    setReplyingTo(null);
+  }
+
+  async function sendGroupMessage(e) {
+    e.preventDefault();
+    const text = messageText.trim();
+    if (!text) return;
+
+    if (editingMsg) {
+      const target = editingMsg;
+      setMessageText("");
+      setEditingMsg(null);
+      setGroupMessages((prev) =>
+        prev.map((m) =>
+          m.id === target.id
+            ? { ...m, content: text, edited_at: new Date().toISOString() }
+            : m
+        )
+      );
+      const { error } = await supabase
+        .from("group_messages")
+        .update({ content: text, edited_at: new Date().toISOString() })
+        .eq("id", target.id);
+      if (error) alert(error.message);
+      return;
+    }
+
+    setMessageText("");
+    setShowEmoji(false);
+    await insertGroupMessage(text, "text");
+  }
+
+  function notifyGroupTyping() {
+    const now = Date.now();
+    if (now - lastTypingSentRef.current < 1400) return;
+    lastTypingSentRef.current = now;
+    groupChannelRef.current?.send({
+      type: "broadcast",
+      event: "typing",
+      payload: { userId: currentUser.id, name: profile?.username },
+    });
+  }
+
+  async function leaveGroup() {
+    if (!selectedGroup) return;
+    if (!window.confirm(`Leave "${selectedGroup.name}"?`)) return;
+    await supabase
+      .from("group_members")
+      .delete()
+      .eq("group_id", selectedGroup.id)
+      .eq("user_id", currentUser.id);
+    setSelectedGroup(null);
+    loadGroups();
+  }
+
+  async function insertMessage(content, type, fileName = null) {
     if (!chatId || !selectedUser) return;
     const { error } = await supabase.from("messages").insert({
       chat_id: chatId,
@@ -745,16 +1118,146 @@ export default function App() {
       content,
       type,
       is_read: false,
+      reply_to: replyingTo?.id || null,
+      file_name: fileName,
     });
     if (error) alert(error.message);
+    setReplyingTo(null);
+  }
+
+  async function uploadChatFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      alert("That file is too big (max 10 MB).");
+      e.target.value = "";
+      return;
+    }
+    setUploadingFile(true);
+    try {
+      const safeName = file.name.replace(/[^\w.\-]/g, "_");
+      const folder = selectedGroup ? `group_${selectedGroup.id}` : chatId;
+      const path = `${folder}/${Date.now()}-${safeName}`;
+      const { error: upErr } = await supabase.storage
+        .from("chat-files")
+        .upload(path, file);
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage
+        .from("chat-files")
+        .getPublicUrl(path);
+      const isImg = file.type.startsWith("image/");
+      if (selectedGroup) {
+        await insertGroupMessage(
+          pub.publicUrl,
+          isImg ? "image" : "file",
+          isImg ? null : file.name
+        );
+      } else {
+        await insertMessage(
+          pub.publicUrl,
+          isImg ? "image" : "file",
+          isImg ? null : file.name
+        );
+      }
+    } catch (err) {
+      alert("Couldn't send file: " + err.message);
+    }
+    setUploadingFile(false);
+    e.target.value = "";
   }
 
   async function sendMessage(e) {
     e.preventDefault();
     const text = messageText.trim();
     if (!text) return;
+
+    // editing an existing message?
+    if (editingMsg) {
+      setMessageText("");
+      const target = editingMsg;
+      setEditingMsg(null);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === target.id
+            ? { ...m, content: text, edited_at: new Date().toISOString() }
+            : m
+        )
+      );
+      const { error } = await supabase
+        .from("messages")
+        .update({ content: text, edited_at: new Date().toISOString() })
+        .eq("id", target.id);
+      if (error) alert(error.message);
+      return;
+    }
+
     setMessageText("");
+    setShowEmoji(false);
     await insertMessage(text, "text");
+  }
+
+  function startEdit(msg) {
+    setReactPickerMsg(null);
+    setReplyingTo(null);
+    setEditingMsg(msg);
+    setMessageText(msg.content);
+  }
+  function cancelEdit() {
+    setEditingMsg(null);
+    setMessageText("");
+  }
+  function startReply(msg) {
+    setReactPickerMsg(null);
+    setEditingMsg(null);
+    setReplyingTo(msg);
+  }
+  async function deleteMessage(msg) {
+    setReactPickerMsg(null);
+    if (!window.confirm("Unsend this message?")) return;
+    const stamp = new Date().toISOString();
+    if (selectedGroup) {
+      setGroupMessages((prev) =>
+        prev.map((m) => (m.id === msg.id ? { ...m, deleted_at: stamp } : m))
+      );
+      const { error } = await supabase
+        .from("group_messages")
+        .update({ deleted_at: stamp })
+        .eq("id", msg.id);
+      if (error) alert(error.message);
+      return;
+    }
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msg.id ? { ...m, deleted_at: stamp } : m))
+    );
+    const { error } = await supabase
+      .from("messages")
+      .update({ deleted_at: stamp })
+      .eq("id", msg.id);
+    if (error) alert(error.message);
+  }
+
+  // typing broadcast (throttled to once per ~1.4s)
+  function notifyTyping() {
+    const now = Date.now();
+    if (now - lastTypingSentRef.current < 1400) return;
+    lastTypingSentRef.current = now;
+    chatChannelRef.current?.send({
+      type: "broadcast",
+      event: "typing",
+      payload: { userId: currentUser.id },
+    });
+  }
+
+  function insertEmoji(em) {
+    setMessageText((t) => t + em);
+  }
+
+  // presence label from a last_active timestamp
+  function presence(ts) {
+    if (!ts) return null;
+    const diff = Date.now() - new Date(ts).getTime();
+    if (diff < 70000) return "online";
+    return `last seen ${fmtRelative(ts)}`;
   }
 
   async function sendGif(gifUrl) {
@@ -991,6 +1494,15 @@ export default function App() {
   // --- MAIN APP ---
   return (
     <main className="app-shell">
+      {announcement && (
+        <div className="announce-banner">
+          <Megaphone size={16} />
+          <span className="announce-banner-text">{announcement.body}</span>
+          <button onClick={dismissAnnouncement} aria-label="Dismiss">
+            <X size={16} />
+          </button>
+        </div>
+      )}
       <aside className="sidebar">
         <div className="brand-row">
           <h2>Wavo</h2>
@@ -1195,6 +1707,27 @@ export default function App() {
                       {nameMsg}
                     </p>
                   )}
+
+                  <label className="settings-label">Status</label>
+                  <div className="settings-name-row">
+                    <input
+                      className="settings-input"
+                      value={statusDraft}
+                      onChange={(e) => setStatusDraft(e.target.value)}
+                      placeholder="e.g. 📚 studying"
+                      maxLength={40}
+                    />
+                    <button
+                      className="mini-btn"
+                      onClick={saveStatus}
+                      disabled={
+                        savingStatus ||
+                        statusDraft.trim() === (profile?.status || "")
+                      }
+                    >
+                      {savingStatus ? "Saving…" : "Save"}
+                    </button>
+                  </div>
                 </section>
 
                 {/* APPEARANCE */}
@@ -1377,6 +1910,42 @@ export default function App() {
           </div>
         )}
 
+        <div className="groups-head">
+          <h4>Groups</h4>
+          <button
+            className="new-group-btn"
+            onClick={() => setShowNewGroup(true)}
+            title="New group"
+          >
+            <Users size={14} /> New
+          </button>
+        </div>
+        {groups.length > 0 && (
+          <div className="group-list">
+            {groups.map((g) => (
+              <button
+                key={g.id}
+                className={`user-row ${
+                  selectedGroup?.id === g.id ? "active" : ""
+                }`}
+                onClick={() => openGroup(g)}
+                title={`Open ${g.name}`}
+              >
+                <div className="group-avatar">
+                  <Users size={16} />
+                </div>
+                <div className="user-row-text">
+                  <strong>{g.name}</strong>
+                  <span className="user-status">Group</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="friends-head">
+          <h4>Friends</h4>
+        </div>
         <div className="user-list">
           {friends.length === 0 && !searchQuery.trim() && (
             <div className="friends-empty">
@@ -1390,8 +1959,17 @@ export default function App() {
               onClick={() => openChat(u)}
               title={`Open chat with ${u.username}`}
             >
-              <Avatar url={u.avatar_url} name={u.username} />
-              <strong>{u.username}</strong>
+              <div
+                className={`avatar-presence ${
+                  presence(u.last_active) === "online" ? "online" : ""
+                }`}
+              >
+                <Avatar url={u.avatar_url} name={u.username} />
+              </div>
+              <div className="user-row-text">
+                <strong>{displayName(u)}</strong>
+                {u.status && <span className="user-status">{u.status}</span>}
+              </div>
               {unreadByUser[u.id] > 0 && (
                 <span className="user-badge">{unreadByUser[u.id]}</span>
               )}
@@ -1405,10 +1983,46 @@ export default function App() {
           <>
             <header className="chat-header">
               <div className="chat-header-left">
-                <Avatar url={selectedUser.avatar_url} name={selectedUser.username} size="sm" />
-                <h3>{selectedUser.username}</h3>
+                <div
+                  className={`avatar-presence ${
+                    presence(selectedUser.last_active) === "online" ? "online" : ""
+                  }`}
+                >
+                  <Avatar
+                    url={selectedUser.avatar_url}
+                    name={selectedUser.username}
+                    size="sm"
+                  />
+                </div>
+                <div className="chat-header-name">
+                  <h3>
+                    {displayName(selectedUser)}
+                    <button
+                      className="nickname-btn"
+                      onClick={() => setNickname(selectedUser)}
+                      title="Set a private nickname"
+                    >
+                      <Pencil size={12} />
+                    </button>
+                  </h3>
+                  <span className="presence-line">
+                    {selectedUser.status
+                      ? selectedUser.status
+                      : presence(selectedUser.last_active) || ""}
+                  </span>
+                </div>
               </div>
               <div className="chat-header-right">
+                <button
+                  className={`icon-btn ${showSearch ? "active" : ""}`}
+                  onClick={() => {
+                    setShowSearch((s) => !s);
+                    setMsgSearch("");
+                  }}
+                  title="Search this chat"
+                >
+                  <Search size={16} />
+                </button>
                 <button
                   className="report-user-btn"
                   onClick={() => reportUser(selectedUser)}
@@ -1416,68 +2030,158 @@ export default function App() {
                 >
                   <Flag size={14} /> Report
                 </button>
-                <div className="status-pill">Live</div>
               </div>
             </header>
+            {showSearch && (
+              <div className="chat-search">
+                <Search size={14} />
+                <input
+                  value={msgSearch}
+                  onChange={(e) => setMsgSearch(e.target.value)}
+                  placeholder="Search messages…"
+                  autoFocus
+                />
+                {msgSearch && (
+                  <button onClick={() => setMsgSearch("")} title="Clear">
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            )}
             <div className="messages">
-              {messages.map((msg) => {
+              {(msgSearch.trim()
+                ? messages.filter(
+                    (m) =>
+                      !m.deleted_at &&
+                      (m.content || "")
+                        .toLowerCase()
+                        .includes(msgSearch.trim().toLowerCase())
+                  )
+                : messages
+              ).map((msg) => {
                 const mine = msg.sender_id === currentUser.id;
                 const isImage = msg.type === "image";
                 const chips = reactionsFor(msg.id);
+                const deleted = !!msg.deleted_at;
+                const repliedTo = msg.reply_to
+                  ? messages.find((m) => m.id === msg.reply_to)
+                  : null;
                 return (
-                  <div key={msg.id} className={`bubble-wrap ${mine ? "mine" : "theirs"}`}>
+                  <div
+                    key={msg.id}
+                    className={`bubble-wrap ${mine ? "mine" : "theirs"}`}
+                  >
+                    {repliedTo && (
+                      <div className="reply-quote">
+                        <span className="reply-quote-name">
+                          {repliedTo.sender_id === currentUser.id
+                            ? "You"
+                            : displayName(selectedUser)}
+                        </span>
+                        <span className="reply-quote-text">
+                          {repliedTo.deleted_at
+                            ? "message removed"
+                            : repliedTo.type === "image"
+                            ? "📷 photo"
+                            : repliedTo.type === "file"
+                            ? `📄 ${repliedTo.file_name || "file"}`
+                            : repliedTo.content}
+                        </span>
+                      </div>
+                    )}
                     <div
-                      className={`bubble ${isImage ? "bubble-image" : ""}`}
-                      onTouchStart={() => startPress(msg)}
+                      className={`bubble ${
+                        isImage && !deleted ? "bubble-image" : ""
+                      } ${deleted ? "deleted" : ""}`}
+                      onTouchStart={() => !deleted && startPress(msg)}
                       onTouchEnd={endPress}
                       onTouchMove={endPress}
-                      onMouseDown={() => startPress(msg)}
+                      onMouseDown={() => !deleted && startPress(msg)}
                       onMouseUp={endPress}
                       onMouseLeave={endPress}
                     >
-                      {isImage ? (
+                      {deleted ? (
+                        <p className="msg-deleted">🚫 message removed</p>
+                      ) : isImage ? (
                         <img
                           className="msg-image"
                           src={msg.content}
-                          alt="GIF"
+                          alt="image"
                           loading="lazy"
                         />
+                      ) : msg.type === "file" ? (
+                        <a
+                          className="file-chip"
+                          href={msg.content}
+                          target="_blank"
+                          rel="noreferrer"
+                          download={msg.file_name || true}
+                        >
+                          <FileIcon size={20} />
+                          <span className="file-chip-name">
+                            {msg.file_name || "file"}
+                          </span>
+                          <Download size={15} />
+                        </a>
                       ) : (
                         <p>{msg.content}</p>
                       )}
-                      <div className="msg-footer">
-                        <span>{fmtTime(msg.created_at)}</span>
-                        {mine ? (
-                          <span className={`receipt ${msg.is_read ? "read" : ""}`}>
-                            {msg.is_read
-                              ? msg.read_at
-                                ? `Read ${fmtTime(msg.read_at)}`
-                                : "✓✓"
-                              : "✓"}
+                      {!deleted && (
+                        <div className="msg-footer">
+                          <span>
+                            {fmtTime(msg.created_at)}
+                            {msg.edited_at ? " · edited" : ""}
                           </span>
-                        ) : (
-                          <button
-                            className="report-btn"
-                            onClick={() => reportMessage(msg)}
-                            title="Report message"
-                          >
-                            <Flag size={12} />
-                          </button>
-                        )}
-                      </div>
-
-                      {reactPickerMsg === msg.id && (
-                        <div className="react-picker">
-                          {["👍", "❤️", "😂", "😮", "😢", "🔥"].map((em) => (
-                            <button key={em} onClick={() => addReaction(msg, em)}>
-                              {em}
+                          {mine ? (
+                            <span
+                              className={`receipt ${msg.is_read ? "read" : ""}`}
+                            >
+                              {msg.is_read
+                                ? msg.read_at
+                                  ? `Read ${fmtTime(msg.read_at)}`
+                                  : "✓✓"
+                                : "✓"}
+                            </span>
+                          ) : (
+                            <button
+                              className="report-btn"
+                              onClick={() => reportMessage(msg)}
+                              title="Report message"
+                            >
+                              <Flag size={12} />
                             </button>
-                          ))}
+                          )}
+                        </div>
+                      )}
+
+                      {reactPickerMsg === msg.id && !deleted && (
+                        <div className="msg-menu">
+                          <div className="msg-menu-emojis">
+                            {["👍", "❤️", "😂", "😮", "😢", "🔥"].map((em) => (
+                              <button key={em} onClick={() => addReaction(msg, em)}>
+                                {em}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="msg-menu-actions">
+                            <button onClick={() => startReply(msg)}>↩ Reply</button>
+                            {mine && msg.type === "text" && (
+                              <button onClick={() => startEdit(msg)}>✏️ Edit</button>
+                            )}
+                            {mine && (
+                              <button
+                                className="danger"
+                                onClick={() => deleteMessage(msg)}
+                              >
+                                🗑️ Unsend
+                              </button>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
 
-                    {Object.keys(chips).length > 0 && (
+                    {!deleted && Object.keys(chips).length > 0 && (
                       <div className="react-chips">
                         {Object.entries(chips).map(([em, info]) => (
                           <button
@@ -1493,9 +2197,21 @@ export default function App() {
                   </div>
                 );
               })}
+              {theirTyping && !msgSearch.trim() && (
+                <div className="bubble-wrap theirs">
+                  <div className="bubble typing-bubble">
+                    <span className="typing-dot" />
+                    <span className="typing-dot" />
+                    <span className="typing-dot" />
+                  </div>
+                </div>
+              )}
               <div ref={bottomRef} />
               {reactPickerMsg && (
-                <div className="react-overlay" onClick={() => setReactPickerMsg(null)} />
+                <div
+                  className="react-overlay"
+                  onClick={() => setReactPickerMsg(null)}
+                />
               )}
             </div>
 
@@ -1536,6 +2252,55 @@ export default function App() {
               </div>
             )}
 
+            {showEmoji && (
+              <div className="emoji-panel">
+                {[
+                  "😀","😂","😍","🥰","😎","😅","🤔","😴",
+                  "😭","😡","😱","🥳","🙏","🔥","🎉","✨",
+                  "❤️","💀","💯","👀","👍","👎","🤝","🙌",
+                ].map((em) => (
+                  <button key={em} type="button" onClick={() => insertEmoji(em)}>
+                    {em}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {replyingTo && (
+              <div className="reply-bar">
+                <div className="reply-bar-text">
+                  <strong>
+                    Replying to{" "}
+                    {replyingTo.sender_id === currentUser.id
+                      ? "yourself"
+                      : displayName(selectedUser)}
+                  </strong>
+                  <span>
+                    {replyingTo.type === "image"
+                      ? "📷 photo"
+                      : replyingTo.type === "file"
+                      ? `📄 ${replyingTo.file_name || "file"}`
+                      : replyingTo.content}
+                  </span>
+                </div>
+                <button type="button" onClick={() => setReplyingTo(null)}>
+                  <X size={16} />
+                </button>
+              </div>
+            )}
+
+            {editingMsg && (
+              <div className="reply-bar editing">
+                <div className="reply-bar-text">
+                  <strong>Editing message</strong>
+                  <span>Press Save to update it</span>
+                </div>
+                <button type="button" onClick={cancelEdit}>
+                  <X size={16} />
+                </button>
+              </div>
+            )}
+
             <form className="composer" onSubmit={sendMessage}>
               <button
                 type="button"
@@ -1546,20 +2311,365 @@ export default function App() {
               >
                 {showGiphy ? <X size={18} /> : <ImageIcon size={18} />}
               </button>
+              <button
+                type="button"
+                className={`composer-icon ${showEmoji ? "active" : ""}`}
+                onClick={() => setShowEmoji((s) => !s)}
+                aria-label="Emoji"
+                title="Emoji"
+              >
+                <Smile size={18} />
+              </button>
+              <button
+                type="button"
+                className="composer-icon"
+                onClick={() => chatFileInputRef.current?.click()}
+                disabled={uploadingFile}
+                aria-label="Attach a file"
+                title="Attach an image or file"
+              >
+                <Paperclip size={18} />
+              </button>
+              <input
+                ref={chatFileInputRef}
+                type="file"
+                hidden
+                onChange={uploadChatFile}
+              />
               <input
                 value={messageText}
-                onChange={(e) => setMessageText(e.target.value)}
-                placeholder="Type a message…"
+                onChange={(e) => {
+                  setMessageText(e.target.value);
+                  if (!editingMsg) notifyTyping();
+                }}
+                placeholder={
+                  uploadingFile
+                    ? "Uploading…"
+                    : editingMsg
+                    ? "Edit your message…"
+                    : "Type a message…"
+                }
               />
-              <button>Send</button>
+              <button>{editingMsg ? "Save" : "Send"}</button>
+            </form>
+          </>
+        ) : selectedGroup ? (
+          <>
+            <header className="chat-header">
+              <div className="chat-header-left">
+                <div className="group-avatar">
+                  <Users size={16} />
+                </div>
+                <div className="chat-header-name">
+                  <h3>{selectedGroup.name}</h3>
+                  <span className="presence-line">
+                    {Object.keys(groupMembers).length} member
+                    {Object.keys(groupMembers).length === 1 ? "" : "s"}
+                    {groupTyping ? ` · ${groupTyping} is typing…` : ""}
+                  </span>
+                </div>
+              </div>
+              <div className="chat-header-right">
+                <div className="group-member-avatars">
+                  {Object.values(groupMembers)
+                    .slice(0, 5)
+                    .map((m) => (
+                      <Avatar
+                        key={m.id}
+                        url={m.avatar_url}
+                        name={m.username}
+                        size="sm"
+                      />
+                    ))}
+                </div>
+                <button
+                  className="report-user-btn"
+                  onClick={leaveGroup}
+                  title="Leave group"
+                >
+                  Leave
+                </button>
+              </div>
+            </header>
+            <div className="messages">
+              {groupMessages.map((msg) => {
+                const mine = msg.sender_id === currentUser.id;
+                const isImage = msg.type === "image";
+                const deleted = !!msg.deleted_at;
+                const sender = groupMembers[msg.sender_id];
+                const repliedTo = msg.reply_to
+                  ? groupMessages.find((m) => m.id === msg.reply_to)
+                  : null;
+                return (
+                  <div
+                    key={msg.id}
+                    className={`bubble-wrap ${mine ? "mine" : "theirs"}`}
+                  >
+                    {!mine && (
+                      <span className="group-sender">
+                        {sender?.username || "Unknown"}
+                      </span>
+                    )}
+                    {repliedTo && (
+                      <div className="reply-quote">
+                        <span className="reply-quote-name">
+                          {repliedTo.sender_id === currentUser.id
+                            ? "You"
+                            : groupMembers[repliedTo.sender_id]?.username ||
+                              "Unknown"}
+                        </span>
+                        <span className="reply-quote-text">
+                          {repliedTo.deleted_at
+                            ? "message removed"
+                            : repliedTo.type === "image"
+                            ? "Image"
+                            : repliedTo.type === "file"
+                            ? `📄 ${repliedTo.file_name || "file"}`
+                            : repliedTo.content}
+                        </span>
+                      </div>
+                    )}
+                    <div
+                      className={`bubble ${
+                        isImage && !deleted ? "bubble-image" : ""
+                      } ${deleted ? "deleted" : ""}`}
+                      onTouchStart={() => !deleted && startPress(msg)}
+                      onTouchEnd={endPress}
+                      onTouchMove={endPress}
+                      onMouseDown={() => !deleted && startPress(msg)}
+                      onMouseUp={endPress}
+                      onMouseLeave={endPress}
+                    >
+                      {deleted ? (
+                        <p className="msg-deleted">🚫 message removed</p>
+                      ) : isImage ? (
+                        <img
+                          className="msg-image"
+                          src={msg.content}
+                          alt="image"
+                          loading="lazy"
+                        />
+                      ) : msg.type === "file" ? (
+                        <a
+                          className="file-chip"
+                          href={msg.content}
+                          target="_blank"
+                          rel="noreferrer"
+                          download={msg.file_name || true}
+                        >
+                          <FileIcon size={20} />
+                          <span className="file-chip-name">
+                            {msg.file_name || "file"}
+                          </span>
+                          <Download size={15} />
+                        </a>
+                      ) : (
+                        <p>{msg.content}</p>
+                      )}
+                      {!deleted && (
+                        <div className="msg-footer">
+                          <span>
+                            {fmtTime(msg.created_at)}
+                            {msg.edited_at ? " · edited" : ""}
+                          </span>
+                        </div>
+                      )}
+
+                      {reactPickerMsg === msg.id && !deleted && (
+                        <div className="msg-menu">
+                          <div className="msg-menu-actions">
+                            <button onClick={() => startReply(msg)}>
+                              ↩ Reply
+                            </button>
+                            {mine && msg.type === "text" && (
+                              <button onClick={() => startEdit(msg)}>
+                                ✏️ Edit
+                              </button>
+                            )}
+                            {mine && (
+                              <button
+                                className="danger"
+                                onClick={() => deleteMessage(msg)}
+                              >
+                                🗑️ Unsend
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {groupTyping && (
+                <div className="bubble-wrap theirs">
+                  <div className="bubble typing-bubble">
+                    <span className="typing-dot" />
+                    <span className="typing-dot" />
+                    <span className="typing-dot" />
+                  </div>
+                </div>
+              )}
+              <div ref={bottomRef} />
+              {reactPickerMsg && (
+                <div
+                  className="react-overlay"
+                  onClick={() => setReactPickerMsg(null)}
+                />
+              )}
+            </div>
+
+            {showEmoji && (
+              <div className="emoji-panel">
+                {[
+                  "😀","😂","😍","🥰","😎","😅","🤔","😴",
+                  "😭","😡","😱","🥳","🙏","🔥","🎉","✨",
+                  "❤️","💀","💯","👀","👍","👎","🤝","🙌",
+                ].map((em) => (
+                  <button key={em} type="button" onClick={() => insertEmoji(em)}>
+                    {em}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {replyingTo && (
+              <div className="reply-bar">
+                <div className="reply-bar-text">
+                  <strong>
+                    Replying to{" "}
+                    {replyingTo.sender_id === currentUser.id
+                      ? "yourself"
+                      : groupMembers[replyingTo.sender_id]?.username || "Unknown"}
+                  </strong>
+                  <span>
+                    {replyingTo.type === "image"
+                      ? "Image"
+                      : replyingTo.type === "file"
+                      ? `📄 ${replyingTo.file_name || "file"}`
+                      : replyingTo.content}
+                  </span>
+                </div>
+                <button type="button" onClick={() => setReplyingTo(null)}>
+                  <X size={16} />
+                </button>
+              </div>
+            )}
+
+            {editingMsg && (
+              <div className="reply-bar editing">
+                <div className="reply-bar-text">
+                  <strong>Editing message</strong>
+                  <span>Press Save to update it</span>
+                </div>
+                <button type="button" onClick={cancelEdit}>
+                  <X size={16} />
+                </button>
+              </div>
+            )}
+
+            <form className="composer" onSubmit={sendGroupMessage}>
+              <button
+                type="button"
+                className={`composer-icon ${showEmoji ? "active" : ""}`}
+                onClick={() => setShowEmoji((s) => !s)}
+                aria-label="Emoji"
+                title="Emoji"
+              >
+                <Smile size={18} />
+              </button>
+              <button
+                type="button"
+                className="composer-icon"
+                onClick={() => chatFileInputRef.current?.click()}
+                disabled={uploadingFile}
+                aria-label="Attach a file"
+                title="Attach an image or file"
+              >
+                <Paperclip size={18} />
+              </button>
+              <input
+                value={messageText}
+                onChange={(e) => {
+                  setMessageText(e.target.value);
+                  if (!editingMsg) notifyGroupTyping();
+                }}
+                placeholder={
+                  uploadingFile ? "Uploading…" : "Message the group…"
+                }
+              />
+              <button>{editingMsg ? "Save" : "Send"}</button>
             </form>
           </>
         ) : (
           <div className="empty-chat">
-            <h1>Select a friend to start Wavo-ing</h1>
+            <h1>Select a friend or group to start Wavo-ing</h1>
           </div>
         )}
       </section>
+
+      {showNewGroup && (
+        <div className="modal-overlay" onClick={() => setShowNewGroup(false)}>
+          <div className="new-group-card" onClick={(e) => e.stopPropagation()}>
+            <div className="new-group-head">
+              <h3>New group</h3>
+              <button onClick={() => setShowNewGroup(false)} aria-label="Close">
+                <X size={18} />
+              </button>
+            </div>
+            <input
+              className="settings-input"
+              value={newGroupName}
+              onChange={(e) => setNewGroupName(e.target.value)}
+              placeholder="Group name"
+              maxLength={40}
+            />
+            <p className="new-group-label">Add friends</p>
+            <div className="new-group-friends">
+              {friends.length === 0 && (
+                <p className="new-group-empty">Add some friends first.</p>
+              )}
+              {friends.map((f) => {
+                const checked = newGroupMembers.includes(f.id);
+                return (
+                  <button
+                    key={f.id}
+                    className={`ng-friend ${checked ? "checked" : ""}`}
+                    onClick={() =>
+                      setNewGroupMembers((prev) =>
+                        checked
+                          ? prev.filter((id) => id !== f.id)
+                          : [...prev, f.id]
+                      )
+                    }
+                  >
+                    <Avatar url={f.avatar_url} name={f.username} size="sm" />
+                    <span>{displayName(f)}</span>
+                    {checked && <Check size={16} />}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              className="ng-create"
+              onClick={createGroup}
+              disabled={
+                creatingGroup ||
+                !newGroupName.trim() ||
+                newGroupMembers.length === 0
+              }
+            >
+              {creatingGroup
+                ? "Creating…"
+                : `Create group${
+                    newGroupMembers.length
+                      ? ` (${newGroupMembers.length + 1})`
+                      : ""
+                  }`}
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

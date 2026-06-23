@@ -1892,3 +1892,521 @@ body::before {
   flex-shrink: 0;
 }
 .acct-remove:hover { background: var(--panel-2); color: var(--text); }
+
+/* ============================================================
+   STEP 10 — Batch 1: typing, presence, edit/delete, reply,
+   emoji picker, in-chat search
+   ============================================================ */
+
+/* presence dot on avatars */
+.avatar-presence { position: relative; display: inline-block; line-height: 0; }
+.avatar-presence.online::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--online);
+  border: 2px solid var(--panel);
+}
+
+/* chat header name + presence */
+.chat-header-name { display: flex; flex-direction: column; gap: 1px; }
+.chat-header-name h3 { margin: 0; line-height: 1.1; }
+.presence-line { font-size: 0.72rem; color: var(--text-dim); }
+
+/* in-chat search bar */
+.chat-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-faint);
+  background: var(--panel);
+}
+.chat-search input {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 0.9rem;
+  outline: none;
+}
+.chat-search button {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+/* message long-press action menu */
+.msg-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 7px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 50;
+  overflow: hidden;
+  min-width: 168px;
+}
+.bubble-wrap.mine .msg-menu { left: auto; right: 0; }
+.msg-menu-emojis {
+  display: flex;
+  gap: 2px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.msg-menu-emojis button {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 3px 4px;
+  border-radius: 8px;
+  transition: transform 0.1s, background 0.1s;
+}
+.msg-menu-emojis button:hover { transform: scale(1.3); background: var(--panel); }
+.msg-menu-actions { display: flex; flex-direction: column; padding: 4px; }
+.msg-menu-actions button {
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.msg-menu-actions button:hover { background: var(--panel); }
+.msg-menu-actions button.danger { color: var(--coral); }
+
+/* reply quote above a bubble */
+.reply-quote {
+  max-width: 78%;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 10px;
+  margin-bottom: -2px;
+  border-left: 3px solid var(--coral);
+  background: var(--panel-2);
+  border-radius: 8px 8px 0 0;
+  font-size: 0.76rem;
+}
+.reply-quote-name { color: var(--coral); font-weight: 700; }
+.reply-quote-text {
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+
+/* deleted / unsent message */
+.bubble.deleted { opacity: 0.7; }
+.msg-deleted { font-style: italic; color: var(--text-faint); margin: 0; }
+
+/* typing indicator bubble */
+.typing-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 14px !important;
+}
+.typing-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  animation: typing-bounce 1.2s infinite ease-in-out;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+
+/* composer reply / edit bar */
+.reply-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--panel-2);
+}
+.reply-bar.editing { border-left: 3px solid var(--amber); }
+.reply-bar-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.reply-bar-text strong { font-size: 0.8rem; color: var(--coral); }
+.reply-bar.editing .reply-bar-text strong { color: var(--amber); }
+.reply-bar-text span {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.reply-bar > button {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+/* composer emoji panel */
+.emoji-panel {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--panel-2);
+  max-height: 160px;
+  overflow-y: auto;
+}
+.emoji-panel button {
+  background: none;
+  border: none;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 8px;
+  transition: transform 0.1s, background 0.1s;
+}
+.emoji-panel button:hover { transform: scale(1.25); background: var(--panel); }
+
+/* ============================================================
+   STEP 11 — Batch 2: custom status + nicknames
+   ============================================================ */
+.user-row-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+  gap: 1px;
+}
+.user-status {
+  font-size: 0.74rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-header-name h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.nickname-btn {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  border-radius: 6px;
+  opacity: 0.6;
+  transition: opacity 0.12s, color 0.12s;
+}
+.nickname-btn:hover { opacity: 1; color: var(--coral); }
+
+/* ============================================================
+   STEP 12 — Batch 3: announcements, audit log, rate limit
+   ============================================================ */
+
+/* user-facing announcement banner */
+.announce-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, var(--coral), var(--amber));
+  color: var(--on-accent);
+  font-weight: 600;
+  font-size: 0.9rem;
+  box-shadow: var(--shadow-sm);
+}
+.announce-banner-text { flex: 1; min-width: 0; }
+.announce-banner button {
+  background: rgba(0, 0, 0, 0.12);
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* admin: announce composer */
+.announce-tab { display: flex; flex-direction: column; gap: 16px; }
+.announce-compose {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 16px;
+}
+.announce-compose h3 { margin: 0 0 4px; }
+.announce-hint { margin: 0 0 10px; color: var(--text-dim); font-size: 0.82rem; }
+.announce-compose textarea {
+  width: 100%;
+  background: var(--bg-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  padding: 10px 12px;
+  font: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.announce-post {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: linear-gradient(135deg, var(--coral), var(--amber));
+  color: var(--on-accent);
+  border: none;
+  border-radius: var(--r-sm);
+  padding: 9px 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.announce-post:disabled { opacity: 0.5; cursor: default; }
+.announce-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--line);
+}
+.announce-row-main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.announce-body { font-size: 0.9rem; }
+.announce-time { font-size: 0.74rem; color: var(--text-faint); }
+
+/* admin: audit log */
+.audit-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 13px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.85rem;
+}
+.audit-action {
+  flex-shrink: 0;
+  min-width: 104px;
+  text-transform: capitalize;
+  font-weight: 700;
+  font-size: 0.74rem;
+  padding: 3px 9px;
+  border-radius: 999px;
+  text-align: center;
+  background: var(--panel-2);
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+}
+.audit-action.act-ban,
+.audit-action.act-strike,
+.audit-action.act-delete_message { background: var(--coral-soft); color: var(--coral); border-color: var(--coral); }
+.audit-action.act-unban,
+.audit-action.act-remove_strike { background: rgba(74,222,128,0.12); color: var(--online); border-color: var(--online); }
+.audit-main { flex: 1; min-width: 0; }
+.audit-detail { color: var(--text-dim); margin-left: 6px; font-style: italic; }
+.audit-time { font-size: 0.74rem; color: var(--text-faint); flex-shrink: 0; }
+
+/* ============================================================
+   STEP 13 — Batch 4: image & file uploads
+   ============================================================ */
+.file-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  text-decoration: none;
+  max-width: 260px;
+  transition: border-color 0.12s;
+}
+.file-chip:hover { border-color: var(--coral); }
+.file-chip-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-chip svg:last-child { color: var(--text-faint); flex-shrink: 0; }
+/* uploaded photos share the GIF image styling already (.msg-image) */
+.bubble.mine .file-chip { background: rgba(0, 0, 0, 0.12); border-color: rgba(0,0,0,0.15); }
+
+/* ============================================================
+   STEP 13 — Batch 5: group chats
+   ============================================================ */
+.groups-head,
+.friends-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 14px;
+  margin-top: 8px;
+}
+.groups-head h4,
+.friends-head h4 {
+  margin: 0;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+.new-group-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--coral-soft);
+  color: var(--coral);
+  border: 1px solid var(--coral);
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.group-list { display: flex; flex-direction: column; }
+.group-avatar {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--coral), var(--amber));
+  color: var(--on-accent);
+}
+.chat-header-left .group-avatar { width: 34px; height: 34px; border-radius: 11px; }
+
+/* sender label above a group bubble */
+.group-sender {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--coral);
+  margin: 0 0 1px 2px;
+}
+
+/* member avatars in group header */
+.group-member-avatars { display: flex; }
+.group-member-avatars .avatar {
+  margin-left: -8px;
+  border: 2px solid var(--panel);
+}
+.group-member-avatars .avatar:first-child { margin-left: 0; }
+
+/* new group modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.new-group-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 80vh;
+}
+.new-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.new-group-head h3 { margin: 0; }
+.new-group-head button {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.new-group-label {
+  margin: 2px 0 0;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+.new-group-friends {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  max-height: 40vh;
+}
+.new-group-empty { color: var(--text-dim); font-size: 0.86rem; }
+.ng-friend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.ng-friend span { flex: 1; text-align: left; }
+.ng-friend.checked { border-color: var(--coral); color: var(--coral); }
+.ng-create {
+  margin-top: 4px;
+  background: linear-gradient(135deg, var(--coral), var(--amber));
+  color: var(--on-accent);
+  border: none;
+  border-radius: var(--r-sm);
+  padding: 11px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+.ng-create:disabled { opacity: 0.5; cursor: default; }

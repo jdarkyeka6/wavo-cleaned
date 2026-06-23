@@ -14,6 +14,8 @@ import {
   AlertTriangle,
   Lock,
   Minus,
+  Megaphone,
+  ScrollText,
 } from "lucide-react";
 
 export default function Admin({ me, onBack }) {
@@ -34,6 +36,12 @@ export default function Admin({ me, onBack }) {
   const [vaSelected, setVaSelected] = useState(null);
   const [vaMessages, setVaMessages] = useState([]);
 
+  // batch 3: audit log + announcements
+  const [auditLog, setAuditLog] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [announceText, setAnnounceText] = useState("");
+  const [posting, setPosting] = useState(false);
+
   // --- LOAD ---
   useEffect(() => {
     loadUsers();
@@ -41,6 +49,8 @@ export default function Admin({ me, onBack }) {
     loadFriendCount();
     loadFlags();
     loadStrikes();
+    loadAudit();
+    loadAnnouncements();
 
     const channel = supabase
       .channel("admin")
@@ -174,6 +184,57 @@ export default function Admin({ me, onBack }) {
     setVaMessages([]);
   }
 
+  // --- AUDIT LOG + ANNOUNCEMENTS ---
+  async function loadAudit() {
+    const { data } = await supabase
+      .from("admin_actions")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (data) setAuditLog(data);
+  }
+
+  async function loadAnnouncements() {
+    const { data } = await supabase
+      .from("announcements")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (data) setAnnouncements(data);
+  }
+
+  async function logAction(action, targetUserId, detail) {
+    await supabase.from("admin_actions").insert({
+      actor_id: me.id,
+      action,
+      target_user_id: targetUserId || null,
+      detail: detail || null,
+    });
+    loadAudit();
+  }
+
+  async function postAnnouncement() {
+    const body = announceText.trim();
+    if (!body) return;
+    setPosting(true);
+    const { error } = await supabase
+      .from("announcements")
+      .insert({ body, created_by: me.id });
+    if (error) {
+      alert(error.message);
+    } else {
+      setAnnounceText("");
+      logAction("announce", null, body.slice(0, 80));
+      loadAnnouncements();
+    }
+    setPosting(false);
+  }
+
+  async function deleteAnnouncement(id) {
+    await supabase.from("announcements").delete().eq("id", id);
+    loadAnnouncements();
+  }
+
   // --- MODERATION ACTIONS ---
   async function issueStrike(userId) {
     if (!userId) return;
@@ -188,6 +249,7 @@ export default function Admin({ me, onBack }) {
       alert(error.message);
       return;
     }
+    logAction("strike", userId, reason.trim() || null);
     loadStrikes();
     loadUsers();
   }
@@ -204,6 +266,7 @@ export default function Admin({ me, onBack }) {
       alert(error.message);
       return;
     }
+    logAction("remove_strike", userId, null);
     loadStrikes();
     loadUsers();
   }
@@ -215,16 +278,27 @@ export default function Admin({ me, onBack }) {
     else if (choice === "permanent") banned_until = new Date("2999-01-01").toISOString();
     else banned_until = new Date(Date.now() + Number(choice) * 86400000).toISOString();
     await supabase.from("profiles").update({ banned_until }).eq("id", userId);
+    logAction(
+      choice === "lift" ? "unban" : "ban",
+      userId,
+      choice === "lift"
+        ? null
+        : choice === "permanent"
+        ? "permanent"
+        : `${choice} day(s)`
+    );
     loadUsers();
   }
 
   async function toggleAdmin(u) {
     await supabase.from("profiles").update({ is_admin: !u.is_admin }).eq("id", u.id);
+    logAction(u.is_admin ? "demote_admin" : "promote_admin", u.id, null);
     loadUsers();
   }
 
   async function deleteMessage(id) {
     await supabase.from("messages").delete().eq("id", id);
+    logAction("delete_message", null, `message ${id.slice(0, 8)}`);
     loadMessages();
     loadFlags();
     if (viewerId) loadViewer(viewerId);
@@ -408,6 +482,12 @@ export default function Admin({ me, onBack }) {
         </button>
         <button className={tab === "viewer" ? "active" : ""} onClick={() => setTab("viewer")}>
           <Eye size={15} /> Viewer
+        </button>
+        <button className={tab === "announce" ? "active" : ""} onClick={() => setTab("announce")}>
+          <Megaphone size={15} /> Announce
+        </button>
+        <button className={tab === "audit" ? "active" : ""} onClick={() => setTab("audit")}>
+          <ScrollText size={15} /> Audit
         </button>
       </nav>
 
@@ -595,6 +675,79 @@ export default function Admin({ me, onBack }) {
               ))}
             </div>
           </>
+        )}
+
+        {tab === "announce" && (
+          <div className="announce-tab">
+            <div className="announce-compose">
+              <h3>Post an announcement</h3>
+              <p className="announce-hint">
+                This shows as a banner to every user until they dismiss it.
+              </p>
+              <textarea
+                value={announceText}
+                onChange={(e) => setAnnounceText(e.target.value)}
+                placeholder="Type your announcement…"
+                rows={3}
+                maxLength={280}
+              />
+              <button
+                className="announce-post"
+                onClick={postAnnouncement}
+                disabled={posting || !announceText.trim()}
+              >
+                <Megaphone size={15} /> {posting ? "Posting…" : "Post to everyone"}
+              </button>
+            </div>
+            <div className="admin-table">
+              {announcements.length === 0 && (
+                <div className="admin-empty">No announcements yet.</div>
+              )}
+              {announcements.map((a) => (
+                <div key={a.id} className="announce-row">
+                  <div className="announce-row-main">
+                    <span className="announce-body">{a.body}</span>
+                    <span className="announce-time">
+                      {fmt(a.created_at)} · {nameById[a.created_by] || "?"}
+                    </span>
+                  </div>
+                  <button
+                    className="danger"
+                    onClick={() => deleteAnnouncement(a.id)}
+                    title="Delete announcement"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tab === "audit" && (
+          <div className="admin-table audit-tab">
+            {auditLog.length === 0 && (
+              <div className="admin-empty">No actions logged yet.</div>
+            )}
+            {auditLog.map((a) => (
+              <div key={a.id} className="audit-row">
+                <span className={`audit-action act-${a.action}`}>
+                  {a.action.replace(/_/g, " ")}
+                </span>
+                <span className="audit-main">
+                  <strong>{nameById[a.actor_id] || "?"}</strong>
+                  {a.target_user_id && (
+                    <>
+                      {" → "}
+                      <strong>{nameById[a.target_user_id] || "?"}</strong>
+                    </>
+                  )}
+                  {a.detail && <span className="audit-detail">“{a.detail}”</span>}
+                </span>
+                <span className="audit-time">{fmt(a.created_at)}</span>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </main>
