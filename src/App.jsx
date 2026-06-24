@@ -19,6 +19,7 @@ import {
   File as FileIcon,
   Download,
   Users,
+  Gamepad2,
 } from "lucide-react";
 import {
   registerServiceWorker,
@@ -26,6 +27,7 @@ import {
   subscribeToPush,
 } from "./push";
 import Admin from "./Admin";
+import Games from "./Games";
 import "./styles.css";
 
 const GIPHY_API_KEY = import.meta.env.VITE_GIPHY_API_KEY;
@@ -188,6 +190,9 @@ export default function App() {
   const [notifications, setNotifications] = useState([]);
   const [showNotifs, setShowNotifs] = useState(false);
   const [notifTab, setNotifTab] = useState("notifs"); // notifs | requests
+
+  // games
+  const [showGames, setShowGames] = useState(false);
 
   // giphy
   const [showGiphy, setShowGiphy] = useState(false);
@@ -991,6 +996,7 @@ export default function App() {
     setMessageText("");
     setSelectedUser(user);
     setShowGiphy(false);
+    setShowGames(false);
     clearNotifsFromSender(user.id);
   }
 
@@ -2076,6 +2082,13 @@ export default function App() {
                   <Search size={16} />
                 </button>
                 <button
+                  className={`icon-btn ${showGames ? "active" : ""}`}
+                  onClick={() => setShowGames((s) => !s)}
+                  title="Play a game"
+                >
+                  <Gamepad2 size={16} />
+                </button>
+                <button
                   className="report-user-btn"
                   onClick={() => reportUser(selectedUser)}
                   title={`Report ${selectedUser.username}`}
@@ -2266,6 +2279,15 @@ export default function App() {
                 />
               )}
             </div>
+
+            {showGames && (
+              <Games
+                chatId={chatId}
+                currentUser={currentUser}
+                opponent={selectedUser}
+                onClose={() => setShowGames(false)}
+              />
+            )}
 
             {showGiphy && (
               <div className="giphy-panel">
