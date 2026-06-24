@@ -66,7 +66,7 @@ function isPronounceablePart(w) {
     const vowels = (w.match(/[aeiouyà-ÿ]/gi) || []).length;
     if (vowels === 0) return false; // a long word with no vowel is a mash
     const ratio = vowels / w.length;
-    if (ratio < 0.2 || ratio > 0.9) return false; // sensible vowel balance
+    if (ratio < 0.1 || ratio > 1.0) return false; // sensible vowel balance
     if (/[bcdfghjklmnpqrstvwxz]{5,}/i.test(w)) return false; // no 5+ consonant pile-up
     if (/[aeiou]{4,}/i.test(w)) return false; // no 4+ vowel pile-up
   }
