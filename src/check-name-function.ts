@@ -60,10 +60,12 @@ Deno.serve(async (req) => {
         messages: [
           {
             role: "system",
-            content:
-              "You decide whether a submitted word is a plausible real human name " +
-              "(a first or last name from any culture) or just random keyboard " +
-              "gibberish. Reply with ONLY one word: REAL or FAKE.",
+           content:
+  "You decide whether a submitted word could plausibly be a real human " +
+  "name (a first or last name from ANY culture or language). Many real " +
+  "surnames are very short (e.g. Ng, Li, Yeo, Wu, Ho, Xu, An, Oh, Ng, Yu). " +
+  "When in doubt, treat it as REAL. Only answer FAKE for obvious keyboard " +
+  "gibberish like 'asdfgh' or 'qwerty'. Reply with ONLY one word: REAL or FAKE.",,
           },
           { role: "user", content: clean },
         ],
