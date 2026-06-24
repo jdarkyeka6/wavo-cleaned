@@ -55,14 +55,23 @@ function isPronounceablePart(w) {
   return true;
 }
 
-function looksLikeName(s) {
-  const v = (s || "").trim().toLowerCase();
-  if (v.length < 2 || v.length > 30) return false;
-  if (!/^[a-zà-ÿ' -]+$/i.test(v)) return false; // letters, spaces, ' and - only
-  // validate each word so "Anne-Marie" / "Mary Jane" / "de la Cruz" pass
-  const parts = v.split(/[ '-]+/).filter(Boolean);
-  if (parts.length === 0) return false;
-  return parts.every(isPronounceablePart);
+function isPronounceablePart(w) {
+  if (w.length <= 1) return true; // initials like "J" are fine
+  if (NAME_BLOCKLIST.includes(w)) return false;
+  if (/(.)\1\1/.test(w)) return false; // no 3+ identical in a row (aaa)
+
+  // Short surnames (Ng, Wu, Li, Yeo, Bo, Oh…) are real but have extreme
+  // vowel ratios, so only run the ratio + pile-up checks on longer words.
+  if (w.length >= 5) {
+    const vowels = (w.match(/[aeiouyà-ÿ]/gi) || []).length;
+    if (vowels === 0) return false; // a long word with no vowel is a mash
+    const ratio = vowels / w.length;
+    if (ratio < 0.2 || ratio > 0.9) return false; // sensible vowel balance
+    if (/[bcdfghjklmnpqrstvwxz]{5,}/i.test(w)) return false; // no 5+ consonant pile-up
+    if (/[aeiou]{4,}/i.test(w)) return false; // no 4+ vowel pile-up
+  }
+  return true;
+}
 }
 
 // Whole years between a YYYY-MM-DD birthday and today.
