@@ -42,36 +42,25 @@ const NAME_BLOCKLIST = [
   "firstname", "lastname", "user", "admin", "null", "undefined",
 ];
 
+// A single word is acceptable unless it's obvious junk. We intentionally do
+// NOT judge "real-ness" by vowel ratios etc., because real names (Yeo, Smith,
+// Ng, Bo…) break those rules. We only block the blocklist and triple-letter
+// mash like "aaargh".
 function isPronounceablePart(w) {
   if (w.length <= 1) return true; // initials like "J" are fine
   if (NAME_BLOCKLIST.includes(w)) return false;
-  const vowels = (w.match(/[aeiouyà-ÿ]/gi) || []).length;
-  if (vowels === 0) return false; // needs a vowel
-  const ratio = vowels / w.length;
-  if (ratio < 0.25 || ratio > 0.85) return false; // sensible vowel balance
-  if (/(.)\1\1/.test(w)) return false; // no 3+ identical in a row (aaa)
-  if (/[bcdfghjklmnpqrstvwxz]{4,}/i.test(w)) return false; // no 4+ consonant pile-up
-  if (/[aeiou]{4,}/i.test(w)) return false; // no 4+ vowel pile-up
+  if (/(.)\1\1/.test(w)) return false; // no 3+ identical in a row (aaaa)
   return true;
 }
 
-function isPronounceablePart(w) {
-  if (w.length <= 1) return true; // initials like "J" are fine
-  if (NAME_BLOCKLIST.includes(w)) return false;
-  if (/(.)\1\1/.test(w)) return false; // no 3+ identical in a row (aaa)
-
-  // Short surnames (Ng, Wu, Li, Yeo, Bo, Oh…) are real but have extreme
-  // vowel ratios, so only run the ratio + pile-up checks on longer words.
-  if (w.length >= 5) {
-    const vowels = (w.match(/[aeiouyà-ÿ]/gi) || []).length;
-    if (vowels === 0) return false; // a long word with no vowel is a mash
-    const ratio = vowels / w.length;
-    if (ratio < 0.1 || ratio > 1.0) return false; // sensible vowel balance
-    if (/[bcdfghjklmnpqrstvwxz]{5,}/i.test(w)) return false; // no 5+ consonant pile-up
-    if (/[aeiou]{4,}/i.test(w)) return false; // no 4+ vowel pile-up
-  }
-  return true;
-}
+function looksLikeName(s) {
+  const v = (s || "").trim().toLowerCase();
+  if (v.length < 2 || v.length > 30) return false;
+  if (!/^[a-zà-ÿ' -]+$/i.test(v)) return false; // letters, spaces, ' and - only
+  // validate each word so "Anne-Marie" / "Mary Jane" / "de la Cruz" pass
+  const parts = v.split(/[ '-]+/).filter(Boolean);
+  if (parts.length === 0) return false;
+  return parts.every(isPronounceablePart);
 }
 
 // Whole years between a YYYY-MM-DD birthday and today.
@@ -1371,10 +1360,7 @@ export default function App() {
         alert("Please enter a real first name.");
         return;
       }
-      if (!looksLikeName(auth.lastName)) {
-        alert("Please enter a real last name.");
-        return;
-      }
+      // Last name accepts anything (real surnames are too varied to validate).
       if (!/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(auth.email.trim())) {
         alert("Please enter a valid email address (like name@example.com).");
         return;
@@ -1406,7 +1392,7 @@ export default function App() {
           password: auth.password,
         });
         if (error) throw error;
-        await supabase.from("profiles").insert({
+        const { error: profileErr } = await supabase.from("profiles").insert({
           id: data.user.id,
           username: auth.username.trim(),
           first_name: auth.firstName.trim(),
@@ -1415,6 +1401,7 @@ export default function App() {
           birthday: auth.birthday,
           age: ageFromBirthday(auth.birthday),
         });
+        if (profileErr) throw profileErr;
         rememberAccount(auth.username.trim(), auth.password);
         setMode("login");
       }
