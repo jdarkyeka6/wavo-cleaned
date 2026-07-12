@@ -28,6 +28,8 @@ import {
 } from "./push";
 import Admin from "./Admin";
 import Games from "./Games";
+import Plans from "./Plans";
+import { useCosmetics } from "./useCosmetics";
 import "./styles.css";
 
 const GIPHY_API_KEY = import.meta.env.VITE_GIPHY_API_KEY;
@@ -77,15 +79,9 @@ function ageFromBirthday(birthday) {
   return age;
 }
 
-const THEMES = [
-  { id: "dusk", name: "Warm Dusk", color: "#FF6B5B" },
-  { id: "midnight", name: "Midnight", color: "#6C7CFF" },
-  { id: "ocean", name: "Ocean", color: "#2DD4BF" },
-  { id: "forest", name: "Forest", color: "#4ADE80" },
-  { id: "grape", name: "Grape", color: "#C084FC" },
-  { id: "rose", name: "Rose", color: "#FB7185" },
-  { id: "daylight", name: "Daylight", color: "#F59E0B" },
-];
+// Themes now live in the `cosmetics` table (see useCosmetics.js).
+// The palettes themselves are still plain CSS — [data-theme="x"] in styles.css.
+// The database only tracks who has unlocked what.
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -130,6 +126,33 @@ export default function App() {
     () => localStorage.getItem("wavo-theme") || "dusk"
   );
   const [themeOpen, setThemeOpen] = useState(false);
+
+  // cosmetics / stats / streaks — server decides what's unlocked
+  const {
+    catalogue,
+    stats,
+    claim,
+    requirement,
+    isUsable,
+  } = useCosmetics(session?.user?.id);
+
+  const themeItems = useMemo(
+    () => catalogue.filter((c) => c.kind === "theme"),
+    [catalogue]
+  );
+
+  // Tap a theme: use it if it's yours, otherwise try to claim it first.
+  async function pickTheme(item) {
+    if (isUsable(item)) {
+      setTheme(item.id);
+      return;
+    }
+    const req = requirement(item);
+    if (req?.kind === "earned" && req.met) {
+      const ok = await claim(item.id);
+      if (ok) setTheme(item.id);
+    }
+  }
 
   // saved accounts for quick switching (stored on this device only)
   const [accounts, setAccounts] = useState(() => {
@@ -1791,21 +1814,66 @@ export default function App() {
                 {/* APPEARANCE */}
                 <section className="settings-section">
                   <h4>Appearance</h4>
+
+                  {stats && (
+                    <div className="streak-line">
+                      <span className="streak-flame">🔥</span>
+                      {stats.current_streak > 0
+                        ? `${stats.current_streak} day streak`
+                        : "Open Wavo tomorrow to start a streak"}
+                      <span style={{ marginLeft: "auto", fontWeight: 500 }}>
+                        {stats.messages_sent} sent
+                      </span>
+                    </div>
+                  )}
+
                   <div className="theme-grid">
-                    {THEMES.map((t) => (
-                      <button
-                        key={t.id}
-                        className={`theme-option ${theme === t.id ? "active" : ""}`}
-                        onClick={() => setTheme(t.id)}
-                      >
-                        <span
-                          className="theme-swatch"
-                          style={{ background: t.color }}
-                        />
-                        {t.name}
-                      </button>
-                    ))}
+                    {themeItems.map((t) => {
+                      const req = requirement(t);
+                      const usable = isUsable(t);
+                      const claimable = req?.kind === "earned" && req.met;
+
+                      let cls = "theme-option";
+                      if (theme === t.id && usable) cls += " active";
+                      if (!usable && !claimable) cls += " locked";
+                      if (claimable) cls += " claimable";
+
+                      return (
+                        <button
+                          key={t.id}
+                          className={cls}
+                          onClick={() => pickTheme(t)}
+                          title={
+                            usable
+                              ? t.name
+                              : req?.kind === "premium"
+                              ? "Premium theme"
+                              : `${req?.have ?? 0} / ${req?.need ?? 0}`
+                          }
+                        >
+                          <span
+                            className="theme-swatch"
+                            style={{ background: t.payload?.swatch || "#888" }}
+                          />
+                          {t.name}
+                          {!usable && (
+                            <span className="theme-lock">
+                              {claimable
+                                ? "Claim"
+                                : req?.kind === "premium"
+                                ? "Premium"
+                                : `${req?.have ?? 0}/${req?.need ?? 0}`}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
+
+                  <p className="theme-hint">
+                    Keep using Wavo to unlock more. Streaks, days active and
+                    messages sent all count.
+                  </p>
                 </section>
 
                 {/* NOTIFICATIONS */}
@@ -2465,6 +2533,13 @@ export default function App() {
                 </button>
               </div>
             </header>
+
+            <Plans
+              group={selectedGroup}
+              userId={currentUser.id}
+              isAdmin={!!profile?.is_admin}
+            />
+
             <div className="messages">
               {groupMessages.map((msg) => {
                 const mine = msg.sender_id === currentUser.id;

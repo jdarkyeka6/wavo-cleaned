@@ -2451,3 +2451,228 @@ body::before {
 }
 .auth-date { color-scheme: dark; }
 [data-theme="daylight"] .auth-date { color-scheme: light; }
+
+/* ============================================================
+   STEP 10 — UNLOCKABLE THEMES
+   Same pattern as above: a theme is just a palette swap.
+   ============================================================ */
+
+/* ── SKY · pale blue on slate (earned: 3 days active) ── */
+[data-theme="sky"] {
+  --bg:#0d1520; --bg-deep:#080e16; --on-accent:#080e16;
+  --panel:#132030; --panel-2:#1a2b3e; --card:#20364d;
+  --coral:#38BDF8; --coral-soft:rgba(56,189,248,.15); --amber:#7DD3FC;
+  --read:#38BDF8; --online:#4ADE80;
+}
+
+/* ── MONO · greyscale (earned: 100 messages) ── */
+[data-theme="mono"] {
+  --bg:#121212; --bg-deep:#0a0a0a; --on-accent:#0a0a0a;
+  --panel:#1c1c1c; --panel-2:#242424; --card:#2c2c2c;
+  --line:rgba(255,255,255,.09); --line-soft:rgba(255,255,255,.05);
+  --text:#F2F2F2; --text-dim:#9A9A9A; --text-faint:#5E5E5E;
+  --coral:#E5E5E5; --coral-soft:rgba(229,229,229,.12); --amber:#B8B8B8;
+  --read:#8A8A8A; --online:#C8C8C8;
+}
+
+/* ── EMBER · orange on charcoal (earned: 7 day streak) ── */
+[data-theme="ember"] {
+  --bg:#16110d; --bg-deep:#0e0a07; --on-accent:#0e0a07;
+  --panel:#221a13; --panel-2:#2d221a; --card:#3a2c21;
+  --coral:#FF8B3D; --coral-soft:rgba(255,139,61,.16); --amber:#FFC46B;
+  --read:#4FB8FF; --online:#4ADE80;
+}
+
+/* ── AURORA · premium ── */
+[data-theme="aurora"] {
+  --bg:#070d16; --bg-deep:#040810; --on-accent:#040810;
+  --panel:#0e1a2c; --panel-2:#142440; --card:#1a2f52;
+  --coral:#38E8C8; --coral-soft:rgba(56,232,200,.15); --amber:#5B7CFA;
+  --read:#5B7CFA; --online:#38E8C8;
+}
+
+/* ── SUNSET · premium ── */
+[data-theme="sunset"] {
+  --bg:#180b14; --bg-deep:#0f070d; --on-accent:#0f070d;
+  --panel:#26121f; --panel-2:#33192a; --card:#412137;
+  --coral:#FF5C8A; --coral-soft:rgba(255,92,138,.16); --amber:#FFB443;
+  --read:#4FB8FF; --online:#4ADE80;
+}
+
+/* ── locked theme states ───────────────────────────────── */
+.theme-option { position: relative; }
+.theme-option.locked { opacity: .5; cursor: default; }
+.theme-option.locked:hover { color: var(--text-dim); border-color: var(--line); }
+.theme-option.claimable {
+  border-color: var(--amber);
+  color: var(--text);
+  cursor: pointer;
+  opacity: 1;
+}
+.theme-lock {
+  margin-left: auto;
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.theme-option.claimable .theme-lock { color: var(--amber); }
+.theme-hint {
+  margin: 8px 0 0;
+  font-size: .72rem;
+  color: var(--text-faint);
+  line-height: 1.4;
+}
+.streak-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.streak-flame { color: var(--amber); }
+
+/* ============================================================
+   STEP 11 — PLANS (group meet-ups + RSVP)
+   ============================================================ */
+.plans-wrap {
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  flex-shrink: 0;
+}
+.plans-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+}
+.plans-head h5 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: .86rem;
+  color: var(--text);
+}
+.plans-count {
+  font-size: .68rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--coral-soft);
+  color: var(--coral);
+}
+.plans-new-btn {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  border-radius: var(--r-sm);
+  padding: 3px 9px;
+  font-size: .74rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.plans-new-btn:hover { color: var(--text); border-color: var(--text-faint); }
+.plans-body { padding: 0 14px 12px; }
+
+.plan-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 11px 12px;
+  margin-bottom: 8px;
+}
+.plan-card.past { opacity: .55; }
+.plan-title {
+  font-family: var(--display);
+  font-size: .95rem;
+  color: var(--text);
+  margin: 0 0 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.plan-meta {
+  font-size: .76rem;
+  color: var(--text-dim);
+  margin-bottom: 9px;
+}
+.plan-notes {
+  font-size: .78rem;
+  color: var(--text-faint);
+  margin: -5px 0 9px;
+}
+.plan-rsvp-row { display: flex; gap: 6px; }
+.rsvp-btn {
+  flex: 1;
+  padding: 6px 4px;
+  border-radius: var(--r-sm);
+  border: 1.5px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text-dim);
+  font-size: .76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .14s;
+}
+.rsvp-btn:hover { color: var(--text); border-color: var(--text-faint); }
+.rsvp-btn.on {
+  background: var(--coral);
+  border-color: var(--coral);
+  color: var(--on-accent);
+}
+.plan-going {
+  margin-top: 8px;
+  font-size: .72rem;
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+.plan-delete {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: .72rem;
+  padding: 0 2px;
+}
+.plan-delete:hover { color: var(--coral); }
+
+.plan-form { display: grid; gap: 7px; margin-bottom: 10px; }
+.plan-form input,
+.plan-form textarea {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-size: .82rem;
+  outline: none;
+}
+.plan-form input:focus,
+.plan-form textarea:focus { border-color: var(--coral); }
+.plan-form textarea { resize: vertical; min-height: 46px; }
+.plan-form-row { display: flex; gap: 6px; }
+.plan-form-row button {
+  flex: 1;
+  padding: 8px;
+  border-radius: var(--r-sm);
+  border: none;
+  font-size: .8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.plan-save { background: var(--coral); color: var(--on-accent); }
+.plan-save:disabled { opacity: .45; cursor: default; }
+.plan-cancel { background: var(--panel-2); color: var(--text-dim); }
+.plans-empty {
+  font-size: .78rem;
+  color: var(--text-faint);
+  padding: 2px 0 8px;
+}
