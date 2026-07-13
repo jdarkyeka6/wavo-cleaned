@@ -30,6 +30,8 @@ import Admin from "./Admin";
 import Games from "./Games";
 import Plans from "./Plans";
 import Landing from "./Landing";
+import Premium from "./Premium";
+import { UserLabel } from "./Cosmetic";
 import { useCosmetics } from "./useCosmetics";
 import "./styles.css";
 
@@ -89,6 +91,8 @@ export default function App() {
   const [profile, setProfile] = useState(null);
   const [mode, setMode] = useState("login");
   const [showAuth, setShowAuth] = useState(false);
+  const [showPremium, setShowPremium] = useState(false);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [auth, setAuth] = useState({
     firstName: "",
     lastName: "",
@@ -142,6 +146,58 @@ export default function App() {
     () => catalogue.filter((c) => c.kind === "theme"),
     [catalogue]
   );
+
+  const isPremium =
+    !!profile?.is_premium &&
+    (!profile?.premium_until || new Date(profile.premium_until) > new Date());
+
+  // Equip a badge or name colour. The server re-checks ownership; the client
+  // asking nicely is not a security model.
+  async function equip(item, slot) {
+    const usable = isUsable(item);
+    if (!usable) {
+      const req = requirement(item);
+      if (req?.kind === "premium") {
+        setShowPremium(true);
+        return;
+      }
+      if (req?.met) {
+        const got = await claim(item.id);
+        if (!got) return;
+      } else {
+        return;
+      }
+    }
+    const equipped =
+      slot === "badge" ? profile?.equipped_badge : profile?.equipped_name_style;
+    const next = equipped === item.id ? null : item.id;
+    const { data } = await supabase.rpc("equip_cosmetic", {
+      p_cosmetic_id: next,
+      p_slot: slot,
+    });
+    if (data !== false) await loadProfile();
+  }
+
+  async function startCheckout() {
+    setCheckoutBusy(true);
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${sess?.session?.access_token || ""}`,
+        },
+      });
+      const json = await res.json();
+      if (json.url) window.location.href = json.url;
+      else alert(json.error || "Couldn't start checkout.");
+    } catch (err) {
+      alert("Couldn't start checkout: " + err.message);
+    } finally {
+      setCheckoutBusy(false);
+    }
+  }
 
   // Tap a theme: use it if it's yours, otherwise try to claim it first.
   async function pickTheme(item) {
@@ -945,7 +1001,7 @@ export default function App() {
     setSearching(true);
     const { data } = await supabase
       .from("profiles")
-      .select("id, username, avatar_url")
+      .select("id, username, avatar_url, equipped_badge, equipped_name_style")
       .ilike("username", `%${q}%`)
       .neq("id", currentUser.id)
       .limit(10);
@@ -1059,7 +1115,7 @@ export default function App() {
   async function loadGroupMembers(gid) {
     const { data } = await supabase
       .from("group_members")
-      .select("user_id, profiles(id, username, avatar_url)")
+      .select("user_id, profiles(id, username, avatar_url, equipped_badge, equipped_name_style)")
       .eq("group_id", gid);
     if (data) {
       const map = {};
@@ -1899,6 +1955,84 @@ export default function App() {
                   </p>
                 </section>
 
+                {/* BADGES + NAME — the bits other people actually see */}
+                <section className="settings-section">
+                  <h4>Your name in chat</h4>
+
+                  <div className="cos-preview">
+                    <UserLabel user={profile} />
+                    <span className="cos-preview-hint">what everyone sees</span>
+                  </div>
+
+                  <h5 className="cos-sub">Badge</h5>
+                  <div className="cos-grid">
+                    {catalogue
+                      .filter((c) => c.kind === "badge")
+                      .map((b) => {
+                        const req = requirement(b);
+                        const usable = isUsable(b);
+                        const on = profile?.equipped_badge === b.id;
+                        return (
+                          <button
+                            key={b.id}
+                            className={`cos-chip ${on ? "on" : ""} ${
+                              usable ? "" : "locked"
+                            }`}
+                            onClick={() => equip(b, "badge")}
+                            title={usable ? b.name : b.description}
+                          >
+                            <span style={{ color: b.payload?.color }}>
+                              {b.payload?.emoji}
+                            </span>
+                            {b.name}
+                            {!usable && (
+                              <span className="cos-lock">
+                                {req?.kind === "premium"
+                                  ? "Premium"
+                                  : `${req?.have ?? 0}/${req?.need ?? 0}`}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                  </div>
+
+                  <h5 className="cos-sub">Name colour</h5>
+                  <div className="cos-grid">
+                    {catalogue
+                      .filter((c) => c.kind === "name_style")
+                      .map((n) => {
+                        const usable = isUsable(n);
+                        const on = profile?.equipped_name_style === n.id;
+                        return (
+                          <button
+                            key={n.id}
+                            className={`cos-chip ${on ? "on" : ""} ${
+                              usable ? "" : "locked"
+                            }`}
+                            onClick={() => equip(n, "name_style")}
+                          >
+                            <span
+                              className="cos-dot"
+                              style={{ background: n.payload?.color }}
+                            />
+                            {n.name.replace(" name", "")}
+                            {!usable && <span className="cos-lock">Premium</span>}
+                          </button>
+                        );
+                      })}
+                  </div>
+
+                  {!isPremium && (
+                    <button
+                      className="cos-upsell"
+                      onClick={() => setShowPremium(true)}
+                    >
+                      ⭐ Get Premium — $2/mo
+                    </button>
+                  )}
+                </section>
+
                 {/* NOTIFICATIONS */}
                 <section className="settings-section">
                   <h4>Notifications</h4>
@@ -2579,7 +2713,7 @@ export default function App() {
                   >
                     {!mine && (
                       <span className="group-sender">
-                        {sender?.username || "Unknown"}
+                        <UserLabel user={sender} name={sender?.username || "Unknown"} />
                       </span>
                     )}
                     {repliedTo && (
@@ -2842,6 +2976,14 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <Premium
+        open={showPremium}
+        onClose={() => setShowPremium(false)}
+        onSubscribe={startCheckout}
+        isPremium={isPremium}
+        busy={checkoutBusy}
+      />
     </main>
   );
 }

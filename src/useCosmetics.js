@@ -94,3 +94,40 @@ export function useCosmetics(userId) {
 
   return { catalogue, unlocked, stats, loading, claim, requirement, isUsable, reload: load };
 }
+
+/**
+ * The cosmetics catalogue: small, public, near-static. Fetched once per page
+ * load and shared, rather than every message row hitting the network.
+ */
+let cataloguePromise = null;
+
+function fetchCatalogue() {
+  if (!cataloguePromise) {
+    cataloguePromise = supabase
+      .from("cosmetics")
+      .select("id, kind, name, description, payload, unlock_type, unlock_rule, sort_order")
+      .order("sort_order")
+      .then(({ data }) => {
+        const map = {};
+        (data || []).forEach((c) => {
+          map[c.id] = c;
+        });
+        return { list: data || [], map };
+      });
+  }
+  return cataloguePromise;
+}
+
+export function useCosmeticCatalogue() {
+  const [cat, setCat] = useState({ list: [], map: {} });
+  useEffect(() => {
+    let live = true;
+    fetchCatalogue().then((c) => {
+      if (live) setCat(c);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  return cat;
+}
