@@ -1,0 +1,92 @@
+/* ── Append to the END of src/styles.css ───────────────────────────── */
+
+.premium-price-was {
+  opacity: 0.45;
+  font-weight: 400;
+  margin-right: 4px;
+}
+
+.premium-yearly-note {
+  font-size: 12px;
+  opacity: 0.6;
+  margin: -4px 0 10px;
+}
+
+.premium-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.premium-student {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  justify-content: center;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  font-size: 14px;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+
+.premium-student:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.premium-student input {
+  width: 16px;
+  height: 16px;
+  accent-color: #FFB454;
+  cursor: pointer;
+  margin: 0;
+}
+
+.premium-student strong {
+  color: #FFB454;
+}
+
+.premium-billing-switch {
+  display: flex;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 3px;
+  gap: 3px;
+}
+
+.premium-billing-switch button {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  opacity: 0.6;
+  transition: all 0.15s ease;
+}
+
+.premium-billing-switch button.active {
+  background: rgba(255, 255, 255, 0.1);
+  opacity: 1;
+}
+
+.premium-billing-switch .save-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #4ADE80;
+  background: rgba(74, 222, 128, 0.15);
+  padding: 2px 6px;
+  border-radius: 5px;
+}

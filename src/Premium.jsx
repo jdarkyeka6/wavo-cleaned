@@ -1,14 +1,20 @@
+import { useState } from "react";
 import { Check, Star, X } from "lucide-react";
 import { useCosmeticCatalogue } from "./useCosmetics";
 
 /**
  * Premium.
  *
- * $2/mo. Everything sold here is something OTHER people can see — badges and
- * name colours render from the server's copy of your profile, so they can't
- * be faked. Themes are deliberately NOT the pitch: the CSS ships to every
- * browser, so a locked theme isn't really locked, and charging for one would
- * be charging for something a kid can take with devtools.
+ * $5/mo standard, $3/mo student, or pay yearly for two months free
+ * ($40/yr standard, $25/yr student). The student rate is on the honour
+ * system — no verification, deliberately: checking it would mean storing
+ * school email addresses belonging to kids, a bigger liability than the
+ * $2 it would protect.
+ *
+ * Everything sold here is something OTHER people can see — badges and name
+ * colours render from the server's copy of your profile, so they can't be
+ * faked. Themes are deliberately NOT the pitch: the CSS ships to every
+ * browser, so a locked theme isn't really locked.
  */
 
 const FREE = [
@@ -26,11 +32,26 @@ const PREMIUM = [
   "Everything in Free, obviously",
 ];
 
+// Prices live here only for display. The server decides the real price —
+// this object never gets sent anywhere, it just draws the buttons.
+const PRICES = {
+  standard: { monthly: 5, yearly: 50 },
+  student: { monthly: 3, yearly: 30 },
+};
+
 export default function Premium({ open, onClose, onSubscribe, isPremium, busy }) {
   const { list } = useCosmeticCatalogue();
+  const [student, setStudent] = useState(true);
+  const [yearly, setYearly] = useState(false);
+
   if (!open) return null;
 
   const nameStyles = list.filter((c) => c.kind === "name_style");
+  const tier = student ? "student" : "standard";
+  const price = yearly ? PRICES[tier].yearly : PRICES[tier].monthly;
+  const period = yearly ? "yr" : "mo";
+  const plan = yearly ? `${tier}_annual` : tier;
+  const monthlyEquivalent = yearly ? (PRICES[tier].yearly / 12).toFixed(2) : null;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -42,7 +63,7 @@ export default function Premium({ open, onClose, onSubscribe, isPremium, busy })
         <div className="premium-head">
           <Star size={22} />
           <h2>Wavo Premium</h2>
-          <p>Two dollars a month. Keeps the lights on.</p>
+          <p>Keeps the lights on. Cancel any time.</p>
         </div>
 
         {/* Show the thing, don't describe it */}
@@ -74,8 +95,17 @@ export default function Premium({ open, onClose, onSubscribe, isPremium, busy })
 
           <div className="premium-col paid">
             <h4>
-              Premium <span className="premium-price">$2/mo</span>
+              Premium{" "}
+              <span className="premium-price">
+                {student && <s className="premium-price-was">${yearly ? 50 : 5}</s>} $
+                {price}/{period}
+              </span>
             </h4>
+            {yearly && (
+              <p className="premium-yearly-note">
+                works out to ${monthlyEquivalent}/mo — 2 months free
+              </p>
+            )}
             <ul>
               {PREMIUM.map((f) => (
                 <li key={f}>
@@ -90,13 +120,44 @@ export default function Premium({ open, onClose, onSubscribe, isPremium, busy })
           <div className="premium-active">You're a Supporter. Thank you.</div>
         ) : (
           <>
+            <div className="premium-toggles">
+              <label className="premium-student">
+                <input
+                  type="checkbox"
+                  checked={student}
+                  onChange={(e) => setStudent(e.target.checked)}
+                />
+                <span>
+                  I'm a student <strong>— $2 off</strong>
+                </span>
+              </label>
+
+              <div className="premium-billing-switch">
+                <button
+                  type="button"
+                  className={!yearly ? "active" : ""}
+                  onClick={() => setYearly(false)}
+                >
+                  Monthly
+                </button>
+                <button
+                  type="button"
+                  className={yearly ? "active" : ""}
+                  onClick={() => setYearly(true)}
+                >
+                  Yearly <span className="save-badge">2 months free</span>
+                </button>
+              </div>
+            </div>
+
             <button
               className="premium-cta"
-              onClick={onSubscribe}
+              onClick={() => onSubscribe(plan)}
               disabled={busy}
             >
-              {busy ? "Opening…" : "Get Premium — $2/mo"}
+              {busy ? "Opening…" : `Get Premium — $${price}/${period}`}
             </button>
+
             <p className="premium-fineprint">
               Ask a parent before you subscribe. Cancel any time.
             </p>
