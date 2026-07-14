@@ -33,6 +33,7 @@ import Landing from "./Landing";
 import Premium from "./Premium";
 import { UserLabel } from "./Cosmetic";
 import { useCosmetics } from "./useCosmetics";
+import { useUrlSync } from "./useUrlSync";
 import "./styles.css";
 
 const GIPHY_API_KEY = import.meta.env.VITE_GIPHY_API_KEY;
@@ -178,7 +179,7 @@ export default function App() {
     if (data !== false) await loadProfile();
   }
 
-  async function startCheckout() {
+  async function startCheckout(plan = "standard") {
     setCheckoutBusy(true);
     try {
       const { data: sess } = await supabase.auth.getSession();
@@ -188,6 +189,7 @@ export default function App() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${sess?.session?.access_token || ""}`,
         },
+        body: JSON.stringify({ plan }),
       });
       const json = await res.json();
       if (json.url) window.location.href = json.url;
@@ -251,6 +253,33 @@ export default function App() {
   const [searching, setSearching] = useState(false);
 
   const [selectedUser, setSelectedUser] = useState(null);
+
+  // Look up a friend by username — used when the URL is /chats/someusername
+  // (e.g. someone bookmarked or was sent a direct link to a specific chat).
+  function setSelectedUserByUsername(username) {
+    const match = friends.find(
+      (f) => f.username?.toLowerCase() === username.toLowerCase()
+    );
+    if (match) setSelectedUser(match);
+    // If friends haven't loaded yet, or the username isn't a friend, this
+    // silently does nothing — the chat list still shows, just nothing
+    // pre-selected. No error, no crash.
+  }
+
+  useUrlSync({
+    session,
+    profile,
+    showAuth,
+    setShowAuth,
+    mode,
+    setMode,
+    view,
+    setView,
+    selectedUser,
+    setSelectedUserByUsername,
+    friends,
+  });
+
   const [messages, setMessages] = useState([]);
   const [messageText, setMessageText] = useState("");
   const [loadingChat, setLoadingChat] = useState(false);
