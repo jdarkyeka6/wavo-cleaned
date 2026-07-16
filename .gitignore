@@ -1,0 +1,24 @@
+# Dependencies — never commit these, Vercel installs them itself
+node_modules
+
+# Build output
+dist
+dist-ssr
+
+# Secrets — keep API keys out of a public repo!
+.env
+.env.local
+.env*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS junk
+.vscode
+.idea
+.DS_Store
+*.local
+
+# Vercel
+.vercel
