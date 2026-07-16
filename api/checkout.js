@@ -7,15 +7,18 @@ import { createClient } from "@supabase/supabase-js";
  * Creates a Stripe Checkout session for Wavo Premium.
  *
  * The client never tells us a price. It sends a PLAN KEYWORD:
- *   "standard"        $5/mo
- *   "student"         $3/mo
- *   "standard_annual"  $40/yr
- *   "student_annual"   $25/yr
+ *   "standard"   $4.99 AUD / month
+ *   "student"    $3.49 AUD / month  (honour system)
  *
- * The server looks the keyword up in its own table of price IDs. The worst
- * a tampered client can do is pick a price we already publish — it can
- * never invent one. That's the difference between pointing at a menu and
+ * The server looks the keyword up in its own table below. The worst a
+ * tampered client can do is pick a plan we already publish — it can never
+ * invent a price. That's the difference between pointing at a menu and
  * writing your own number on the bill.
+ *
+ * Prices live HERE, in code, as `price_data`. Stripe creates the price
+ * object on the fly, so there are no STRIPE_PRICE_ID env vars to keep in
+ * sync and nothing to click in the Stripe dashboard. To change a price,
+ * change the number below and redeploy.
  */
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -29,11 +32,10 @@ const admin = createClient(
 );
 
 // The allowlist. If it isn't in here, it isn't for sale.
+// Amounts are in cents: 499 = $4.99 AUD.
 const PLANS = {
-  standard: process.env.STRIPE_PRICE_ID,                  // $5/mo
-  student: process.env.STRIPE_PRICE_ID_STUDENT,            // $3/mo
-  standard_annual: process.env.STRIPE_PRICE_ID_ANNUAL,      // $40/yr
-  student_annual: process.env.STRIPE_PRICE_ID_STUDENT_ANNUAL, // $25/yr
+  standard: { label: "Wavo Premium", amount: 499 },
+  student: { label: "Wavo Premium — Student", amount: 349 },
 };
 
 export default async function handler(req, res) {
@@ -56,21 +58,22 @@ export default async function handler(req, res) {
     const plan = Object.prototype.hasOwnProperty.call(PLANS, requested)
       ? requested
       : "standard";
-    const priceId = PLANS[plan];
+    const { label, amount } = PLANS[plan];
 
-    if (!priceId) {
-      console.error(`No price ID for plan "${plan}" — check Vercel env vars`);
-      return res.status(500).json({ error: "That plan isn't available right now." });
-    }
-
-    // 3. Banned users don't get to buy a badge.
+    // 3. Banned users don't get to buy a badge. (For real, this time.)
     const { data: profile } = await admin
       .from("profiles")
-      .select("id, username, is_premium, premium_until, stripe_customer_id")
+      .select("id, username, is_premium, premium_until, stripe_customer_id, banned")
       .eq("id", user.id)
       .single();
 
     if (!profile) return res.status(404).json({ error: "No profile" });
+
+    if (profile.banned) {
+      return res
+        .status(403)
+        .json({ error: "Your account can't buy Premium right now." });
+    }
 
     const stillActive =
       profile.is_premium &&
@@ -102,7 +105,17 @@ export default async function handler(req, res) {
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: "aud",
+            unit_amount: amount,
+            recurring: { interval: "month" },
+            product_data: { name: label },
+          },
+        },
+      ],
       success_url: `${origin}/?premium=1`,
       cancel_url: `${origin}/?premium=0`,
       // The webhook reads this to know who paid. Never trust the browser for it.
