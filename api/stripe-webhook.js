@@ -33,13 +33,21 @@ function rawBody(req) {
   });
 }
 
-async function setPremium(uid, active, until) {
+async function setPremium(uid, active, until, plan) {
   if (!uid) return;
+  // Map the purchased plan to a tier. Anything vip-flavoured -> 'vip',
+  // everything else that's active -> 'premium', inactive -> 'free'.
+  const tier = !active
+    ? "free"
+    : plan && plan.startsWith("vip")
+    ? "vip"
+    : "premium";
   await admin
     .from("profiles")
     .update({
       is_premium: active,
       premium_until: until ? new Date(until * 1000).toISOString() : null,
+      tier,
     })
     .eq("id", uid);
 
@@ -83,7 +91,7 @@ export default async function handler(req, res) {
         const s = event.data.object;
         const uid = s.client_reference_id;
         const sub = await stripe.subscriptions.retrieve(s.subscription);
-        await setPremium(uid, true, periodEnd(sub));
+        await setPremium(uid, true, periodEnd(sub), sub.metadata?.plan);
         break;
       }
 
@@ -91,7 +99,7 @@ export default async function handler(req, res) {
         const sub = event.data.object;
         const uid = sub.metadata?.supabase_uid;
         const live = ["active", "trialing"].includes(sub.status);
-        await setPremium(uid, live, periodEnd(sub));
+        await setPremium(uid, live, periodEnd(sub), sub.metadata?.plan);
         break;
       }
 
