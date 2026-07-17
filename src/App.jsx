@@ -20,6 +20,8 @@ import {
   Download,
   Users,
   Gamepad2,
+  Ban,
+  Trash2,
 } from "lucide-react";
 import {
   registerServiceWorker,
@@ -113,6 +115,11 @@ export default function App() {
 
   // my own strikes (each user sees only their own)
   const [myStrikes, setMyStrikes] = useState([]);
+
+  // people I've blocked
+  const [blockedIds, setBlockedIds] = useState(new Set());
+  const [blockedProfiles, setBlockedProfiles] = useState([]);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   // message reactions
   const [reactions, setReactions] = useState([]);
@@ -436,6 +443,7 @@ export default function App() {
     loadNicknames();
     loadAnnouncement();
     loadGroups();
+    loadBlocks();
   }, [currentUser]);
 
   // --- ANNOUNCEMENTS banner ---
@@ -1123,6 +1131,74 @@ export default function App() {
     });
     if (error) alert(error.message);
     else alert(`Reported ${user.username} — an admin will review it.`);
+  }
+
+  // --- BLOCKING ---
+  async function loadBlocks() {
+    const { data } = await supabase
+      .from("blocks")
+      .select("blocked_id")
+      .eq("blocker_id", currentUser.id);
+    const ids = (data || []).map((b) => b.blocked_id);
+    setBlockedIds(new Set(ids));
+    if (ids.length) {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, username, avatar_url")
+        .in("id", ids);
+      setBlockedProfiles(profs || []);
+    } else {
+      setBlockedProfiles([]);
+    }
+  }
+
+  async function blockUser(user) {
+    const ok = window.confirm(
+      `Block ${user.username}? They'll be removed from your friends and won't be able to message you or add you again.`
+    );
+    if (!ok) return;
+    const { error } = await supabase.rpc("block_user", { target: user.id });
+    if (error) {
+      alert("Couldn't block: " + error.message);
+      return;
+    }
+    // If we're in their chat, back out of it.
+    if (selectedUser?.id === user.id) setSelectedUser(null);
+    await loadBlocks();
+    await loadFriends();
+    await loadRequests();
+    alert(`${user.username} has been blocked.`);
+  }
+
+  async function unblockUser(userId) {
+    const { error } = await supabase.rpc("unblock_user", { target: userId });
+    if (error) {
+      alert("Couldn't unblock: " + error.message);
+      return;
+    }
+    await loadBlocks();
+  }
+
+  // --- DELETE ACCOUNT (Apple requires in-app deletion) ---
+  async function deleteAccount() {
+    const sure = window.confirm(
+      "Delete your account? This permanently erases your profile, messages, friends, groups and everything else on Wavo. This cannot be undone."
+    );
+    if (!sure) return;
+    const typed = window.prompt('This is permanent. Type DELETE to confirm.');
+    if (typed !== "DELETE") {
+      alert("Account deletion cancelled.");
+      return;
+    }
+    setDeletingAccount(true);
+    const { error } = await supabase.rpc("delete_my_account");
+    if (error) {
+      alert("Couldn't delete account: " + error.message);
+      setDeletingAccount(false);
+      return;
+    }
+    await supabase.auth.signOut();
+    window.location.href = "/";
   }
 
   // --- ACTIONS ---
@@ -2182,11 +2258,62 @@ export default function App() {
                     <span>Role</span>
                     <strong>{profile?.is_admin ? "Admin" : "Member"}</strong>
                   </div>
+
+                  {/* Blocked users */}
+                  <h5 className="cos-sub">Blocked</h5>
+                  {blockedProfiles.length === 0 ? (
+                    <p className="settings-hint">You haven't blocked anyone.</p>
+                  ) : (
+                    <div className="acct-list">
+                      {blockedProfiles.map((b) => (
+                        <div key={b.id} className="acct-row">
+                          <Avatar url={b.avatar_url} name={b.username} size="sm" />
+                          <div className="acct-info">
+                            <strong>{b.username}</strong>
+                            <span>Blocked</span>
+                          </div>
+                          <button
+                            className="mini-btn"
+                            onClick={() => unblockUser(b.id)}
+                          >
+                            Unblock
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <button
                     className="settings-signout"
                     onClick={() => supabase.auth.signOut()}
                   >
                     Sign out
+                  </button>
+
+                  <a
+                    className="settings-hint"
+                    href="/privacy.html"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ display: "block", marginTop: "14px" }}
+                  >
+                    Privacy Policy
+                  </a>
+
+                  {/* Delete account — Apple requires in-app deletion */}
+                  <button
+                    className="settings-signout"
+                    onClick={deleteAccount}
+                    disabled={deletingAccount}
+                    style={{
+                      marginTop: "10px",
+                      color: "#fff",
+                      background: "#c0392b",
+                      borderColor: "#c0392b",
+                    }}
+                  >
+                    <Trash2 size={14} style={{ marginRight: "6px", verticalAlign: "-2px" }} />
+                    {deletingAccount ? "Deleting…" : "Delete my account"}
                   </button>
                 </section>
               </div>
@@ -2213,7 +2340,7 @@ export default function App() {
             {!searching && searchResults.length === 0 && (
               <div className="search-status">No users found</div>
             )}
-            {searchResults.map((u) => {
+            {searchResults.filter((u) => !blockedIds.has(u.id)).map((u) => {
               const pending = outgoingIds.has(u.id);
               const incoming = incomingRequests.some((r) => r.sender_id === u.id);
               return (
@@ -2294,7 +2421,7 @@ export default function App() {
               No friends yet — search a username above to send a request.
             </div>
           )}
-          {friends.map((u) => (
+          {friends.filter((u) => !blockedIds.has(u.id)).map((u) => (
             <button
               key={u.id}
               className={`user-row ${selectedUser?.id === u.id ? "active" : ""}`}
@@ -2388,6 +2515,13 @@ export default function App() {
                   title={`Report ${selectedUser.username}`}
                 >
                   <Flag size={14} /> Report
+                </button>
+                <button
+                  className="report-user-btn"
+                  onClick={() => blockUser(selectedUser)}
+                  title={`Block ${selectedUser.username}`}
+                >
+                  <Ban size={14} /> Block
                 </button>
               </div>
             </header>
@@ -3004,7 +3138,7 @@ export default function App() {
               {friends.length === 0 && (
                 <p className="new-group-empty">Add some friends first.</p>
               )}
-              {friends.map((f) => {
+              {friends.filter((f) => !blockedIds.has(f.id)).map((f) => {
                 const checked = newGroupMembers.includes(f.id);
                 return (
                   <button
