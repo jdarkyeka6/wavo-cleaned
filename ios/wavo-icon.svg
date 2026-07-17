@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7b2cff"/>
+      <stop offset="0.55" stop-color="#5b46ff"/>
+      <stop offset="1" stop-color="#38a5ff"/>
+    </linearGradient>
+    <radialGradient id="corner" cx="0.28" cy="0.22" r="0.9">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Electric outer glow around the bolt -->
+    <filter id="electricglow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="16" result="blur"/>
+      <feFlood flood-color="#8fd0ff" flood-opacity="0.9"/>
+      <feComposite in2="blur" operator="in" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <rect width="1024" height="1024" fill="url(#corner)"/>
+
+  <!-- SHARP bolt: same silhouette, rebuilt with straight cuts + hard points.
+       viewBox coords in the 0..48 x 0..46 space, scaled 11.30x, translated. -->
+  <g transform="translate(241,252) scale(11.30)" filter="url(#electricglow)">
+    <path fill="#ffffff" d="
+      M10.93 0
+      L39.83 0
+      L28.4 16
+      L46.2 16
+      L23.9 45.9
+      L23.9 31.7
+      L9.4 31.7
+      L18.1 19.5
+      L0.3 19.5
+      Z"/>
+  </g>
+</svg>

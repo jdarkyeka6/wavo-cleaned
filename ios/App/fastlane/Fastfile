@@ -1,0 +1,70 @@
+# Fastlane: builds Wavo and ships it to TestFlight.
+#
+# Signing is handled with an App Store Connect API key (the modern, simple way),
+# so we don't hand-juggle certificates. On the cloud Mac this:
+#   1. authenticates with the API key,
+#   2. creates/fetches a signing certificate into a temporary keychain,
+#   3. creates/fetches the provisioning profile for lol.wavo.app,
+#   4. builds the app, and
+#   5. uploads it to TestFlight.
+
+APP_IDENTIFIER = "lol.wavo.app"
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Build Wavo and upload to TestFlight"
+  lane :beta do
+    api_key = app_store_connect_api_key(
+      key_id: ENV["ASC_KEY_ID"],
+      issuer_id: ENV["ASC_ISSUER_ID"],
+      key_content: ENV["ASC_KEY_CONTENT"],
+      is_key_content_base64: true
+    )
+
+    # Fresh temporary keychain to hold the signing certificate for this run.
+    keychain_name = "wavo-ci.keychain"
+    keychain_pw = "ci-temp-pw"
+    create_keychain(
+      name: keychain_name,
+      password: keychain_pw,
+      default_keychain: true,
+      unlock: true,
+      timeout: 3600,
+      lock_when_sleeps: false
+    )
+
+    # Distribution certificate (created if needed) into our temp keychain.
+    cert(
+      api_key: api_key,
+      keychain_path: File.expand_path("~/Library/Keychains/#{keychain_name}-db"),
+      keychain_password: keychain_pw
+    )
+
+    # App Store provisioning profile for our bundle id.
+    sigh(
+      api_key: api_key,
+      app_identifier: APP_IDENTIFIER,
+      force: true
+    )
+
+    # Point the build at the profile sigh just produced.
+    profile_name = ENV["sigh_#{APP_IDENTIFIER}_appstore_profile-name"]
+
+    build_app(
+      workspace: "App.xcworkspace",
+      scheme: "App",
+      export_method: "app-store",
+      export_options: {
+        provisioningProfiles: {
+          APP_IDENTIFIER => profile_name
+        }
+      }
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      skip_waiting_for_build_processing: true
+    )
+  end
+end
