@@ -2083,7 +2083,7 @@ export default function App() {
                       className="cos-upsell"
                       onClick={() => setShowPremium(true)}
                     >
-                      ⭐ Get Premium — $2/mo
+                      ⭐ Get Premium
                     </button>
                   )}
                 </section>
