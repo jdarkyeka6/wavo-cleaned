@@ -44,6 +44,7 @@ body {
   color: var(--text);
   font-family: var(--body);
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -62,6 +63,7 @@ body::before {
 /* ---------- AUTH ---------- */
 .auth-page {
   height: 100vh;
+  height: 100dvh;
   display: grid;
   place-items: center;
   padding: 24px;
@@ -172,6 +174,7 @@ body::before {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
   height: 100vh;
+  height: 100dvh;
 }
 
 /* ---------- SIDEBAR ---------- */
@@ -970,6 +973,7 @@ body::before {
 /* admin shell */
 .admin-shell {
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   background: var(--bg);
@@ -2687,6 +2691,7 @@ body::before {
 
 .landing {
   min-height: 100vh;
+  min-height: 100dvh;
   background:
     radial-gradient(1100px 520px at 78% -10%, rgba(255, 107, 91, 0.13), transparent 62%),
     radial-gradient(700px 420px at 8% 105%, rgba(255, 180, 84, 0.07), transparent 60%),
