@@ -78,10 +78,17 @@ export default function Premium({
   const price = PRICES[plan];
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal pm2-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="new-group-card pm2-modal" onClick={(e) => e.stopPropagation()}>
         <style>{`
-          .pm2-modal { max-width: 430px; width: 100%; padding: 1.5rem 1.5rem 1.3rem; }
+          .pm2-modal { max-width: 430px; width: 100%; padding: 1.5rem 1.5rem 1.3rem; max-height: 88vh; overflow-y: auto; position: relative; }
+
+          .pm2-close {
+            position: absolute; top: 0.9rem; right: 0.9rem;
+            background: none; border: none; color: var(--text-dim);
+            cursor: pointer; padding: 0.2rem; line-height: 0;
+          }
+          .pm2-close:hover { color: var(--text); }
 
           .pm2-head { text-align: center; margin-bottom: 1.1rem; }
           .pm2-head h2 {
@@ -207,7 +214,7 @@ export default function Premium({
           }
         `}</style>
 
-        <button className="modal-close" onClick={onClose} aria-label="Close">
+        <button className="pm2-close" onClick={onClose} aria-label="Close">
           <X size={18} />
         </button>
 
