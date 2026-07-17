@@ -44,8 +44,20 @@ async function setPremium(uid, active, until) {
     .eq("id", uid);
 
   // If they've lapsed, take the Supporter badge and the coloured name off
-  // them — otherwise one month's $2 buys the status forever.
+  // them — otherwise one month buys the status forever.
   if (!active) await admin.rpc("strip_lapsed_premium");
+}
+
+// Stripe moved current_period_end onto the subscription ITEM in newer API
+// versions; older ones kept it on the subscription. Check both so the
+// expiry date never silently comes back undefined (which stored null and
+// made premium permanent).
+function periodEnd(sub) {
+  return (
+    sub?.current_period_end ??
+    sub?.items?.data?.[0]?.current_period_end ??
+    null
+  );
 }
 
 export default async function handler(req, res) {
@@ -71,7 +83,7 @@ export default async function handler(req, res) {
         const s = event.data.object;
         const uid = s.client_reference_id;
         const sub = await stripe.subscriptions.retrieve(s.subscription);
-        await setPremium(uid, true, sub.current_period_end);
+        await setPremium(uid, true, periodEnd(sub));
         break;
       }
 
@@ -79,7 +91,7 @@ export default async function handler(req, res) {
         const sub = event.data.object;
         const uid = sub.metadata?.supabase_uid;
         const live = ["active", "trialing"].includes(sub.status);
-        await setPremium(uid, live, sub.current_period_end);
+        await setPremium(uid, live, periodEnd(sub));
         break;
       }
 
