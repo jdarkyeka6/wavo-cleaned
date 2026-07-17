@@ -121,6 +121,9 @@ export default function App() {
   const [blockedProfiles, setBlockedProfiles] = useState([]);
   const [deletingAccount, setDeletingAccount] = useState(false);
 
+  // mobile: is the friends/groups sidebar showing? (desktop ignores this)
+  const [showSidebar, setShowSidebar] = useState(true);
+
   // message reactions
   const [reactions, setReactions] = useState([]);
   const [reactPickerMsg, setReactPickerMsg] = useState(null);
@@ -1210,6 +1213,7 @@ export default function App() {
     setSelectedUser(user);
     setShowGiphy(false);
     setShowGames(false);
+    setShowSidebar(false); // mobile: reveal the chat
     clearNotifsFromSender(user.id);
   }
 
@@ -1267,6 +1271,7 @@ export default function App() {
     setShowEmoji(false);
     setGroupMessages([]);
     setSelectedGroup(group);
+    setShowSidebar(false); // mobile: reveal the chat
   }
 
   async function createGroup() {
@@ -1798,7 +1803,7 @@ export default function App() {
           </button>
         </div>
       )}
-      <aside className="sidebar">
+      <aside className={`sidebar ${showSidebar ? "open" : "closed"}`}>
         <div className="brand-row">
           <h2>Wavo</h2>
           <div className="brand-actions">
@@ -2462,11 +2467,26 @@ export default function App() {
         </div>
       </aside>
 
+      {showSidebar && (selectedUser || selectedGroup) && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setShowSidebar(false)}
+          aria-hidden="true"
+        />
+      )}
+
       <section className="chat">
         {selectedUser ? (
           <>
             <header className="chat-header">
               <div className="chat-header-left">
+                <button
+                  className="mobile-back"
+                  onClick={() => setShowSidebar(true)}
+                  aria-label="Back to chats"
+                >
+                  ‹
+                </button>
                 <div
                   className={`avatar-presence ${
                     presence(selectedUser.last_active) === "online" ? "online" : ""
@@ -2868,6 +2888,13 @@ export default function App() {
           <>
             <header className="chat-header">
               <div className="chat-header-left">
+                <button
+                  className="mobile-back"
+                  onClick={() => setShowSidebar(true)}
+                  aria-label="Back to chats"
+                >
+                  ‹
+                </button>
                 <div className="group-avatar">
                   <Users size={16} />
                 </div>
