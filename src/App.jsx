@@ -2543,14 +2543,14 @@ export default function App() {
                   onClick={() => reportUser(selectedUser)}
                   title={`Report ${selectedUser.username}`}
                 >
-                  <Flag size={14} /> Report
+                  <Flag size={14} /> <span className="btn-label">Report</span>
                 </button>
                 <button
                   className="report-user-btn"
                   onClick={() => blockUser(selectedUser)}
                   title={`Block ${selectedUser.username}`}
                 >
-                  <Ban size={14} /> Block
+                  <Ban size={14} /> <span className="btn-label">Block</span>
                 </button>
               </div>
             </header>

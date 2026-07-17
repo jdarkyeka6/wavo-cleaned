@@ -505,6 +505,23 @@ body::before {
   .composer-icon { width: 38px; }
   .composer button { padding: 0 16px; }
 
+  /* keep the chat header inside the screen (was overflowing to the Block btn) */
+  .chat-header { padding: 0 10px; }
+  .chat-header-left { min-width: 0; }
+  .chat-header-name { min-width: 0; }
+  .chat-header-name h3 {
+    max-width: 42vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chat-header-right { gap: 6px; }
+  /* Report/Block become icon-only on mobile to save space */
+  .btn-label { display: none; }
+  .report-user-btn { padding: 6px 8px; }
+  /* group header: drop the member avatar stack on small screens */
+  .group-member-avatars { display: none; }
+
   .sidebar {
     position: absolute;
     inset: 0 auto 0 0;
