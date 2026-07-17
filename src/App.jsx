@@ -253,6 +253,9 @@ export default function App() {
   const [searching, setSearching] = useState(false);
 
   const [selectedUser, setSelectedUser] = useState(null);
+  // Ticks every 30s so presence labels stay honest and re-fetches friends'
+  // last_active so their dots don't go stale while you sit on the screen.
+  const [now, setNow] = useState(Date.now());
 
   // Look up a friend by username — used when the URL is /chats/someusername
   // (e.g. someone bookmarked or was sent a direct link to a specific chat).
@@ -475,6 +478,20 @@ export default function App() {
       clearInterval(interval);
       window.removeEventListener("focus", ping);
     };
+  }, [currentUser]);
+
+  // --- PRESENCE TICKER ---
+  // Advances `now` and refetches friends' last_active every 30s, so other
+  // people's online dots and "last seen" labels update without a refresh.
+  useEffect(() => {
+    if (!currentUser) return;
+    const tick = () => {
+      setNow(Date.now());
+      loadFriends();
+    };
+    const interval = setInterval(tick, 30000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
 
   // --- PUSH SUBSCRIPTION (post-login) ---
@@ -728,6 +745,12 @@ export default function App() {
       .select("*")
       .in("id", otherIds);
     setFriends(profs || []);
+    // keep the open chat's presence fresh too
+    setSelectedUser((cur) => {
+      if (!cur) return cur;
+      const updated = (profs || []).find((p) => p.id === cur.id);
+      return updated ? { ...cur, last_active: updated.last_active } : cur;
+    });
   }
 
   async function loadRequests() {
@@ -1408,13 +1431,16 @@ export default function App() {
     setMessageText((t) => t + em);
   }
 
-  // presence label from a last_active timestamp
+  // presence from a last_active timestamp.
+  // `now` (a state ticker updated every 30s below) is read here so the
+  // labels re-render as time passes instead of freezing at page-load.
   function presence(ts) {
     if (!ts) return null;
-    const diff = Date.now() - new Date(ts).getTime();
+    const diff = now - new Date(ts).getTime();
     if (diff < 70000) return "online";
     return `last seen ${fmtRelative(ts)}`;
   }
+  const isOnline = (ts) => presence(ts) === "online";
 
   async function sendGif(gifUrl) {
     setShowGiphy(false);
@@ -2280,7 +2306,13 @@ export default function App() {
               </div>
               <div className="user-row-text">
                 <strong>{displayName(u)}</strong>
-                {u.status && <span className="user-status">{u.status}</span>}
+                <span
+                  className={`user-status ${isOnline(u.last_active) ? "is-online" : ""}`}
+                >
+                  {isOnline(u.last_active)
+                    ? "online"
+                    : presence(u.last_active) || u.status || ""}
+                </span>
               </div>
               {unreadByUser[u.id] > 0 && (
                 <span className="user-badge">{unreadByUser[u.id]}</span>
@@ -2317,10 +2349,14 @@ export default function App() {
                       <Pencil size={12} />
                     </button>
                   </h3>
-                  <span className="presence-line">
-                    {selectedUser.status
-                      ? selectedUser.status
-                      : presence(selectedUser.last_active) || ""}
+                  <span
+                    className={`presence-line ${
+                      isOnline(selectedUser.last_active) ? "is-online" : ""
+                    }`}
+                  >
+                    {presence(selectedUser.last_active) ||
+                      selectedUser.status ||
+                      ""}
                   </span>
                 </div>
               </div>
