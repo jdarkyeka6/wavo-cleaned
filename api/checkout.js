@@ -47,10 +47,19 @@ export default async function handler(req, res) {
     const token = (req.headers.authorization || "").replace(/^Bearer /, "");
     if (!token) return res.status(401).json({ error: "Not signed in" });
 
-    const { data: userData, error: authErr } = await admin.auth.getUser(token);
+    // Validate the login token by asking Supabase to resolve it. We pass the
+    // token as the client's auth header (rather than admin.auth.getUser,
+    // which doesn't validate reliably under the newer sb_secret_ key format).
+    const asUser = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const { data: userData, error: authErr } = await asUser.auth.getUser(token);
     const user = userData?.user;
     if (authErr || !user)
-      return res.status(401).json({ error: "Session expired — sign in again" });
+      return res
+        .status(401)
+        .json({ error: "Session expired — sign in again" + (authErr ? ` (${authErr.message})` : "") });
 
     // --- body may arrive parsed or as a raw string; handle both ---
     let body = req.body;
