@@ -31,6 +31,7 @@ import Games from "./Games";
 import Plans from "./Plans";
 import Landing from "./Landing";
 import Premium from "./Premium";
+import { isNativeApp } from "./lib/platform";
 import { UserLabel } from "./Cosmetic";
 import { useCosmetics } from "./useCosmetics";
 import { useUrlSync } from "./useUrlSync";
@@ -2081,7 +2082,7 @@ export default function App() {
                       })}
                   </div>
 
-                  {!isPremium && (
+                  {!isPremium && !isNativeApp && (
                     <button
                       className="cos-upsell"
                       onClick={() => setShowPremium(true)}
