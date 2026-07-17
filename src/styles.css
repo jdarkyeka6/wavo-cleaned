@@ -421,6 +421,7 @@ body::before {
 
 .composer input {
   flex: 1;
+  min-width: 0;
   background: var(--bg-deep);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
@@ -439,6 +440,7 @@ body::before {
 }
 
 .composer button {
+  flex-shrink: 0;
   background: linear-gradient(135deg, var(--coral), #ff8366);
   border: none;
   padding: 0 22px;
@@ -495,7 +497,14 @@ body::before {
 .sidebar-backdrop { display: none; }
 
 @media (max-width: 720px) {
-  .app-shell { grid-template-columns: 1fr; }
+  /* minmax(0,...) lets the chat column shrink instead of overflowing */
+  .app-shell { grid-template-columns: minmax(0, 1fr); }
+
+  /* keep the composer inside the screen */
+  .composer { padding: 12px 10px; gap: 7px; }
+  .composer-icon { width: 38px; }
+  .composer button { padding: 0 16px; }
+
   .sidebar {
     position: absolute;
     inset: 0 auto 0 0;
