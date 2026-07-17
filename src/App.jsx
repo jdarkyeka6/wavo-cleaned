@@ -135,22 +135,22 @@ export default function App() {
   const [themeOpen, setThemeOpen] = useState(false);
 
   // cosmetics / stats / streaks — server decides what's unlocked
+  const isPremium =
+    !!profile?.is_premium &&
+    (!profile?.premium_until || new Date(profile.premium_until) > new Date());
+
   const {
     catalogue,
     stats,
     claim,
     requirement,
     isUsable,
-  } = useCosmetics(session?.user?.id);
+  } = useCosmetics(session?.user?.id, isPremium);
 
   const themeItems = useMemo(
     () => catalogue.filter((c) => c.kind === "theme"),
     [catalogue]
   );
-
-  const isPremium =
-    !!profile?.is_premium &&
-    (!profile?.premium_until || new Date(profile.premium_until) > new Date());
 
   // Equip a badge or name colour. The server re-checks ownership; the client
   // asking nicely is not a security model.
