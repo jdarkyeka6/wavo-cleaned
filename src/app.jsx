@@ -20,8 +20,6 @@ import {
   Download,
   Users,
   Gamepad2,
-  Ban,
-  Trash2,
 } from "lucide-react";
 import {
   registerServiceWorker,
@@ -33,7 +31,6 @@ import Games from "./Games";
 import Plans from "./Plans";
 import Landing from "./Landing";
 import Premium from "./Premium";
-import { isNativeApp } from "./lib/platform";
 import { UserLabel } from "./Cosmetic";
 import { useCosmetics } from "./useCosmetics";
 import { useUrlSync } from "./useUrlSync";
@@ -116,11 +113,6 @@ export default function App() {
   // my own strikes (each user sees only their own)
   const [myStrikes, setMyStrikes] = useState([]);
 
-  // people I've blocked
-  const [blockedIds, setBlockedIds] = useState(new Set());
-  const [blockedProfiles, setBlockedProfiles] = useState([]);
-  const [deletingAccount, setDeletingAccount] = useState(false);
-
   // message reactions
   const [reactions, setReactions] = useState([]);
   const [reactPickerMsg, setReactPickerMsg] = useState(null);
@@ -143,25 +135,22 @@ export default function App() {
   const [themeOpen, setThemeOpen] = useState(false);
 
   // cosmetics / stats / streaks — server decides what's unlocked
-  const premiumActive =
-    !!profile?.is_premium &&
-    (!profile?.premium_until || new Date(profile.premium_until) > new Date());
-  // Tier drives cosmetics access. If a paid tier has lapsed, fall back to free.
-  const tier = premiumActive ? profile?.tier || "premium" : "free";
-  const isPremium = premiumActive;
-
   const {
     catalogue,
     stats,
     claim,
     requirement,
     isUsable,
-  } = useCosmetics(session?.user?.id, tier);
+  } = useCosmetics(session?.user?.id);
 
   const themeItems = useMemo(
     () => catalogue.filter((c) => c.kind === "theme"),
     [catalogue]
   );
+
+  const isPremium =
+    !!profile?.is_premium &&
+    (!profile?.premium_until || new Date(profile.premium_until) > new Date());
 
   // Equip a badge or name colour. The server re-checks ownership; the client
   // asking nicely is not a security model.
@@ -264,9 +253,6 @@ export default function App() {
   const [searching, setSearching] = useState(false);
 
   const [selectedUser, setSelectedUser] = useState(null);
-  // Ticks every 30s so presence labels stay honest and re-fetches friends'
-  // last_active so their dots don't go stale while you sit on the screen.
-  const [now, setNow] = useState(Date.now());
 
   // Look up a friend by username — used when the URL is /chats/someusername
   // (e.g. someone bookmarked or was sent a direct link to a specific chat).
@@ -443,7 +429,6 @@ export default function App() {
     loadNicknames();
     loadAnnouncement();
     loadGroups();
-    loadBlocks();
   }, [currentUser]);
 
   // --- ANNOUNCEMENTS banner ---
@@ -490,20 +475,6 @@ export default function App() {
       clearInterval(interval);
       window.removeEventListener("focus", ping);
     };
-  }, [currentUser]);
-
-  // --- PRESENCE TICKER ---
-  // Advances `now` and refetches friends' last_active every 30s, so other
-  // people's online dots and "last seen" labels update without a refresh.
-  useEffect(() => {
-    if (!currentUser) return;
-    const tick = () => {
-      setNow(Date.now());
-      loadFriends();
-    };
-    const interval = setInterval(tick, 30000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
 
   // --- PUSH SUBSCRIPTION (post-login) ---
@@ -757,12 +728,6 @@ export default function App() {
       .select("*")
       .in("id", otherIds);
     setFriends(profs || []);
-    // keep the open chat's presence fresh too
-    setSelectedUser((cur) => {
-      if (!cur) return cur;
-      const updated = (profs || []).find((p) => p.id === cur.id);
-      return updated ? { ...cur, last_active: updated.last_active } : cur;
-    });
   }
 
   async function loadRequests() {
@@ -1133,74 +1098,6 @@ export default function App() {
     else alert(`Reported ${user.username} — an admin will review it.`);
   }
 
-  // --- BLOCKING ---
-  async function loadBlocks() {
-    const { data } = await supabase
-      .from("blocks")
-      .select("blocked_id")
-      .eq("blocker_id", currentUser.id);
-    const ids = (data || []).map((b) => b.blocked_id);
-    setBlockedIds(new Set(ids));
-    if (ids.length) {
-      const { data: profs } = await supabase
-        .from("profiles")
-        .select("id, username, avatar_url")
-        .in("id", ids);
-      setBlockedProfiles(profs || []);
-    } else {
-      setBlockedProfiles([]);
-    }
-  }
-
-  async function blockUser(user) {
-    const ok = window.confirm(
-      `Block ${user.username}? They'll be removed from your friends and won't be able to message you or add you again.`
-    );
-    if (!ok) return;
-    const { error } = await supabase.rpc("block_user", { target: user.id });
-    if (error) {
-      alert("Couldn't block: " + error.message);
-      return;
-    }
-    // If we're in their chat, back out of it.
-    if (selectedUser?.id === user.id) setSelectedUser(null);
-    await loadBlocks();
-    await loadFriends();
-    await loadRequests();
-    alert(`${user.username} has been blocked.`);
-  }
-
-  async function unblockUser(userId) {
-    const { error } = await supabase.rpc("unblock_user", { target: userId });
-    if (error) {
-      alert("Couldn't unblock: " + error.message);
-      return;
-    }
-    await loadBlocks();
-  }
-
-  // --- DELETE ACCOUNT (Apple requires in-app deletion) ---
-  async function deleteAccount() {
-    const sure = window.confirm(
-      "Delete your account? This permanently erases your profile, messages, friends, groups and everything else on Wavo. This cannot be undone."
-    );
-    if (!sure) return;
-    const typed = window.prompt('This is permanent. Type DELETE to confirm.');
-    if (typed !== "DELETE") {
-      alert("Account deletion cancelled.");
-      return;
-    }
-    setDeletingAccount(true);
-    const { error } = await supabase.rpc("delete_my_account");
-    if (error) {
-      alert("Couldn't delete account: " + error.message);
-      setDeletingAccount(false);
-      return;
-    }
-    await supabase.auth.signOut();
-    window.location.href = "/";
-  }
-
   // --- ACTIONS ---
   function openChat(user) {
     setSelectedGroup(null);
@@ -1511,16 +1408,13 @@ export default function App() {
     setMessageText((t) => t + em);
   }
 
-  // presence from a last_active timestamp.
-  // `now` (a state ticker updated every 30s below) is read here so the
-  // labels re-render as time passes instead of freezing at page-load.
+  // presence label from a last_active timestamp
   function presence(ts) {
     if (!ts) return null;
-    const diff = now - new Date(ts).getTime();
+    const diff = Date.now() - new Date(ts).getTime();
     if (diff < 70000) return "online";
     return `last seen ${fmtRelative(ts)}`;
   }
-  const isOnline = (ts) => presence(ts) === "online";
 
   async function sendGif(gifUrl) {
     setShowGiphy(false);
@@ -2158,12 +2052,12 @@ export default function App() {
                       })}
                   </div>
 
-                  {!isPremium && !isNativeApp && (
+                  {!isPremium && (
                     <button
                       className="cos-upsell"
                       onClick={() => setShowPremium(true)}
                     >
-                      ⭐ Get Premium
+                      ⭐ Get Premium — $2/mo
                     </button>
                   )}
                 </section>
@@ -2258,71 +2152,11 @@ export default function App() {
                     <span>Role</span>
                     <strong>{profile?.is_admin ? "Admin" : "Member"}</strong>
                   </div>
-
-                  {/* Blocked users */}
-                  <h5 className="cos-sub">Blocked</h5>
-                  {blockedProfiles.length === 0 ? (
-                    <p className="settings-hint">You haven't blocked anyone.</p>
-                  ) : (
-                    <div className="acct-list">
-                      {blockedProfiles.map((b) => (
-                        <div key={b.id} className="acct-row">
-                          <Avatar url={b.avatar_url} name={b.username} size="sm" />
-                          <div className="acct-info">
-                            <strong>{b.username}</strong>
-                            <span>Blocked</span>
-                          </div>
-                          <button
-                            className="mini-btn"
-                            onClick={() => unblockUser(b.id)}
-                          >
-                            Unblock
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
                   <button
                     className="settings-signout"
                     onClick={() => supabase.auth.signOut()}
                   >
                     Sign out
-                  </button>
-
-                  <a
-                    className="settings-hint"
-                    href="/privacy.html"
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ display: "block", marginTop: "14px" }}
-                  >
-                    Privacy Policy
-                  </a>
-                  <a
-                    className="settings-hint"
-                    href="/terms.html"
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ display: "block", marginTop: "6px" }}
-                  >
-                    Terms of Service
-                  </a>
-
-                  {/* Delete account — Apple requires in-app deletion */}
-                  <button
-                    className="settings-signout"
-                    onClick={deleteAccount}
-                    disabled={deletingAccount}
-                    style={{
-                      marginTop: "10px",
-                      color: "#fff",
-                      background: "#c0392b",
-                      borderColor: "#c0392b",
-                    }}
-                  >
-                    <Trash2 size={14} style={{ marginRight: "6px", verticalAlign: "-2px" }} />
-                    {deletingAccount ? "Deleting…" : "Delete my account"}
                   </button>
                 </section>
               </div>
@@ -2349,7 +2183,7 @@ export default function App() {
             {!searching && searchResults.length === 0 && (
               <div className="search-status">No users found</div>
             )}
-            {searchResults.filter((u) => !blockedIds.has(u.id)).map((u) => {
+            {searchResults.map((u) => {
               const pending = outgoingIds.has(u.id);
               const incoming = incomingRequests.some((r) => r.sender_id === u.id);
               return (
@@ -2430,7 +2264,7 @@ export default function App() {
               No friends yet — search a username above to send a request.
             </div>
           )}
-          {friends.filter((u) => !blockedIds.has(u.id)).map((u) => (
+          {friends.map((u) => (
             <button
               key={u.id}
               className={`user-row ${selectedUser?.id === u.id ? "active" : ""}`}
@@ -2446,13 +2280,7 @@ export default function App() {
               </div>
               <div className="user-row-text">
                 <strong>{displayName(u)}</strong>
-                <span
-                  className={`user-status ${isOnline(u.last_active) ? "is-online" : ""}`}
-                >
-                  {isOnline(u.last_active)
-                    ? "online"
-                    : presence(u.last_active) || u.status || ""}
-                </span>
+                {u.status && <span className="user-status">{u.status}</span>}
               </div>
               {unreadByUser[u.id] > 0 && (
                 <span className="user-badge">{unreadByUser[u.id]}</span>
@@ -2489,14 +2317,10 @@ export default function App() {
                       <Pencil size={12} />
                     </button>
                   </h3>
-                  <span
-                    className={`presence-line ${
-                      isOnline(selectedUser.last_active) ? "is-online" : ""
-                    }`}
-                  >
-                    {presence(selectedUser.last_active) ||
-                      selectedUser.status ||
-                      ""}
+                  <span className="presence-line">
+                    {selectedUser.status
+                      ? selectedUser.status
+                      : presence(selectedUser.last_active) || ""}
                   </span>
                 </div>
               </div>
@@ -2524,13 +2348,6 @@ export default function App() {
                   title={`Report ${selectedUser.username}`}
                 >
                   <Flag size={14} /> Report
-                </button>
-                <button
-                  className="report-user-btn"
-                  onClick={() => blockUser(selectedUser)}
-                  title={`Block ${selectedUser.username}`}
-                >
-                  <Ban size={14} /> Block
                 </button>
               </div>
             </header>
@@ -3147,7 +2964,7 @@ export default function App() {
               {friends.length === 0 && (
                 <p className="new-group-empty">Add some friends first.</p>
               )}
-              {friends.filter((f) => !blockedIds.has(f.id)).map((f) => {
+              {friends.map((f) => {
                 const checked = newGroupMembers.includes(f.id);
                 return (
                   <button

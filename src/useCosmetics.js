@@ -9,7 +9,18 @@ import { supabase } from "./supabaseClient";
  * requirement against real stats before it writes anything. Nothing here
  * can be lied to from devtools.
  */
-export function useCosmetics(userId) {
+export function useCosmetics(userId, tier = "free") {
+  // Tier ranking mirrors the DB: free < premium < vip. A user meets an
+  // item's requirement when their rank >= the item's required rank.
+  const rank = (t) => (t === "vip" ? 3 : t === "premium" ? 2 : 1);
+  const isPremium = rank(tier) >= 2;
+  // What tier an item needs: explicit min_tier wins, else legacy premium.
+  const neededTier = (item) =>
+    item.min_tier || (item.unlock_type === "premium" ? "premium" : null);
+  const meetsTier = (item) => {
+    const need = neededTier(item);
+    return need ? rank(tier) >= rank(need) : false;
+  };
   const [catalogue, setCatalogue] = useState([]);
   const [unlocked, setUnlocked] = useState(new Set());
   const [stats, setStats] = useState(null);
@@ -68,8 +79,15 @@ export function useCosmetics(userId) {
       if (item.unlock_type === "default") return null;
       if (unlocked.has(item.id)) return null;
 
-      if (item.unlock_type === "premium") {
-        return { kind: "premium", label: "Premium", met: false };
+      const needReq = neededTier(item);
+      if (needReq) {
+        // A tier item. Usable when the user's tier is high enough.
+        return {
+          kind: "premium",
+          label: needReq === "vip" ? "VIP" : "Premium",
+          needTier: needReq,
+          met: meetsTier(item),
+        };
       }
 
       const key = item.unlock_rule?.stat;
@@ -88,11 +106,14 @@ export function useCosmetics(userId) {
   );
 
   const isUsable = useCallback(
-    (item) => item.unlock_type === "default" || unlocked.has(item.id),
-    [unlocked]
+    (item) =>
+      item.unlock_type === "default" ||
+      unlocked.has(item.id) ||
+      meetsTier(item),
+    [unlocked, tier]
   );
 
-  return { catalogue, unlocked, stats, loading, claim, requirement, isUsable, reload: load };
+  return { catalogue, unlocked, stats, loading, claim, requirement, isUsable, tier, isPremium, reload: load };
 }
 
 /**

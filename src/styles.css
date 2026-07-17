@@ -2109,6 +2109,8 @@ body::before {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.user-status.is-online,
+.presence-line.is-online { color: var(--online); font-weight: 600; }
 .chat-header-name h3 {
   display: inline-flex;
   align-items: center;

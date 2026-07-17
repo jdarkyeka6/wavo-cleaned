@@ -1,5 +1,6 @@
 import { Check, Star, X } from "lucide-react";
 import { useCosmeticCatalogue } from "./useCosmetics";
+import { isNativeApp } from "./lib/platform"; // ← added
 
 /**
  * Premium.
@@ -10,7 +11,6 @@ import { useCosmeticCatalogue } from "./useCosmetics";
  * browser, so a locked theme isn't really locked, and charging for one would
  * be charging for something a kid can take with devtools.
  */
-
 const FREE = [
   "Unlimited chat, groups and DMs",
   "All 10 games",
@@ -18,33 +18,29 @@ const FREE = [
   "7 themes, plus 3 more you can earn",
   "Badges you earn by turning up",
 ];
-
 const PREMIUM = [
   "The Supporter badge, next to your name",
   "Coloured name — coral, aurora, sunset or gold",
   "Aurora and Sunset themes",
   "Everything in Free, obviously",
 ];
-
 export default function Premium({ open, onClose, onSubscribe, isPremium, busy }) {
   const { list } = useCosmeticCatalogue();
-  if (!open) return null;
-
+  // Never render any Premium/purchase UI inside the native iOS app —
+  // Apple's anti-steering rules forbid it. Web (wavo.lol) is unaffected.
+  if (!open || isNativeApp) return null; // ← added isNativeApp
   const nameStyles = list.filter((c) => c.kind === "name_style");
-
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal premium-modal" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose} aria-label="Close">
           <X size={18} />
         </button>
-
         <div className="premium-head">
           <Star size={22} />
           <h2>Wavo Premium</h2>
           <p>Two dollars a month. Keeps the lights on.</p>
         </div>
-
         {/* Show the thing, don't describe it */}
         <div className="premium-demo">
           <span className="premium-demo-label">What people see:</span>
@@ -59,7 +55,6 @@ export default function Premium({ open, onClose, onSubscribe, isPremium, busy })
             ))}
           </div>
         </div>
-
         <div className="premium-cols">
           <div className="premium-col">
             <h4>Free</h4>
@@ -71,7 +66,6 @@ export default function Premium({ open, onClose, onSubscribe, isPremium, busy })
               ))}
             </ul>
           </div>
-
           <div className="premium-col paid">
             <h4>
               Premium <span className="premium-price">$2/mo</span>
@@ -85,7 +79,6 @@ export default function Premium({ open, onClose, onSubscribe, isPremium, busy })
             </ul>
           </div>
         </div>
-
         {isPremium ? (
           <div className="premium-active">You're a Supporter. Thank you.</div>
         ) : (

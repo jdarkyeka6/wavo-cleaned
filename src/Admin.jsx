@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
+import FounderDashboard from "./FounderDashboard";
 import {
   ArrowLeft,
   BarChart3,
@@ -17,10 +18,11 @@ import {
   Megaphone,
   ScrollText,
   Ban,
+  Flame,
 } from "lucide-react";
 
 export default function Admin({ me, onBack }) {
-  const [tab, setTab] = useState("overview"); // overview | users | reports | viewer
+  const [tab, setTab] = useState("growth"); // growth | overview | users | reports | viewer
   const [users, setUsers] = useState([]);
   const [messages, setMessages] = useState([]);
   const [friendCount, setFriendCount] = useState(0);
@@ -484,6 +486,9 @@ export default function Admin({ me, onBack }) {
       </header>
 
       <nav className="admin-tabs">
+        <button className={tab === "growth" ? "active" : ""} onClick={() => setTab("growth")}>
+          <Flame size={15} /> Growth
+        </button>
         <button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>
           <BarChart3 size={15} /> Overview
         </button>
@@ -509,6 +514,8 @@ export default function Admin({ me, onBack }) {
       </nav>
 
       <div className="admin-body">
+        {tab === "growth" && <FounderDashboard />}
+
         {tab === "overview" && (
           <div className="stat-grid">
             <div className="stat-card">
