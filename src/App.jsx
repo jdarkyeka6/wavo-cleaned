@@ -135,9 +135,12 @@ export default function App() {
   const [themeOpen, setThemeOpen] = useState(false);
 
   // cosmetics / stats / streaks — server decides what's unlocked
-  const isPremium =
+  const premiumActive =
     !!profile?.is_premium &&
     (!profile?.premium_until || new Date(profile.premium_until) > new Date());
+  // Tier drives cosmetics access. If a paid tier has lapsed, fall back to free.
+  const tier = premiumActive ? profile?.tier || "premium" : "free";
+  const isPremium = premiumActive;
 
   const {
     catalogue,
@@ -145,7 +148,7 @@ export default function App() {
     claim,
     requirement,
     isUsable,
-  } = useCosmetics(session?.user?.id, isPremium);
+  } = useCosmetics(session?.user?.id, tier);
 
   const themeItems = useMemo(
     () => catalogue.filter((c) => c.kind === "theme"),
