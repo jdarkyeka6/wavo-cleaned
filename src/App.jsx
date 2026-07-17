@@ -2299,6 +2299,15 @@ export default function App() {
                   >
                     Privacy Policy
                   </a>
+                  <a
+                    className="settings-hint"
+                    href="/terms.html"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ display: "block", marginTop: "6px" }}
+                  >
+                    Terms of Service
+                  </a>
 
                   {/* Delete account — Apple requires in-app deletion */}
                   <button
