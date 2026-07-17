@@ -9,7 +9,7 @@ import { supabase } from "./supabaseClient";
  * requirement against real stats before it writes anything. Nothing here
  * can be lied to from devtools.
  */
-export function useCosmetics(userId) {
+export function useCosmetics(userId, isPremium = false) {
   const [catalogue, setCatalogue] = useState([]);
   const [unlocked, setUnlocked] = useState(new Set());
   const [stats, setStats] = useState(null);
@@ -69,7 +69,8 @@ export function useCosmetics(userId) {
       if (unlocked.has(item.id)) return null;
 
       if (item.unlock_type === "premium") {
-        return { kind: "premium", label: "Premium", met: false };
+        // Premium status IS the unlock. met=true means it's usable now.
+        return { kind: "premium", label: "Premium", met: !!isPremium };
       }
 
       const key = item.unlock_rule?.stat;
@@ -88,8 +89,11 @@ export function useCosmetics(userId) {
   );
 
   const isUsable = useCallback(
-    (item) => item.unlock_type === "default" || unlocked.has(item.id),
-    [unlocked]
+    (item) =>
+      item.unlock_type === "default" ||
+      unlocked.has(item.id) ||
+      (item.unlock_type === "premium" && !!isPremium),
+    [unlocked, isPremium]
   );
 
   return { catalogue, unlocked, stats, loading, claim, requirement, isUsable, reload: load };
