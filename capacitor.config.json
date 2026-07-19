@@ -4,6 +4,10 @@
   "webDir": "dist",
   "server": {
     "url": "https://wavo.lol",
-    "cleartext": false
+    "cleartext": false,
+    "allowNavigation": [
+      "wavo.lol",
+      "*.wavo.lol"
+    ]
   }
 }
