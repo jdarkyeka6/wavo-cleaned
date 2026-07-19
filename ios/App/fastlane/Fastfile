@@ -1,6 +1,5 @@
 # Fastlane: builds Wavo and ships it to TestFlight.
-# Signing uses an App Store Connect API key. The project is a Capacitor
-# app using Swift Package Manager (no CocoaPods), so we build the
+# Capacitor + Swift Package Manager (no CocoaPods), so we build the
 # .xcodeproj directly and inject the signing team at build time.
 
 APP_IDENTIFIER = "lol.wavo.app"
@@ -10,12 +9,16 @@ default_platform(:ios)
 platform :ios do
   desc "Build Wavo and upload to TestFlight"
   lane :beta do
-    # 1. Authenticate with App Store Connect using the API key.
+    # 1. Write the raw .p8 key text to a file, then authenticate with it.
+    #    ASC_KEY_CONTENT holds the plain -----BEGIN PRIVATE KEY----- text,
+    #    so we write it as-is (no base64 decoding).
+    key_path = File.expand_path("~/asc_api_key.p8")
+    File.write(key_path, ENV["ASC_KEY_CONTENT"])
+
     api_key = app_store_connect_api_key(
       key_id: ENV["ASC_KEY_ID"],
       issuer_id: ENV["ASC_ISSUER_ID"],
-      key_content: ENV["ASC_KEY_CONTENT"],
-      is_key_content_base64: true
+      key_filepath: key_path
     )
 
     # 2. Fresh temporary keychain to hold the signing certificate.
@@ -46,9 +49,7 @@ platform :ios do
 
     profile_name = ENV["sigh_#{APP_IDENTIFIER}_appstore_profile-name"]
 
-    # 5. Build & archive. We hand Xcode the team + profile explicitly via
-    #    xcargs, because the .xcodeproj has no team set — that was the
-    #    "requires a development team" error.
+    # 5. Build & archive, injecting the team + profile so Xcode signs manually.
     build_app(
       project: "App.xcodeproj",
       scheme: "App",
@@ -66,8 +67,7 @@ platform :ios do
       }
     )
 
-    # 6. Upload to TestFlight. We don't wait for Apple's processing —
-    #    the build just appears in TestFlight a few minutes later.
+    # 6. Upload to TestFlight (don't wait for Apple's processing).
     upload_to_testflight(
       api_key: api_key,
       skip_waiting_for_build_processing: true
