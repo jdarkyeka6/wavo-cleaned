@@ -9,8 +9,6 @@ default_platform(:ios)
 platform :ios do
   desc "Build Wavo and upload to TestFlight"
   lane :beta do
-    # Read secrets and strip any stray whitespace/newlines. A trailing
-    # newline in APPLE_TEAM_ID was breaking the build command.
     key_id    = ENV["ASC_KEY_ID"].to_s.strip
     issuer_id = ENV["ASC_ISSUER_ID"].to_s.strip
     team_id   = ENV["APPLE_TEAM_ID"].to_s.strip
@@ -37,9 +35,11 @@ platform :ios do
       lock_when_sleeps: false
     )
 
-    # 3. Distribution certificate.
+    # 3. Distribution certificate — REUSE an existing one instead of
+    #    creating a new one each run (avoids hitting Apple's cert limit).
     cert(
       api_key: api_key,
+      generate_apple_certs: false,
       keychain_path: File.expand_path("~/Library/Keychains/#{keychain_name}-db"),
       keychain_password: keychain_pw
     )
@@ -51,11 +51,9 @@ platform :ios do
       force: true
     )
 
-    # Grab the profile name reliably from the lane context (not an env var).
     profile_name = lane_context[SharedValues::SIGH_NAME]
 
-    # 5. Write signing settings straight into the project file. This avoids
-    #    passing them as a fragile command-line string.
+    # 5. Write signing settings straight into the project file.
     update_code_signing_settings(
       path: "App.xcodeproj",
       use_automatic_signing: false,
