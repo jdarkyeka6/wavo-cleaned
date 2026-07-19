@@ -52,7 +52,7 @@ platform :ios do
     profile_name = ENV["sigh_#{APP_IDENTIFIER}_appstore_profile-name"]
 
     build_app(
-      workspace: "App.xcworkspace",
+      workspace: "App.xcodeproj",
       scheme: "App",
       export_method: "app-store",
       export_options: {
