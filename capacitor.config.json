@@ -1,1 +1,9 @@
-{"appId":"lol.wavo.app","appName":"Wavo","webDir":"dist"} 
+{
+  "appId": "lol.wavo.app",
+  "appName": "Wavo",
+  "webDir": "dist",
+  "server": {
+    "url": "https://wavo.lol",
+    "cleartext": false
+  }
+}
