@@ -1,13 +1,5 @@
 {
   "appId": "lol.wavo.app",
   "appName": "Wavo",
-  "webDir": "dist",
-  "server": {
-    "url": "https://wavo.lol",
-    "cleartext": false,
-    "allowNavigation": [
-      "wavo.lol",
-      "*.wavo.lol"
-    ]
-  }
+  "webDir": "dist"
 }
