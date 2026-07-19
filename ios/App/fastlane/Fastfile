@@ -1,6 +1,4 @@
 # Fastlane: builds Wavo and ships it to TestFlight.
-# Capacitor + Swift Package Manager (no CocoaPods): build the .xcodeproj,
-# and write signing settings into the project before archiving.
 
 APP_IDENTIFIER = "lol.wavo.app"
 
@@ -35,11 +33,10 @@ platform :ios do
       lock_when_sleeps: false
     )
 
-    # 3. Distribution certificate — REUSE an existing one instead of
-    #    creating a new one each run (avoids hitting Apple's cert limit).
+    # 3. Distribution certificate.
     cert(
       api_key: api_key,
-      generate_apple_certs: false,
+      generate_apple_certs: true,
       keychain_path: File.expand_path("~/Library/Keychains/#{keychain_name}-db"),
       keychain_password: keychain_pw
     )
@@ -61,6 +58,18 @@ platform :ios do
       code_sign_identity: "Apple Distribution",
       profile_name: profile_name,
       targets: ["App"]
+    )
+
+    # 5b. Bump the build number to the next unused value on App Store Connect,
+    #     so each upload has a unique, higher number than the last.
+    latest = latest_testflight_build_number(
+      api_key: api_key,
+      app_identifier: APP_IDENTIFIER,
+      initial_build_number: 0
+    )
+    increment_build_number(
+      xcodeproj: "App.xcodeproj",
+      build_number: latest + 1
     )
 
     # 6. Build & archive.
