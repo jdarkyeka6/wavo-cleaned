@@ -19,9 +19,6 @@ jobs:
         run: npm run build
       - name: Sync web build into iOS
         run: npx cap sync ios
-      - name: Install CocoaPods
-        working-directory: ios/App
-        run: pod install
       - name: Set up Ruby and Fastlane
         uses: ruby/setup-ruby@v1
         with:
