@@ -4309,3 +4309,80 @@ body::before {
     place-items: center;
   }
 }
+
+/* ============================================================
+   PINNED CHATS, PINNED MESSAGES, PROFILE TRIGGERS
+   ============================================================ */
+
+/* A sidebar row is a button, so the pin can't live inside it — nested buttons
+   are invalid and swallow each other's clicks. It's a sibling instead. */
+.row-wrap { position: relative; }
+.row-wrap .user-row { width: 100%; }
+.row-pin {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.14s, color 0.14s, background 0.14s;
+}
+.row-wrap:hover .row-pin,
+.row-pin:focus-visible { opacity: 1; }
+.row-pin:hover { background: var(--panel-2); color: var(--text); }
+/* An already-pinned row keeps its pin visible — otherwise the only way to
+   know a chat is pinned is to notice where it sits in the list. */
+.row-pin.on {
+  opacity: 1;
+  color: var(--coral);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+/* Count on the header pin button */
+.icon-btn { position: relative; }
+.icon-btn-count {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--coral);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* Landing on a pinned message: say which one without moving anything. */
+@keyframes msg-flash {
+  0%   { background: var(--coral-soft); }
+  100% { background: transparent; }
+}
+.bubble-wrap.flash { animation: msg-flash 1.6s ease-out; border-radius: var(--r-md); }
+@media (prefers-reduced-motion: reduce) {
+  .bubble-wrap.flash { animation: none; outline: 2px solid var(--coral); }
+}
+
+/* An avatar that opens a profile is a button, but shouldn't look like one. */
+.as-button {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.as-button:hover { filter: brightness(1.12); }
+
+.msg-image { cursor: zoom-in; }

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "./supabaseClient";
 import {
@@ -33,6 +33,8 @@ import {
   Trophy,
   ChevronRight,
   SendHorizontal,
+  Pin,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import {
   registerServiceWorker,
@@ -49,6 +51,14 @@ import { PLANS, DEFAULT_PLAN } from "./lib/pricing";
 import { UserLabel } from "./Cosmetic";
 import { UnlockGuide } from "./UnlockGuide";
 import { useIsPhone } from "./lib/useIsPhone";
+import { useSocialUpgrades } from "./useSocialUpgrades";
+import {
+  ProfileCardModal,
+  MediaViewer,
+  PinnedMessagesPanel,
+  GroupManageModal,
+} from "./SocialUpgrades";
+import "./social-upgrades.css";
 import { swatchStyle } from "./lib/cosmeticStyles";
 import { useCosmetics } from "./useCosmetics";
 import { useUrlSync } from "./useUrlSync";
@@ -217,6 +227,25 @@ function ChatMenuLayer({ isPhone, onDismiss, children }) {
       {children}
     </>,
     document.body
+  );
+}
+
+// A DM's conversation id, matching the `chatId` memo below. Pinning needs it
+// for rows other than the open one, where that memo doesn't apply.
+const dmChatId = (a, b) => (a && b ? [a, b].sort().join("_") : null);
+
+/** The pin/unpin control on a sidebar row. */
+function PinToggle({ pinned, onClick, label }) {
+  return (
+    <button
+      className={`row-pin ${pinned ? "on" : ""}`}
+      onClick={onClick}
+      aria-pressed={pinned}
+      title={pinned ? `Unpin ${label}` : `Pin ${label} to the top`}
+      aria-label={pinned ? `Unpin ${label}` : `Pin ${label} to the top`}
+    >
+      <Pin size={14} />
+    </button>
   );
 }
 
@@ -556,6 +585,36 @@ export default function App() {
     return [currentUser.id, selectedUser.id].sort().join("_");
   }, [currentUser, selectedUser]);
 
+  // Group roles, pinned chats, pinned messages. The destructive parts are
+  // enforced by security-definer RPCs; what this returns only decides what to
+  // draw, never what's allowed.
+  const social = useSocialUpgrades({
+    userId: currentUser?.id,
+    chatId,
+    selectedUser,
+    selectedGroup,
+    messages,
+    groupMessages,
+    groupMembers,
+    loadGroups,
+    loadGroupMembers,
+    setSelectedGroup,
+  });
+
+  // Pinned conversations float to the top of their list, keeping their
+  // existing order within each half so nothing else jumps around.
+  const sortPinned = useCallback(
+    (list, kind, idOf) => {
+      const score = (x) => (social.isChatPinned(kind, idOf(x)) ? 0 : 1);
+      return [...list].sort((a, b) => score(a) - score(b));
+    },
+    [social]
+  );
+
+  // Whose profile card is open, and which image the viewer is showing.
+  const [profileCardUser, setProfileCardUser] = useState(null);
+  const [viewerImageId, setViewerImageId] = useState(null);
+
   useEffect(() => {
     selectedUserRef.current = selectedUser;
   }, [selectedUser]);
@@ -577,6 +636,21 @@ export default function App() {
 
   function scrollToBottom(behavior = "smooth") {
     bottomRef.current?.scrollIntoView({ behavior, block: "end" });
+  }
+
+  // Scroll a pinned message into view and flash it, so it's obvious which one
+  // you landed on when the surrounding text looks the same.
+  function jumpToMessage(id) {
+    const el = messagesRef.current?.querySelector(
+      `[data-msg-id="${CSS.escape(String(id))}"]`
+    );
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.remove("flash");
+    // reading offsetWidth restarts the animation if it's already running
+    void el.offsetWidth;
+    el.classList.add("flash");
+    window.setTimeout(() => el.classList.remove("flash"), 1600);
   }
 
   function jumpToLatest() {
@@ -1638,12 +1712,15 @@ export default function App() {
   async function loadGroupMembers(gid) {
     const { data } = await supabase
       .from("group_members")
-      .select("user_id, profiles(id, username, avatar_url, equipped_badge, equipped_name_style)")
+      .select("user_id, role, profiles(id, username, avatar_url, equipped_badge, equipped_name_style)")
       .eq("group_id", gid);
     if (data) {
       const map = {};
       data.forEach((row) => {
-        if (row.profiles) map[row.profiles.id] = row.profiles;
+        // role lives on group_members, not on the joined profile — without
+        // folding it in here every member reads as "member" and the whole
+        // permission UI silently disappears.
+        if (row.profiles) map[row.profiles.id] = { ...row.profiles, role: row.role };
       });
       setGroupMembers(map);
     }
@@ -2387,23 +2464,31 @@ export default function App() {
         </div>
         {groups.length > 0 && (
           <div className="group-list">
-            {groups.map((g) => (
-              <button
-                key={g.id}
-                className={`user-row ${
-                  selectedGroup?.id === g.id ? "active" : ""
-                }`}
-                onClick={() => openGroup(g)}
-                title={`Open ${g.name}`}
-              >
-                <div className="group-avatar">
-                  <Users size={16} />
-                </div>
-                <div className="user-row-text">
-                  <strong>{g.name}</strong>
-                  <span className="user-status">Group</span>
-                </div>
-              </button>
+            {sortPinned(groups, "group", (g) => g.id).map((g) => (
+              <div className="row-wrap" key={g.id}>
+                <button
+                  className={`user-row ${
+                    selectedGroup?.id === g.id ? "active" : ""
+                  }`}
+                  onClick={() => openGroup(g)}
+                  title={`Open ${g.name}`}
+                >
+                  <div className="group-avatar">
+                    <Users size={16} />
+                  </div>
+                  <div className="user-row-text">
+                    <strong>{g.name}</strong>
+                    <span className="user-status">
+                      {social.isChatPinned("group", g.id) ? "Pinned · Group" : "Group"}
+                    </span>
+                  </div>
+                </button>
+                <PinToggle
+                  pinned={social.isChatPinned("group", g.id)}
+                  onClick={() => social.toggleChatPin("group", g.id)}
+                  label={g.name}
+                />
+              </div>
             ))}
           </div>
         )}
@@ -2417,34 +2502,46 @@ export default function App() {
               No friends yet — search a username above to send a request.
             </div>
           )}
-          {friends.filter((u) => !blockedIds.has(u.id)).map((u) => (
-            <button
-              key={u.id}
-              className={`user-row ${selectedUser?.id === u.id ? "active" : ""}`}
-              onClick={() => openChat(u)}
-              title={`Open chat with ${u.username}`}
-            >
-              <div
-                className={`avatar-presence ${
-                  presence(u.last_active) === "online" ? "online" : ""
-                }`}
+          {sortPinned(
+            friends.filter((u) => !blockedIds.has(u.id)),
+            "dm",
+            (u) => dmChatId(currentUser?.id, u.id)
+          ).map((u) => (
+            <div className="row-wrap" key={u.id}>
+              <button
+                className={`user-row ${selectedUser?.id === u.id ? "active" : ""}`}
+                onClick={() => openChat(u)}
+                title={`Open chat with ${u.username}`}
               >
-                <Avatar url={u.avatar_url} name={u.username} />
-              </div>
-              <div className="user-row-text">
-                <strong>{displayName(u)}</strong>
-                <span
-                  className={`user-status ${isOnline(u.last_active) ? "is-online" : ""}`}
+                <div
+                  className={`avatar-presence ${
+                    presence(u.last_active) === "online" ? "online" : ""
+                  }`}
                 >
-                  {isOnline(u.last_active)
-                    ? "online"
-                    : presence(u.last_active) || u.status || ""}
-                </span>
-              </div>
-              {unreadByUser[u.id] > 0 && (
-                <span className="user-badge">{unreadByUser[u.id]}</span>
-              )}
-            </button>
+                  <Avatar url={u.avatar_url} name={u.username} />
+                </div>
+                <div className="user-row-text">
+                  <strong>{displayName(u)}</strong>
+                  <span
+                    className={`user-status ${isOnline(u.last_active) ? "is-online" : ""}`}
+                  >
+                    {isOnline(u.last_active)
+                      ? "online"
+                      : presence(u.last_active) || u.status || ""}
+                  </span>
+                </div>
+                {unreadByUser[u.id] > 0 && (
+                  <span className="user-badge">{unreadByUser[u.id]}</span>
+                )}
+              </button>
+              <PinToggle
+                pinned={social.isChatPinned("dm", dmChatId(currentUser?.id, u.id))}
+                onClick={() =>
+                  social.toggleChatPin("dm", dmChatId(currentUser?.id, u.id))
+                }
+                label={displayName(u)}
+              />
+            </div>
           ))}
         </div>
       </aside>
@@ -2976,17 +3073,20 @@ export default function App() {
                 >
                   ‹
                 </button>
-                <div
-                  className={`avatar-presence ${
+                <button
+                  className={`avatar-presence as-button ${
                     presence(selectedUser.last_active) === "online" ? "online" : ""
                   }`}
+                  onClick={() => setProfileCardUser(selectedUser)}
+                  title={`View ${displayName(selectedUser)}'s profile`}
+                  aria-label={`View ${displayName(selectedUser)}'s profile`}
                 >
                   <Avatar
                     url={selectedUser.avatar_url}
                     name={selectedUser.username}
                     size="sm"
                   />
-                </div>
+                </button>
                 <div className="chat-header-name">
                   <h3>
                     {displayName(selectedUser)}
@@ -3020,6 +3120,21 @@ export default function App() {
                   title="Search this chat"
                 >
                   <Search size={16} />
+                </button>
+                <button
+                  className={`icon-btn ${social.pinsOpen ? "active" : ""}`}
+                  onClick={() => social.setPinsOpen((v) => !v)}
+                  aria-label="Pinned messages"
+                  title={
+                    social.messagePins.length
+                      ? `${social.messagePins.length} pinned message${social.messagePins.length === 1 ? "" : "s"}`
+                      : "Pinned messages"
+                  }
+                >
+                  <Pin size={16} />
+                  {social.messagePins.length > 0 && (
+                    <span className="icon-btn-count">{social.messagePins.length}</span>
+                  )}
                 </button>
                 <button
                   className={`icon-btn ${showGames ? "active" : ""}`}
@@ -3105,6 +3220,17 @@ export default function App() {
                 )}
               </div>
             )}
+            {social.pinsOpen && (
+              <PinnedMessagesPanel
+                pins={social.resolvedPins}
+                onClose={() => social.setPinsOpen(false)}
+                onJump={(m) => {
+                  social.setPinsOpen(false);
+                  jumpToMessage(m.id);
+                }}
+                onTogglePin={social.toggleMessagePin}
+              />
+            )}
             <div className="messages" ref={messagesRef} onScroll={onMessagesScroll}>
               {loadingChat && messages.length === 0 && (
                 <div className="messages-status">Loading messages…</div>
@@ -3139,6 +3265,7 @@ export default function App() {
                     </div>
                   )}
                   <div
+                    data-msg-id={msg.id}
                     className={`bubble-wrap ${mine ? "mine" : "theirs"} ${
                       startsRun ? "run-start" : ""
                     } ${endsRun ? "run-end" : ""}`}
@@ -3178,8 +3305,9 @@ export default function App() {
                         <img
                           className="msg-image"
                           src={msg.content}
-                          alt="image"
+                          alt="Shared image — open viewer"
                           loading="lazy"
+                          onClick={() => setViewerImageId(msg.id)}
                         />
                       ) : msg.type === "file" ? (
                         <a
@@ -3253,6 +3381,14 @@ export default function App() {
                           </div>
                           <div className="msg-menu-actions">
                             <button onClick={() => startReply(msg)}>↩ Reply</button>
+                            <button
+                              onClick={() => {
+                                setReactPickerMsg(null);
+                                social.toggleMessagePin(msg);
+                              }}
+                            >
+                              📌 {social.isMessagePinned(msg.id) ? "Unpin" : "Pin"}
+                            </button>
                             {mine && msg.type === "text" && (
                               <button onClick={() => startEdit(msg)}>✏️ Edit</button>
                             )}
@@ -3510,6 +3646,33 @@ export default function App() {
                     ))}
                 </div>
                 <button
+                  className={`icon-btn ${social.pinsOpen ? "active" : ""}`}
+                  onClick={() => social.setPinsOpen((v) => !v)}
+                  aria-label="Pinned messages"
+                  title={
+                    social.messagePins.length
+                      ? `${social.messagePins.length} pinned message${social.messagePins.length === 1 ? "" : "s"}`
+                      : "Pinned messages"
+                  }
+                >
+                  <Pin size={16} />
+                  {social.messagePins.length > 0 && (
+                    <span className="icon-btn-count">{social.messagePins.length}</span>
+                  )}
+                </button>
+                <button
+                  className="icon-btn"
+                  onClick={() => social.setGroupManageOpen(true)}
+                  aria-label="Group settings"
+                  title={
+                    social.canManageGroup
+                      ? "Manage group"
+                      : "Group members"
+                  }
+                >
+                  <SettingsIcon size={16} />
+                </button>
+                <button
                   className="report-user-btn"
                   onClick={leaveGroup}
                   title="Leave group"
@@ -3525,6 +3688,17 @@ export default function App() {
               isAdmin={!!profile?.is_admin}
             />
 
+            {social.pinsOpen && (
+              <PinnedMessagesPanel
+                pins={social.resolvedPins}
+                onClose={() => social.setPinsOpen(false)}
+                onJump={(m) => {
+                  social.setPinsOpen(false);
+                  jumpToMessage(m.id);
+                }}
+                onTogglePin={social.toggleMessagePin}
+              />
+            )}
             <div className="messages" ref={messagesRef} onScroll={onMessagesScroll}>
               {loadingChat && groupMessages.length === 0 && (
                 <div className="messages-status">Loading messages…</div>
@@ -3551,6 +3725,7 @@ export default function App() {
                     </div>
                   )}
                   <div
+                    data-msg-id={msg.id}
                     className={`bubble-wrap ${mine ? "mine" : "theirs"} ${
                       startsRun ? "run-start" : ""
                     } ${endsRun ? "run-end" : ""}`}
@@ -3598,8 +3773,9 @@ export default function App() {
                         <img
                           className="msg-image"
                           src={msg.content}
-                          alt="image"
+                          alt="Shared image — open viewer"
                           loading="lazy"
+                          onClick={() => setViewerImageId(msg.id)}
                         />
                       ) : msg.type === "file" ? (
                         <a
@@ -3645,6 +3821,18 @@ export default function App() {
                             <button onClick={() => startReply(msg)}>
                               ↩ Reply
                             </button>
+                            {/* Only owners and admins may pin in a group; the
+                                RPC enforces it, this just avoids offering it. */}
+                            {social.canManageGroup && (
+                              <button
+                                onClick={() => {
+                                  setReactPickerMsg(null);
+                                  social.toggleMessagePin(msg);
+                                }}
+                              >
+                                📌 {social.isMessagePinned(msg.id) ? "Unpin" : "Pin"}
+                              </button>
+                            )}
                             {mine && msg.type === "text" && (
                               <button onClick={() => startEdit(msg)}>
                                 ✏️ Edit
@@ -3881,6 +4069,47 @@ export default function App() {
             </button>
           )}
         </div>
+      )}
+
+      {/* ---- social layers: profile card, media viewer, group management ---- */}
+      {profileCardUser && (
+        <ProfileCardModal
+          key={profileCardUser.id}
+          user={profileCardUser}
+          isFriend={friends.some((f) => f.id === profileCardUser.id)}
+          onClose={() => setProfileCardUser(null)}
+          onMessage={openChat}
+          onAdd={sendRequest}
+          onReport={reportUser}
+          onBlock={blockUser}
+        />
+      )}
+
+      {viewerImageId && (
+        <MediaViewer
+          key={viewerImageId}
+          media={selectedGroup ? groupMessages : messages}
+          activeId={viewerImageId}
+          onClose={() => setViewerImageId(null)}
+        />
+      )}
+
+      {social.groupManageOpen && selectedGroup && (
+        <GroupManageModal
+          group={selectedGroup}
+          members={groupMembers}
+          myRole={social.groupRole}
+          onClose={() => social.setGroupManageOpen(false)}
+          onRename={social.renameGroup}
+          onSetRole={social.setMemberRole}
+          onRemove={social.removeMember}
+          onTransfer={social.transferOwnership}
+          onDelete={social.deleteGroup}
+          onProfile={(m) => {
+            social.setGroupManageOpen(false);
+            setProfileCardUser(m);
+          }}
+        />
       )}
 
       <Premium
