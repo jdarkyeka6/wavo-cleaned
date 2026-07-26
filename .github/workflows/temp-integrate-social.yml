@@ -1,0 +1,44 @@
+name: Temporary social integration runner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/temp-integrate-social.yml
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/wavo-social-upgrades
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply guarded integration patch
+        run: python scripts/apply_social_upgrades.py
+
+      - name: Verify production build
+        run: npm run build
+
+      - name: Commit only to feature branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.jsx
+          git diff --cached --quiet && { echo "No changes"; exit 0; }
+          git commit -m "feat: integrate profiles roles pins streaks and media viewer"
+          git push origin HEAD:feature/wavo-social-upgrades
