@@ -3576,6 +3576,10 @@ body::before {
 }
 .modal-close:hover { border-color: var(--coral); color: var(--coral); }
 
+/* .premium-modal's own max-width is declared earlier in this sheet, so the
+   generic .modal rule above would otherwise win on source order alone. */
+.modal.premium-modal { max-width: 560px; }
+
 /* ---------- PLAN PICKER ---------- */
 /* The student plan ($3.49) was supported by the checkout API and defined
    in lib/pricing.js, but there was no control anywhere to choose it. */

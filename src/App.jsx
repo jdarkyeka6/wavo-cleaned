@@ -355,6 +355,13 @@ export default function App() {
     if (req?.kind === "earned" && req.met) {
       const ok = await claim(item.id);
       if (ok) setTheme(item.id);
+      return;
+    }
+    // Premium-locked themes (Aurora, Sunset) used to fall off the end of this
+    // function, so tapping one did nothing at all — no theme, no paywall, no
+    // feedback. Badges and name colours already open the paywall via equip().
+    if (req?.kind === "premium" && !req.met) {
+      setShowPremium(true);
     }
   }
 

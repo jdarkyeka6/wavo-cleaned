@@ -9,18 +9,23 @@ import { supabase } from "./supabaseClient";
  * requirement against real stats before it writes anything. Nothing here
  * can be lied to from devtools.
  */
+// Tier ranking mirrors the DB: free < premium < vip. A user meets an item's
+// requirement when their rank >= the item's required rank.
+// These are pure and live outside the hook so the memoised callbacks below
+// can depend on `tier` directly instead of closing over a stale copy.
+const rank = (t) => (t === "vip" ? 3 : t === "premium" ? 2 : 1);
+
+/** What tier an item needs: explicit min_tier wins, else legacy premium. */
+const neededTier = (item) =>
+  item.min_tier || (item.unlock_type === "premium" ? "premium" : null);
+
+const meetsTier = (item, tier) => {
+  const need = neededTier(item);
+  return need ? rank(tier) >= rank(need) : false;
+};
+
 export function useCosmetics(userId, tier = "free") {
-  // Tier ranking mirrors the DB: free < premium < vip. A user meets an
-  // item's requirement when their rank >= the item's required rank.
-  const rank = (t) => (t === "vip" ? 3 : t === "premium" ? 2 : 1);
   const isPremium = rank(tier) >= 2;
-  // What tier an item needs: explicit min_tier wins, else legacy premium.
-  const neededTier = (item) =>
-    item.min_tier || (item.unlock_type === "premium" ? "premium" : null);
-  const meetsTier = (item) => {
-    const need = neededTier(item);
-    return need ? rank(tier) >= rank(need) : false;
-  };
   const [catalogue, setCatalogue] = useState([]);
   const [unlocked, setUnlocked] = useState(new Set());
   const [stats, setStats] = useState(null);
@@ -86,7 +91,7 @@ export function useCosmetics(userId, tier = "free") {
           kind: "premium",
           label: needReq === "vip" ? "VIP" : "Premium",
           needTier: needReq,
-          met: meetsTier(item),
+          met: meetsTier(item, tier),
         };
       }
 
@@ -102,14 +107,17 @@ export function useCosmetics(userId, tier = "free") {
         met: have >= need,            // met but unclaimed → claimable
       };
     },
-    [unlocked, stats]
+    // `tier` matters: it was missing here, so straight after a purchase
+    // requirement() kept reporting met:false from the pre-payment tier until
+    // something else happened to change `unlocked` or `stats`.
+    [unlocked, stats, tier]
   );
 
   const isUsable = useCallback(
     (item) =>
       item.unlock_type === "default" ||
       unlocked.has(item.id) ||
-      meetsTier(item),
+      meetsTier(item, tier),
     [unlocked, tier]
   );
 
