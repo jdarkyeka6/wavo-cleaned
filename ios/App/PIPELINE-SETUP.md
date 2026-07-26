@@ -45,13 +45,19 @@ secret". Add these four, named EXACTLY:
 | `ASC_KEY_ID`       | the Key ID from Step 2                                     |
 | `ASC_ISSUER_ID`    | the Issuer ID from Step 2                                  |
 | `APPLE_TEAM_ID`    | the Team ID from Step 3                                    |
-| `ASC_KEY_CONTENT`  | the .p8 file contents, base64-encoded (see below)         |
+| `ASC_KEY_CONTENT`  | the .p8 file contents — raw or base64, either works       |
 
-To base64 the .p8 on Windows PowerShell:
+Simplest: open the `.p8` in Notepad and paste the whole thing, including the
+`-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` lines.
+
+If you'd rather base64 it, that works too — on Windows PowerShell:
 ```
 [Convert]::ToBase64String([IO.File]::ReadAllBytes("AuthKey_XXXX.p8"))
 ```
-Copy the whole output string into `ASC_KEY_CONTENT`.
+The lane detects which form it got and decodes when it needs to. (It used to
+write whatever it was given straight to disk, so following the base64
+instruction produced a file of base64 text where Apple expected a key, and the
+first App Store Connect call failed.)
 
 ## Step 5 — run it
 
@@ -65,6 +71,31 @@ we'll fix it.
 When it goes green, the build appears in App Store Connect → TestFlight after a
 few minutes of Apple processing. Add yourself and Miles as testers, install the
 TestFlight app on the iPhone, and Wavo installs like a real app.
+
+---
+
+## Known limit: distribution certificates
+
+The lane calls `cert(generate_apple_certs: true)`, which looks for a signing
+certificate it can use and creates one when it can't find a usable one. CI
+starts from an empty keychain every run, so it can't reuse the private key from
+last time — it asks Apple for a **new** certificate each build.
+
+Apple allows **three** Apple Distribution certificates per account. So around
+the third or fourth run this stops working, with an error about already having
+a current distribution certificate.
+
+Two ways out when you hit it:
+
+- **Quick:** revoke the old certificates at
+  developer.apple.com → Certificates, and let the next run make a fresh one.
+  Fine while it's just you testing; it invalidates anything signed with them.
+- **Proper:** switch the lane to [fastlane match](https://docs.fastlane.tools/actions/match/),
+  which keeps one certificate in a private repo and reuses it every build. It
+  needs a repo to store them in and one more secret, so it's a deliberate
+  change rather than something to slip in.
+
+Nothing to do until the first failure — just know what it is when it happens.
 
 ---
 
