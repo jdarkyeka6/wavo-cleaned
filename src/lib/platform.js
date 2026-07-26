@@ -19,6 +19,14 @@ export function isNative() {
   return Capacitor.isNativePlatform();
 }
 
+/**
+ * Boolean form of isNative(), for `{!isNativeApp && ...}` in JSX.
+ * The platform can't change while the page is open, so evaluating once at
+ * module load is safe — and it keeps call sites from accidentally rendering
+ * a truthy function reference.
+ */
+export const isNativeApp = isNative();
+
 /** 'ios' | 'android' | 'web' */
 export function getPlatform() {
   return Capacitor.getPlatform();

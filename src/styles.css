@@ -3285,3 +3285,239 @@ body::before {
 @media (max-width: 560px) {
   .premium-cols { grid-template-columns: 1fr; }
 }
+
+/* ============================================================
+   READABILITY PASS
+   Date separators, message grouping, and the affordances that
+   make the transcript scannable instead of a wall of bubbles.
+   ============================================================ */
+
+/* ---------- DAY SEPARATORS ---------- */
+/* Without these, a message from two minutes ago and one from last week
+   both just say "01:15 AM". */
+.day-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 10px;
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.day-divider::before,
+.day-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+.day-divider span { flex-shrink: 0; }
+.day-divider:first-child { margin-top: 0; }
+
+/* ---------- MESSAGE GROUPING ---------- */
+/* `.messages` sets gap: 10px between every bubble. Inside a run from one
+   person we pull that back so the run reads as a single block, and open it
+   up again where the speaker changes. */
+.messages { gap: 2px; }
+.bubble-wrap.run-start { margin-top: 12px; }
+.bubble-wrap.run-start:first-child { margin-top: 0; }
+
+/* Square off the inner corners of a run so stacked bubbles look joined */
+.mine .bubble { border-bottom-right-radius: 18px; }
+.theirs .bubble { border-bottom-left-radius: 18px; }
+.bubble-wrap.mine.run-end .bubble { border-bottom-right-radius: 5px; }
+.bubble-wrap.theirs.run-end .bubble { border-bottom-left-radius: 5px; }
+
+/* ---------- STATUS / EMPTY LINES INSIDE THE TRANSCRIPT ---------- */
+.messages-status {
+  margin: auto;
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 0.88rem;
+}
+
+/* ---------- HOVER ACTIONS ON A BUBBLE ---------- */
+/* Hold-to-react is invisible with a mouse. Show a small handle on hover so
+   reply and react are discoverable without a tooltip hunt. */
+.bubble-actions {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  z-index: 5;
+}
+.bubble-wrap.theirs .bubble-actions { left: calc(100% + 8px); }
+.bubble-wrap.mine .bubble-actions { right: calc(100% + 8px); }
+.bubble:hover .bubble-actions,
+.bubble-actions:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+.bubble-actions button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.bubble-actions button:hover { background: var(--panel); color: var(--coral); }
+
+/* Touch devices have long-press and no hover — the handle would just sit
+   there permanently or flash on tap, so hide it. */
+@media (hover: none) {
+  .bubble-actions { display: none; }
+}
+
+/* ---------- READ RECEIPT ---------- */
+/* Now shown once, on the newest message you sent. */
+.receipt {
+  font-weight: 600;
+  letter-spacing: 0;
+  font-size: 0.68rem;
+}
+
+/* ---------- JUMP TO LATEST ---------- */
+.jump-latest {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 90px;
+  z-index: 12;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 15px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+  animation: rise 0.18s ease-out;
+}
+.jump-latest:hover { border-color: var(--coral); color: var(--coral); }
+
+/* ---------- CHAT HEADER OVERFLOW MENU ---------- */
+/* Report and Block used to sit permanently in the header next to Search and
+   Games, reading as equally routine and squeezing the name on a phone. */
+
+/* The header's `backdrop-filter` makes it a stacking context, so anything
+   dropping out of it was painted *under* the message list no matter how
+   high its z-index. Lift the header itself instead. */
+.chat-header { position: relative; z-index: 20; }
+
+.chat-menu-wrap { position: relative; }
+.chat-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  padding: 5px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  animation: rise 0.15s ease-out;
+}
+.chat-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 11px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.86rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.chat-menu button:hover { background: var(--panel); }
+.chat-menu button.danger { color: var(--coral); }
+
+/* ---------- EMPTY CHAT ---------- */
+.empty-chat { gap: 4px; align-content: center; }
+.empty-chat h1 {
+  max-width: none;
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 1.4rem;
+}
+.empty-chat p {
+  max-width: 340px;
+  margin: 0 auto 18px;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.empty-chat-cta {
+  display: none; /* desktop always shows the sidebar, so this is mobile-only */
+  align-items: center;
+  gap: 7px;
+  margin: 0 auto;
+  padding: 10px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+.empty-chat-cta:hover { border-color: var(--coral); color: var(--coral); }
+
+/* ---------- REPLY QUOTE ---------- */
+/* The quote is a sibling of the bubble in a column flex wrap, so it needs
+   its own alignment; it was inheriting a left-ish look on both sides. */
+.reply-quote { max-width: min(78%, 340px); }
+.bubble-wrap.mine .reply-quote {
+  border-left: none;
+  border-right: 3px solid var(--coral);
+  border-radius: 8px 8px 0 0;
+  text-align: right;
+}
+.reply-quote-text { max-width: 100%; }
+
+/* ---------- MOBILE OVERRIDES ---------- */
+/* These live at the end of the file on purpose: the base rules they
+   override (.group-member-avatars, .empty-chat-cta) are declared later in
+   the sheet than the original @media block, so that block never won. */
+@media (max-width: 720px) {
+  .group-member-avatars { display: none; }
+  .empty-chat-cta { display: inline-flex; }
+  .jump-latest { bottom: 78px; }
+  .bubble-wrap.run-start { margin-top: 10px; }
+  .chat-menu { min-width: 180px; }
+}
+
+/* Narrow viewports have no room for the hover handle beside a bubble, and
+   a phone has long-press anyway. */
+@media (max-width: 720px) {
+  .bubble-actions { display: none; }
+}
+
+/* Slightly roomier reaction chips — easier to hit on a phone. */
+.react-chip { padding: 2px 8px; line-height: 1.35; }
