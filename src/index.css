@@ -26,3 +26,37 @@ input,
 textarea {
   font-family: inherit;
 }
+/* Shown when a build has no Supabase config — see src/ConfigError.jsx.
+   Lives in index.css, not styles.css, because a build broken this early may
+   not have got as far as loading the app's stylesheet. */
+.config-error {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: #14131f;
+  color: #ECECF1;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.config-error > div { max-width: 30rem; }
+.config-error h1 {
+  margin: 0 0 14px;
+  font-size: 1.35rem;
+  color: #FF6B5B;
+}
+.config-error p {
+  margin: 0 0 12px;
+  font-size: 0.94rem;
+  line-height: 1.55;
+  color: #A9A9B8;
+}
+.config-error code {
+  display: inline-block;
+  margin: 4px 6px 0 0;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: #221f31;
+  color: #FFB454;
+  font-size: 0.84rem;
+}
+.config-error-hint { font-size: 0.85rem; color: #6E6E80; }

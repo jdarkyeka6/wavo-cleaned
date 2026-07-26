@@ -4309,3 +4309,50 @@ body::before {
     place-items: center;
   }
 }
+
+/* ============================================================
+   SAFE AREAS — notch, Dynamic Island, home indicator
+   The web app never needed these; the iOS build draws edge to edge and
+   the top of every screen was landing underneath the status bar.
+   ============================================================ */
+
+/* The landing page's nav is the first thing anyone sees. */
+.landing-nav {
+  padding-top: calc(20px + env(safe-area-inset-top));
+  padding-left: calc(34px + env(safe-area-inset-left));
+  padding-right: calc(34px + env(safe-area-inset-right));
+}
+
+/* Signed in: the sidebar's brand row and the chat header are both flush to
+   the top of the screen. */
+.brand-row {
+  padding-top: calc(22px + env(safe-area-inset-top));
+}
+.chat-header {
+  height: auto;
+  min-height: 68px;
+  padding-top: env(safe-area-inset-top);
+}
+
+/* The composer sits against the home indicator. */
+.composer {
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
+
+/* Full-screen overlays need the same treatment or their close buttons end up
+   under the status bar. */
+.settings-card,
+.media-viewer-toolbar {
+  padding-top: env(safe-area-inset-top);
+}
+
+@media (max-width: 720px) {
+  .landing-nav {
+    padding-top: calc(14px + env(safe-area-inset-top));
+    padding-left: calc(16px + env(safe-area-inset-left));
+    padding-right: calc(16px + env(safe-area-inset-right));
+  }
+  .composer {
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+}
