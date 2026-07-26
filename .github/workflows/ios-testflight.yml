@@ -25,8 +25,42 @@ jobs:
           cache: npm
       - name: Install npm dependencies
         run: npm ci
+      # The web build needs the same Supabase config Vercel gives wavo.lol.
+      # Without it Vite happily inlines `undefined`, the build goes green, and
+      # the shipped app throws "supabaseUrl is required." before React mounts —
+      # a black screen, with a successful pipeline. Fail here instead.
+      - name: Check the app config is present
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          missing=""
+          [ -z "$VITE_SUPABASE_URL" ] && missing="$missing VITE_SUPABASE_URL"
+          [ -z "$VITE_SUPABASE_ANON_KEY" ] && missing="$missing VITE_SUPABASE_ANON_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secret(s):$missing"
+            echo "Add them under Settings -> Secrets and variables -> Actions."
+            echo "They are the same values Vercel uses; the anon key is public"
+            echo "by design and already ships in the wavo.lol bundle."
+            exit 1
+          fi
+          echo "Supabase config present."
+
       - name: Build the web app
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
+
+      # Belt and braces: prove the values actually made it into the bundle
+      # rather than trusting that the env var was visible to Vite.
+      - name: Verify the bundle carries the config
+        run: |
+          if ! grep -rq "supabase.co" dist/assets/*.js; then
+            echo "::error::Built bundle contains no Supabase URL - the app would black-screen."
+            exit 1
+          fi
+          echo "Bundle contains the Supabase URL."
       - name: Sync web build into iOS
         run: npx cap sync ios
       - name: Set up Ruby and Fastlane
