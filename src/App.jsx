@@ -25,6 +25,7 @@ import {
   SmilePlus,
   CornerUpLeft,
   ArrowDown,
+  Star,
 } from "lucide-react";
 import {
   registerServiceWorker,
@@ -37,6 +38,7 @@ import Plans from "./Plans";
 import Landing from "./Landing";
 import Premium from "./Premium";
 import { isNativeApp } from "./lib/platform";
+import { PLANS, DEFAULT_PLAN } from "./lib/pricing";
 import { UserLabel } from "./Cosmetic";
 import { useCosmetics } from "./useCosmetics";
 import { useUrlSync } from "./useUrlSync";
@@ -46,6 +48,14 @@ import "./styles.css";
 import "./styles-additions.css";
 
 const GIPHY_API_KEY = import.meta.env.VITE_GIPHY_API_KEY;
+
+// Stripe returns the buyer to /?premium=1 (or ?premium=0 if they backed out).
+// Read it at module load: useUrlSync rewrites the URL as soon as the app
+// mounts, so by the time an effect runs the flag is already gone.
+const CHECKOUT_RETURN =
+  typeof window === "undefined"
+    ? null
+    : new URLSearchParams(window.location.search).get("premium");
 
 // Usernames allowed to use fast account-switching. Only these accounts get
 // remembered on the device — everyone else's password is never stored.
@@ -186,6 +196,9 @@ export default function App() {
   const [showAuth, setShowAuth] = useState(false);
   const [showPremium, setShowPremium] = useState(false);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
+  // Result of coming back from Stripe: null | "pending" | "ok" | "cancelled"
+  const [premiumReturn, setPremiumReturn] = useState(null);
   const [auth, setAuth] = useState({
     firstName: "",
     lastName: "",
@@ -281,23 +294,52 @@ export default function App() {
     if (data !== false) await loadProfile();
   }
 
-  async function startCheckout(plan = "standard") {
+  // `plan` used to arrive as a React click event, because the CTA was wired
+  // up as onClick={onSubscribe}. Guard the value so a stray caller can't put
+  // an object into the request body.
+  async function startCheckout(plan) {
+    const planId = typeof plan === "string" && PLANS[plan] ? plan : DEFAULT_PLAN;
     setCheckoutBusy(true);
+    setCheckoutError("");
     try {
       const { data: sess } = await supabase.auth.getSession();
+      const token = sess?.session?.access_token;
+      if (!token) {
+        setCheckoutError("You're signed out. Sign in again and retry.");
+        return;
+      }
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${sess?.session?.access_token || ""}`,
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({ plan: planId }),
       });
-      const json = await res.json();
-      if (json.url) window.location.href = json.url;
-      else alert(json.error || "Couldn't start checkout.");
+      // A platform-level failure (a Vercel 500, a cold-start timeout) returns
+      // HTML, not JSON. res.json() then throws a parse error that reads like
+      // a bug in Wavo, so read text and decode it ourselves.
+      const raw = await res.text();
+      let json = null;
+      try {
+        json = JSON.parse(raw);
+      } catch {
+        /* not JSON — handled below */
+      }
+      if (json?.url) {
+        window.location.href = json.url;
+        return;
+      }
+      setCheckoutError(
+        json?.error ||
+          (res.ok
+            ? "Checkout didn't return a payment link. Try again."
+            : `Checkout failed (${res.status}). Try again in a minute.`)
+      );
     } catch (err) {
-      alert("Couldn't start checkout: " + err.message);
+      setCheckoutError(
+        err?.message ? `Couldn't reach checkout: ${err.message}` : "Couldn't reach checkout."
+      );
     } finally {
       setCheckoutBusy(false);
     }
@@ -651,6 +693,44 @@ export default function App() {
     setAnnouncement(null);
   }
 
+  // --- RETURN FROM STRIPE CHECKOUT ---
+  // Paying used to look like it had failed: Stripe sends you back to
+  // /?premium=1, nothing read that, and is_premium only flips when the
+  // webhook lands — which the already-loaded tab never noticed. So you paid,
+  // came back, and still saw "Get Premium".
+  useEffect(() => {
+    if (!currentUser || !CHECKOUT_RETURN) return;
+
+    if (CHECKOUT_RETURN === "0") {
+      setPremiumReturn("cancelled");
+      return;
+    }
+    if (CHECKOUT_RETURN !== "1") return;
+
+    setShowPremium(false);
+    setPremiumReturn("pending");
+
+    let stopped = false;
+    (async () => {
+      // The webhook is out of band, so poll instead of trusting the
+      // redirect. ~30s, then say so rather than spinning forever.
+      for (let i = 0; i < 15 && !stopped; i++) {
+        const fresh = await loadProfile();
+        if (fresh?.is_premium) {
+          if (!stopped) setPremiumReturn("ok");
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+      if (!stopped) setPremiumReturn("slow");
+    })();
+
+    return () => {
+      stopped = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser]);
+
   // --- LAST ONLINE heartbeat ---
   useEffect(() => {
     if (!currentUser) return;
@@ -930,6 +1010,7 @@ export default function App() {
       .eq("id", currentUser.id)
       .single();
     if (data) setProfile(data);
+    return data;
   }
 
   async function loadMyStrikes() {
@@ -3546,12 +3627,41 @@ export default function App() {
         </div>
       )}
 
+      {premiumReturn && (
+        <div className={`premium-return ${premiumReturn === "ok" ? "ok" : ""}`}>
+          {premiumReturn === "ok" ? (
+            <>
+              <Star size={16} />
+              <span>You're a Supporter. Thank you.</span>
+            </>
+          ) : premiumReturn === "pending" ? (
+            <span>Confirming your payment with Stripe…</span>
+          ) : premiumReturn === "slow" ? (
+            <span>
+              Payment received — it's taking a moment to show up. Refresh in a
+              minute.
+            </span>
+          ) : (
+            <span>Checkout cancelled — you haven't been charged.</span>
+          )}
+          {premiumReturn !== "pending" && (
+            <button onClick={() => setPremiumReturn(null)} aria-label="Dismiss">
+              <X size={15} />
+            </button>
+          )}
+        </div>
+      )}
+
       <Premium
         open={showPremium}
-        onClose={() => setShowPremium(false)}
+        onClose={() => {
+          setShowPremium(false);
+          setCheckoutError("");
+        }}
         onSubscribe={startCheckout}
         isPremium={isPremium}
         busy={checkoutBusy}
+        error={checkoutError}
       />
     </main>
   );

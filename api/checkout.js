@@ -14,6 +14,9 @@ import { createClient } from "@supabase/supabase-js";
  * crashes the frontend's res.json()).
  */
 
+// KEEP IN SYNC with src/lib/pricing.js, which holds the same amounts in
+// dollars for display. These cents figures are what Stripe actually charges,
+// so they are the ones that win in a disagreement.
 const PLANS = {
   standard: { label: "Wavo Premium", amount: 499 },
   student: { label: "Wavo Premium — Student", amount: 349 },

@@ -3521,3 +3521,143 @@ body::before {
 
 /* Slightly roomier reaction chips — easier to hit on a phone. */
 .react-chip { padding: 2px 8px; line-height: 1.35; }
+
+/* ============================================================
+   PREMIUM MODAL
+   Premium.jsx renders .modal-backdrop / .modal / .modal-close, none of
+   which had any CSS. The paywall was therefore not a modal at all — it
+   was a plain block in normal flow, rendered under the settings overlay
+   (z-index 100) and spilling off the left edge of the viewport, with its
+   buy button unclickable.
+   ============================================================ */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  /* Above .settings-overlay (100), since the only entry point to Premium
+     is the upsell button inside Settings and it opens on top of it. */
+  z-index: 150;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(3px);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.modal {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 24px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg, 18px);
+  box-shadow: var(--shadow-lg);
+  animation: rise 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.modal-close:hover { border-color: var(--coral); color: var(--coral); }
+
+/* ---------- PLAN PICKER ---------- */
+/* The student plan ($3.49) was supported by the checkout API and defined
+   in lib/pricing.js, but there was no control anywhere to choose it. */
+.premium-plans {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 4px 0 14px;
+}
+.premium-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.premium-plan:hover { border-color: var(--amber); }
+.premium-plan.on {
+  border-color: var(--amber);
+  background: var(--coral-soft);
+  box-shadow: inset 0 0 0 1px var(--amber);
+}
+.premium-plan-name { font-weight: 600; font-size: 0.88rem; }
+.premium-plan-price { color: var(--amber); font-weight: 700; font-size: 0.95rem; }
+.premium-plan-note { color: var(--text-faint); font-size: 0.72rem; line-height: 1.35; }
+
+/* ---------- INLINE ERROR ---------- */
+/* Checkout failures used to come through window.alert(), which dumped raw
+   Stripe/Supabase messages into a browser dialog. */
+.premium-error {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--coral);
+  border-radius: var(--r-sm);
+  background: var(--coral-soft);
+  color: var(--text);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+/* ---------- POST-CHECKOUT BANNER ---------- */
+/* Stripe sends you back to /?premium=1 and nothing read it, so a
+   successful payment looked like nothing had happened. */
+.premium-return {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 28px);
+  padding: 11px 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.86rem;
+  box-shadow: var(--shadow-lg);
+  animation: rise 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.premium-return.ok { border-color: var(--online); }
+.premium-return svg { flex-shrink: 0; }
+.premium-return button {
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 0;
+}
+.premium-return button:hover { color: var(--coral); }
+
+@media (max-width: 560px) {
+  .premium-plans { grid-template-columns: 1fr; }
+  .modal { padding: 20px 16px; }
+}
