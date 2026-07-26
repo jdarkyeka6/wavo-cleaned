@@ -1,23 +1,54 @@
-// Are we running inside the native iOS/Android app, or on the website?
+// src/lib/platform.js
 //
-// We deliberately do NOT import "@capacitor/core" here. That package is the
-// bridge to phone hardware — the website has no need for it, and importing it
-// makes the web build (Vercel) fail because the dependency isn't installed
-// there. Instead we read the global that Capacitor injects into the page ONLY
-// when the code is running inside the native shell. On wavo.lol that global
-// never exists, so isNativeApp is false and the website behaves normally.
+// Tells the app whether it's running inside the native iOS/Android shell
+// or on the web at wavo.lol.
+//
+// Why this exists:
+// Apple App Store Guideline 3.1.1 requires that digital subscriptions sold
+// for use inside an iOS app go through In-App Purchase. Since Wavo Premium
+// is sold via Stripe on the web, the iOS build must not show ANY purchase
+// UI, prices, or links to the web paywall. Doing so is a rejection.
+//
+// The app still HONOURS premium bought on the web — badge, name colours and
+// premium themes all work on iOS. It just can't advertise the door.
 
-function detectNative() {
-  if (typeof window === "undefined") return false;
-  const cap = window.Capacitor;
-  if (!cap) return false;
-  // Preferred: Capacitor's own check, if the native runtime exposes it.
-  if (typeof cap.isNativePlatform === "function") return cap.isNativePlatform();
-  // Fallback: read the platform string it injects.
-  const platform =
-    typeof cap.getPlatform === "function" ? cap.getPlatform() : cap.platform;
-  return platform === "ios" || platform === "android";
+import { Capacitor } from '@capacitor/core';
+
+/** True inside the iOS/Android app shell, false in a normal browser. */
+export function isNative() {
+  return Capacitor.isNativePlatform();
 }
 
-// true only inside the native iOS/Android app; false on the website (wavo.lol)
-export const isNativeApp = detectNative();
+/** 'ios' | 'android' | 'web' */
+export function getPlatform() {
+  return Capacitor.getPlatform();
+}
+
+export function isIOS() {
+  return getPlatform() === 'ios';
+}
+
+/**
+ * Whether the UI may show prices, upgrade buttons, or links to checkout.
+ *
+ * Android technically permits external payment links in more cases than
+ * iOS does, but gating both keeps ONE code path and avoids tripping
+ * Google Play's equivalent policy. Flip this to `!isIOS()` only if you
+ * later decide to sell on Android web.
+ */
+export function canShowBilling() {
+  return !isNative();
+}
+
+/**
+ * Guard for anything that navigates the user toward payment.
+ * Use in click handlers as a last line of defence, so a stray button
+ * can never open checkout inside the native app.
+ */
+export function assertBillingAllowed() {
+  if (!canShowBilling()) {
+    console.warn('[wavo] Billing UI suppressed on native platform (App Store 3.1.1)');
+    return false;
+  }
+  return true;
+}
