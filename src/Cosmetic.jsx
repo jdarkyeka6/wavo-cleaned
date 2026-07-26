@@ -1,4 +1,5 @@
 import { useCosmeticCatalogue } from "./useCosmetics";
+import { nameStyleProps } from "./lib/cosmeticStyles";
 
 /**
  * A username, wearing whatever the server says it's allowed to wear.
@@ -17,13 +18,11 @@ export function UserLabel({ user, name, className = "" }) {
   const label = name ?? user?.username ?? "Unknown";
   const style = user?.equipped_name_style ? map[user.equipped_name_style] : null;
   const badge = user?.equipped_badge ? map[user.equipped_badge] : null;
+  const nameProps = nameStyleProps(style);
 
   return (
     <span className={`user-label ${className}`}>
-      <span
-        className="user-label-name"
-        style={style?.payload?.color ? { color: style.payload.color } : undefined}
-      >
+      <span className={nameProps.className} style={nameProps.style}>
         {label}
       </span>
       {badge && (
