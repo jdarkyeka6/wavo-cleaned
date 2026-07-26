@@ -2574,9 +2574,9 @@ export default function App() {
                               title={
                                 usable
                                   ? t.name
-                                  : req?.kind === "premium"
-                                  ? "Premium theme"
-                                  : `${req?.have ?? 0} / ${req?.need ?? 0}`
+                                  : claimable
+                                  ? `${t.name} — earned, tap to claim`
+                                  : req?.detail || t.name
                               }
                             >
                               <span
@@ -2586,11 +2586,7 @@ export default function App() {
                               <span className="theme-name">{t.name}</span>
                               {!usable && (
                                 <span className="theme-lock">
-                                  {claimable
-                                    ? "Claim"
-                                    : req?.kind === "premium"
-                                    ? "Premium"
-                                    : `${req?.have ?? 0}/${req?.need ?? 0}`}
+                                  {claimable ? "Claim" : req?.short}
                                 </span>
                               )}
                             </button>
@@ -2627,7 +2623,13 @@ export default function App() {
                                   usable ? "" : "locked"
                                 }`}
                                 onClick={() => equip(b, "badge")}
-                                title={usable ? b.name : b.description}
+                                title={
+                                  usable
+                                    ? b.name
+                                    : req?.kind === "earned" && req.met
+                                    ? `${b.name} — earned, tap to claim`
+                                    : req?.detail || b.description
+                                }
                               >
                                 <span style={{ color: b.payload?.color }}>
                                   {b.payload?.emoji}
@@ -2635,9 +2637,9 @@ export default function App() {
                                 {b.name}
                                 {!usable && (
                                   <span className="cos-lock">
-                                    {req?.kind === "premium"
-                                      ? "Premium"
-                                      : `${req?.have ?? 0}/${req?.need ?? 0}`}
+                                    {req?.kind === "earned" && req.met
+                                      ? "Claim"
+                                      : req?.short}
                                   </span>
                                 )}
                               </button>
@@ -2650,8 +2652,10 @@ export default function App() {
                         {catalogue
                           .filter((c) => c.kind === "name_style")
                           .map((n) => {
+                            const req = requirement(n);
                             const usable = isUsable(n);
                             const on = profile?.equipped_name_style === n.id;
+                            const label = n.name.replace(" name", "");
                             return (
                               <button
                                 key={n.id}
@@ -2659,6 +2663,13 @@ export default function App() {
                                   usable ? "" : "locked"
                                 }`}
                                 onClick={() => equip(n, "name_style")}
+                                title={
+                                  usable
+                                    ? label
+                                    : req?.kind === "earned" && req.met
+                                    ? `${label} — earned, tap to claim`
+                                    : req?.detail || label
+                                }
                               >
                                 <span
                                   className={`cos-dot ${
@@ -2666,8 +2677,17 @@ export default function App() {
                                   }`}
                                   style={swatchStyle(n)}
                                 />
-                                {n.name.replace(" name", "")}
-                                {!usable && <span className="cos-lock">Premium</span>}
+                                {label}
+                                {/* This said "Premium" for everything, which
+                                    mislabelled the earned Everglow name as a
+                                    paid item. */}
+                                {!usable && (
+                                  <span className="cos-lock">
+                                    {req?.kind === "earned" && req.met
+                                      ? "Claim"
+                                      : req?.short}
+                                  </span>
+                                )}
                               </button>
                             );
                           })}

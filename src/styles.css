@@ -3819,6 +3819,10 @@ body::before {
   .settings-nav-item.on { background: var(--coral-soft); }
 
   .settings-body { padding: 4px 16px 20px; }
+
+  /* Two columns can't hold a theme name and a progress chip like
+     "1/365 streak" at this width — names were ellipsised to "Everg…". */
+  .theme-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Keep the dialog a stable size as you move between tabs — Notifications is

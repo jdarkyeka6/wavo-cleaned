@@ -24,6 +24,20 @@ const meetsTier = (item, tier) => {
   return need ? rank(tier) >= rank(need) : false;
 };
 
+/**
+ * What the numbers on a progress chip actually count.
+ *
+ * A locked item used to read "1/365", which says nothing about what you're
+ * meant to do — and streak milestones and days-active milestones rendered
+ * identically, so "1/30" was two different goals depending on the item.
+ */
+const STAT_UNIT = {
+  longest_streak: "streak",
+  current_streak: "streak",
+  days_active: "days",
+  messages_sent: "sent",
+};
+
 export function useCosmetics(userId, tier = "free") {
   const isPremium = rank(tier) >= 2;
   const [catalogue, setCatalogue] = useState([]);
@@ -87,9 +101,14 @@ export function useCosmetics(userId, tier = "free") {
       const needReq = neededTier(item);
       if (needReq) {
         // A tier item. Usable when the user's tier is high enough.
+        const label = needReq === "vip" ? "VIP" : "Premium";
         return {
           kind: "premium",
-          label: needReq === "vip" ? "VIP" : "Premium",
+          label,
+          short: label,
+          // Premium rows carry description "Premium", so leaning on the
+          // description here produced the tooltip "Premium — Premium".
+          detail: `${item.name} — ${label}`,
           needTier: needReq,
           met: meetsTier(item, tier),
         };
@@ -98,12 +117,20 @@ export function useCosmetics(userId, tier = "free") {
       const key = item.unlock_rule?.stat;
       const need = Number(item.unlock_rule?.gte ?? 0);
       const have = Number(stats?.[key] ?? 0);
+      const unit = STAT_UNIT[key];
 
       return {
         kind: "earned",
-        label: item.description,      // e.g. "7 day streak"
+        label: item.description,      // e.g. "365 day streak"
         have,
         need,
+        unit,
+        // What a lock chip shows: "1/365 streak", not a bare "1/365".
+        short: unit ? `${have}/${need} ${unit}` : `${have}/${need}`,
+        // The long form, for tooltips — says the goal as well as the progress.
+        detail: item.description
+          ? `${item.description} — ${have} of ${need}`
+          : `${have} of ${need}`,
         met: have >= need,            // met but unclaimed → claimable
       };
     },
