@@ -29,6 +29,8 @@ import {
   User,
   Palette,
   LogOut,
+  Trophy,
+  ChevronRight,
 } from "lucide-react";
 import {
   registerServiceWorker,
@@ -43,6 +45,7 @@ import Premium from "./Premium";
 import { isNativeApp } from "./lib/platform";
 import { PLANS, DEFAULT_PLAN } from "./lib/pricing";
 import { UserLabel } from "./Cosmetic";
+import { UnlockGuide } from "./UnlockGuide";
 import { swatchStyle } from "./lib/cosmeticStyles";
 import { useCosmetics } from "./useCosmetics";
 import { useUrlSync } from "./useUrlSync";
@@ -379,6 +382,20 @@ export default function App() {
     }
   }
 
+  // Closing Settings drops you out of the unlock list too, so reopening lands
+  // on Appearance itself rather than on whatever screen you left behind it.
+  function closeSettings() {
+    setShowSettings(false);
+    setShowUnlocks(false);
+  }
+
+  // Claiming from the unlock list only takes ownership — it doesn't apply the
+  // theme or equip the badge. You're reading a list here, not dressing up, and
+  // having the whole app change colour under you would be a surprise.
+  async function claimFromGuide(item) {
+    await claim(item.id);
+  }
+
   // saved accounts for quick switching (stored on this device only)
   const [accounts, setAccounts] = useState(() => {
     try {
@@ -405,6 +422,8 @@ export default function App() {
   const [savingStatus, setSavingStatus] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
   const [settingsTab, setSettingsTab] = useState("profile");
+  // Appearance has a second screen behind it: the full unlock ladder.
+  const [showUnlocks, setShowUnlocks] = useState(false);
   const [nicknames, setNicknames] = useState({});
   // batch 3: latest announcement banner
   const [announcement, setAnnouncement] = useState(null);
@@ -643,7 +662,10 @@ export default function App() {
       if (reactPickerMsg) return setReactPickerMsg(null);
       if (showPremium) return setShowPremium(false);
       if (showNewGroup) return setShowNewGroup(false);
-      if (showSettings) return setShowSettings(false);
+      // The unlock list is a screen *inside* Settings, so Escape steps back to
+      // Appearance before it closes the dialog.
+      if (showSettings && showUnlocks) return setShowUnlocks(false);
+      if (showSettings) return closeSettings();
       if (showGiphy) return setShowGiphy(false);
       if (showEmoji) return setShowEmoji(false);
       if (showGames) return setShowGames(false);
@@ -1242,7 +1264,7 @@ export default function App() {
   }
 
   async function addAccount() {
-    setShowSettings(false);
+    closeSettings();
     await supabase.auth.signOut();
   }
 
@@ -2395,7 +2417,7 @@ export default function App() {
           of the viewport — so this panel was being squeezed into the
           sidebar's 330px and its content clipped off the right edge. */}
       {showSettings && (
-        <div className="settings-overlay" onClick={() => setShowSettings(false)}>
+        <div className="settings-overlay" onClick={closeSettings}>
           <div
             className="settings-card"
             onClick={(e) => e.stopPropagation()}
@@ -2407,7 +2429,7 @@ export default function App() {
               <h3>Settings</h3>
               <button
                 className="icon-btn"
-                onClick={() => setShowSettings(false)}
+                onClick={closeSettings}
                 aria-label="Close settings"
               >
                 <X size={18} />
@@ -2430,7 +2452,10 @@ export default function App() {
                     className={`settings-nav-item ${
                       settingsTab === id ? "on" : ""
                     }`}
-                    onClick={() => setSettingsTab(id)}
+                    onClick={() => {
+                      setSettingsTab(id);
+                      setShowUnlocks(false);
+                    }}
                   >
                     <Icon size={15} />
                     <span>{label}</span>
@@ -2539,7 +2564,20 @@ export default function App() {
                 )}
 
                 {/* ---------------- APPEARANCE ---------------- */}
-                {settingsTab === "appearance" && (
+                {settingsTab === "appearance" && showUnlocks && (
+                  <UnlockGuide
+                    catalogue={catalogue}
+                    requirement={requirement}
+                    isUsable={isUsable}
+                    stats={stats}
+                    isPremium={isPremium}
+                    onClaim={claimFromGuide}
+                    onBack={() => setShowUnlocks(false)}
+                    onGetPremium={() => setShowPremium(true)}
+                  />
+                )}
+
+                {settingsTab === "appearance" && !showUnlocks && (
                   <>
                     <section className="settings-section">
                       {stats && (
@@ -2593,10 +2631,17 @@ export default function App() {
                           );
                         })}
                       </div>
-                      <p className="settings-hint">
-                        Keep using Wavo to unlock more. Streaks, days active and
-                        messages sent all count.
-                      </p>
+                      <button
+                        className="unlock-open"
+                        onClick={() => setShowUnlocks(true)}
+                      >
+                        <Trophy size={15} />
+                        <span>
+                          How to unlock
+                          <em>every theme and badge, and what each one takes</em>
+                        </span>
+                        <ChevronRight size={16} />
+                      </button>
                     </section>
 
                     {/* The bits other people actually see */}

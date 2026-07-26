@@ -3964,3 +3964,223 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   .user-label-name.is-animated { animation: none; }
 }
+
+/* ============================================================
+   UNLOCK GUIDE — "what do I have to do to get that?"
+   A screen behind Appearance, listing the whole ladder.
+   ============================================================ */
+
+.unlock-open {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 11px 12px;
+  background: var(--panel-2);
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.14s, background 0.14s;
+}
+.unlock-open:hover { border-color: var(--coral); background: var(--coral-soft); }
+.unlock-open > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.unlock-open em {
+  font-style: normal;
+  font-size: 0.73rem;
+  font-weight: 500;
+  color: var(--text-faint);
+}
+.unlock-open svg:last-child { margin-left: auto; flex-shrink: 0; color: var(--text-faint); }
+
+.unlock-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.unlock-head h4 { margin: 0; }
+.unlock-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.14s, border-color 0.14s;
+}
+.unlock-back:hover { color: var(--text); border-color: var(--text-faint); }
+.unlock-count {
+  margin-left: auto;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.unlock-group { margin-top: 18px; }
+.unlock-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.unlock-group-title {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.unlock-group-at {
+  margin-left: auto;
+  font-size: 0.73rem;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.unlock-group-at strong { color: var(--text-dim); }
+.unlock-blurb {
+  margin: 3px 0 10px;
+  font-size: 0.73rem;
+  line-height: 1.4;
+  color: var(--text-faint);
+}
+
+.unlock-list, .unlock-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.unlock-step {
+  padding: 9px 0 10px;
+  border-top: 1px solid var(--line);
+}
+.unlock-step-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 7px;
+}
+.unlock-goal {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+.unlock-step.reached .unlock-goal { color: var(--amber); }
+
+.unlock-progress {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  min-width: 108px;
+}
+.unlock-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.unlock-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--coral);
+  transition: width 0.3s;
+}
+.unlock-nums {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.unlock-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.unlock-row.done { color: var(--text); }
+.unlock-swatch {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+.unlock-emoji {
+  width: 15px;
+  flex-shrink: 0;
+  font-size: 0.9rem;
+  line-height: 1;
+  text-align: center;
+}
+.unlock-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.unlock-kind {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.unlock-state {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.unlock-state.done { color: var(--amber); }
+.unlock-claim {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1.5px solid var(--amber);
+  background: transparent;
+  color: var(--amber);
+  font: inherit;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.unlock-claim:hover { background: var(--amber); color: var(--bg); }
+
+/* The progress bar needs its own line once the goal text and the bar stop
+   fitting side by side. */
+@media (max-width: 420px) {
+  .unlock-progress { margin-left: 0; width: 100%; }
+}
