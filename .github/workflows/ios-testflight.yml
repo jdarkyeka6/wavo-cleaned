@@ -23,8 +23,15 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # `npm ci` was tried here and had to be reverted: the committed
+      # package-lock.json is out of sync with package.json — it pins
+      # @emnapi/wasi-threads 1.2.2 where resolution wants 1.2.3 — and ci
+      # refuses to install at all in that state, failing the job in one
+      # second. `npm install` tolerates it, which is why the three builds
+      # before that change worked. Regenerating the lockfile is the real fix,
+      # but not while a release is blocked.
       - name: Install npm dependencies
-        run: npm ci
+        run: npm install
       # The web build needs the same Supabase config Vercel gives wavo.lol.
       # Without it Vite happily inlines `undefined`, the build goes green, and
       # the shipped app throws "supabaseUrl is required." before React mounts —
