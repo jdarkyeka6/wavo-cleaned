@@ -35,6 +35,7 @@ import {
   SendHorizontal,
   Pin,
   Settings as SettingsIcon,
+  Clock,
 } from "lucide-react";
 import {
   registerServiceWorker,
@@ -59,6 +60,10 @@ import {
   GroupManageModal,
 } from "./SocialUpgrades";
 import "./social-upgrades.css";
+import { SendLaterDialog } from "./SendLater";
+import { useScheduled } from "./useScheduled";
+import { draftKeyFor, readDraft, writeDraft, clearDraft } from "./useDrafts";
+import { StreakPill } from "./StreakPill";
 import { swatchStyle } from "./lib/cosmeticStyles";
 import { useCosmetics } from "./useCosmetics";
 import { useUrlSync } from "./useUrlSync";
@@ -614,6 +619,24 @@ export default function App() {
   // Whose profile card is open, and which image the viewer is showing.
   const [profileCardUser, setProfileCardUser] = useState(null);
   const [viewerImageId, setViewerImageId] = useState(null);
+  const [sendLaterOpen, setSendLaterOpen] = useState(false);
+
+  const scheduled = useScheduled({
+    userId: currentUser?.id,
+    kind: selectedGroup ? "group" : "dm",
+    conversationId: selectedGroup ? selectedGroup.id : chatId,
+  });
+
+  // Which conversation any half-typed message belongs to.
+  const draftKey = draftKeyFor(selectedGroup, selectedUser);
+
+  // Persist the draft as you type, so closing the tab mid-sentence doesn't
+  // lose it. Writing to localStorage isn't React state, so no cascade here.
+  useEffect(() => {
+    if (!draftKey || editingMsg) return undefined;
+    const t = window.setTimeout(() => writeDraft(draftKey, messageText), 250);
+    return () => window.clearTimeout(t);
+  }, [draftKey, messageText, editingMsg]);
 
   useEffect(() => {
     selectedUserRef.current = selectedUser;
@@ -1670,9 +1693,21 @@ export default function App() {
     setShowChatMenu(false);
   }
 
+  // Both openers stash whatever is in the box under the conversation you're
+  // leaving and restore the one you're arriving at. Doing it here rather than
+  // in an effect keeps it tied to the actual navigation, and avoids a
+  // setState-in-effect cascade on every conversation change.
+  function swapDraft(nextKey) {
+    writeDraft(draftKey, messageText);
+    setMessageText(readDraft(nextKey));
+  }
+
   function openChat(user) {
     setSelectedGroup(null);
+    // resetConversationState clears the composer, so the draft has to be
+    // restored after it or the restore is immediately overwritten.
     resetConversationState();
+    swapDraft(draftKeyFor(null, user));
     setSelectedUser(user);
     setShowSidebar(false); // mobile: reveal the chat
     clearNotifsFromSender(user.id);
@@ -1729,6 +1764,7 @@ export default function App() {
   function openGroup(group) {
     setSelectedUser(null);
     resetConversationState();
+    swapDraft(draftKeyFor(group, null));
     setGroupMessages([]);
     setSelectedGroup(group);
     setShowSidebar(false); // mobile: reveal the chat
@@ -1807,6 +1843,7 @@ export default function App() {
 
     setMessageText("");
     setShowEmoji(false);
+    clearDraft(draftKey);
     await insertGroupMessage(text, "text");
   }
 
@@ -1917,6 +1954,7 @@ export default function App() {
 
     setMessageText("");
     setShowEmoji(false);
+    clearDraft(draftKey);
     await insertMessage(text, "text");
   }
 
@@ -2386,6 +2424,11 @@ export default function App() {
           </div>
           <Settings size={17} className="me-gear" />
         </button>
+
+        {/* The streak, visible without opening Settings. refreshKey nudges it
+            when a message goes out, since sending counts as activity. */}
+        <StreakPill userId={currentUser?.id} refreshKey={messages.length} />
+
         <input
           ref={avatarInputRef}
           type="file"
@@ -3587,6 +3630,22 @@ export default function App() {
                 hidden
                 onChange={uploadChatFile}
               />
+              <button
+                type="button"
+                className={`composer-icon ${scheduled.pending.length ? "has-pending" : ""}`}
+                onClick={() => setSendLaterOpen(true)}
+                aria-label="Send later"
+                title={
+                  scheduled.pending.length
+                    ? `${scheduled.pending.length} message${scheduled.pending.length === 1 ? "" : "s"} waiting to send`
+                    : "Send later"
+                }
+              >
+                <Clock size={18} />
+                {scheduled.pending.length > 0 && (
+                  <span className="icon-btn-count">{scheduled.pending.length}</span>
+                )}
+              </button>
               <input
                 value={messageText}
                 onChange={(e) => {
@@ -3947,6 +4006,22 @@ export default function App() {
               >
                 <Paperclip size={18} />
               </button>
+              <button
+                type="button"
+                className={`composer-icon ${scheduled.pending.length ? "has-pending" : ""}`}
+                onClick={() => setSendLaterOpen(true)}
+                aria-label="Send later"
+                title={
+                  scheduled.pending.length
+                    ? `${scheduled.pending.length} message${scheduled.pending.length === 1 ? "" : "s"} waiting to send`
+                    : "Send later"
+                }
+              >
+                <Clock size={18} />
+                {scheduled.pending.length > 0 && (
+                  <span className="icon-btn-count">{scheduled.pending.length}</span>
+                )}
+              </button>
               <input
                 value={messageText}
                 onChange={(e) => {
@@ -4091,6 +4166,18 @@ export default function App() {
           media={selectedGroup ? groupMessages : messages}
           activeId={viewerImageId}
           onClose={() => setViewerImageId(null)}
+        />
+      )}
+
+      {sendLaterOpen && (selectedUser || selectedGroup) && (
+        <SendLaterDialog
+          text={messageText}
+          pending={scheduled.pending}
+          onSchedule={(content, at) =>
+            scheduled.schedule(content, at, selectedUser?.id)
+          }
+          onCancel={scheduled.cancel}
+          onClose={() => setSendLaterOpen(false)}
         />
       )}
 

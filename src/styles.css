@@ -4386,3 +4386,198 @@ body::before {
 .as-button:hover { filter: brightness(1.12); }
 
 .msg-image { cursor: zoom-in; }
+
+/* ============================================================
+   SEND LATER
+   ============================================================ */
+
+.composer-icon { position: relative; }
+.composer-icon.has-pending { border-color: var(--coral); color: var(--coral); }
+
+.send-later-modal {
+  width: min(94vw, 460px);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg, 16px);
+  padding: 18px;
+  box-shadow: var(--shadow-lg);
+}
+.send-later-modal header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.send-later-modal header > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--coral);
+}
+.send-later-modal h3 { margin: 0; font-size: 1.02rem; color: var(--text); }
+
+.send-later-preview {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  font-size: 0.86rem;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+.send-later-empty {
+  margin: 0 0 14px;
+  font-size: 0.82rem;
+  color: var(--text-faint);
+}
+
+.send-later-presets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.send-later-presets button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-height: 44px;
+}
+.send-later-presets button:hover:not(:disabled) { border-color: var(--coral); }
+.send-later-presets button:disabled { opacity: 0.5; cursor: default; }
+.send-later-presets strong { font-size: 0.84rem; font-weight: 700; }
+.send-later-presets span { font-size: 0.72rem; color: var(--text-faint); }
+
+.send-later-custom { display: block; margin-top: 14px; }
+.send-later-custom > span {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.send-later-custom > div { display: flex; gap: 8px; }
+.send-later-custom input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 10px;
+  background: var(--bg-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+.send-later-custom .social-primary { min-height: 44px; }
+
+.send-later-error {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  color: var(--coral);
+}
+
+.send-later-pending { margin-top: 16px; }
+.send-later-pending h4 {
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.send-later-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.send-later-row > div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.send-later-row strong {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.send-later-row span { font-size: 0.72rem; color: var(--text-faint); }
+.send-later-row button {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.send-later-row button:hover { border-color: var(--coral); color: var(--coral); }
+
+.send-later-note {
+  margin: 14px 0 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+@media (max-width: 480px) {
+  .send-later-presets { grid-template-columns: 1fr; }
+  .send-later-custom > div { flex-direction: column; }
+}
+
+/* The streak, in the sidebar rather than buried in Settings */
+.streak-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  width: fit-content;
+}
+.streak-pill svg { color: var(--amber); }
+.streak-pill.none { color: var(--text-faint); font-weight: 600; }
+.streak-pill.none svg { color: var(--text-faint); }
+/* Amber, not red: a run you can still save today isn't a failure. */
+.streak-pill.at-risk {
+  border-color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  color: var(--text);
+}
+.streak-pill em {
+  font-style: normal;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--amber);
+}
+.streak-freezes {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 6px;
+  border-left: 1px solid var(--line);
+  font-size: 0.7rem;
+  color: var(--text-faint);
+}
+.streak-freezes svg { color: #7DD3FC; }
