@@ -4628,3 +4628,31 @@ body::before {
     padding-bottom: calc(10px + env(safe-area-inset-bottom));
   }
 }
+
+/* ============================================================
+   WHERE THE TWO MOBILE CHANGES COLLIDE
+   The composer was widened to 158px by removing visual weight; send later
+   then added a fourth icon and took it back down to 106px — worse than the
+   129px that started the whole thing. On a phone the composer keeps three
+   icons and send later moves into the chat menu sheet.
+   ============================================================ */
+
+/* Qualified with `button` — the third time this file has needed it. A bare
+   `.chat-menu-later` is (0,1,0) and loses to `.chat-menu button { display:
+   flex }` at (0,1,1), so it showed on the desktop dropdown alongside the
+   composer clock. Same mistake as .chat-menu-cancel. */
+.chat-menu button.chat-menu-later { display: none; }
+
+@media (max-width: 720px) {
+  .composer-later { display: none; }
+  .chat-menu button.chat-menu-later { display: flex; }
+
+  /* Targets introduced with the pins and profile cards, held to the same
+     44px floor as everything else. */
+  .row-pin { width: 44px; height: 44px; }
+  .avatar-presence.as-button { min-width: 44px; min-height: 44px; }
+}
+
+/* The nickname pencil sits in a header that gained buttons; without this it
+   gets flex-shrunk to 12px wide and is effectively untappable. */
+.nickname-btn { flex-shrink: 0; }

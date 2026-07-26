@@ -3210,6 +3210,20 @@ export default function App() {
                         <span className="chat-menu-title">
                           {displayName(selectedUser)}
                         </span>
+                        {/* Phone only: the composer can hold three icons and
+                            a readable message field, not four. Send later is
+                            the least frequent of them, so it lives here. */}
+                        <button
+                          className="chat-menu-later"
+                          onClick={() => {
+                            setShowChatMenu(false);
+                            setSendLaterOpen(true);
+                          }}
+                        >
+                          <Clock size={14} /> Send later
+                          {scheduled.pending.length > 0 &&
+                            ` (${scheduled.pending.length} waiting)`}
+                        </button>
                         <button
                           onClick={() => {
                             setShowChatMenu(false);
@@ -3632,7 +3646,7 @@ export default function App() {
               />
               <button
                 type="button"
-                className={`composer-icon ${scheduled.pending.length ? "has-pending" : ""}`}
+                className={`composer-icon composer-later ${scheduled.pending.length ? "has-pending" : ""}`}
                 onClick={() => setSendLaterOpen(true)}
                 aria-label="Send later"
                 title={
@@ -4008,7 +4022,7 @@ export default function App() {
               </button>
               <button
                 type="button"
-                className={`composer-icon ${scheduled.pending.length ? "has-pending" : ""}`}
+                className={`composer-icon composer-later ${scheduled.pending.length ? "has-pending" : ""}`}
                 onClick={() => setSendLaterOpen(true)}
                 aria-label="Send later"
                 title={
