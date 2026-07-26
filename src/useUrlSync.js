@@ -29,7 +29,6 @@ export function useUrlSync({
   setView,
   selectedUser,
   setSelectedUserByUsername, // async fn: (username) => void, looks the user up
-  friends, // used to resolve :username -> user object once friends load
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -70,7 +69,7 @@ export function useUrlSync({
   useEffect(() => {
     if (!didInit.current) return; // don't fight step 1 on the very first render
 
-    let next = "/";
+    let next;
 
     if (!session) {
       if (showAuth) {

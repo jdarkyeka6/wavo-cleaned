@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabaseClient";
 import {
   Bell,
@@ -10,7 +10,6 @@ import {
   Flag,
   ShieldCheck,
   Camera,
-  Palette,
   Settings,
   Smile,
   Pencil,
@@ -22,6 +21,11 @@ import {
   Gamepad2,
   Ban,
   Trash2,
+  MoreVertical,
+  SmilePlus,
+  CornerUpLeft,
+  ArrowDown,
+  Star,
 } from "lucide-react";
 import {
   registerServiceWorker,
@@ -34,12 +38,24 @@ import Plans from "./Plans";
 import Landing from "./Landing";
 import Premium from "./Premium";
 import { isNativeApp } from "./lib/platform";
+import { PLANS, DEFAULT_PLAN } from "./lib/pricing";
 import { UserLabel } from "./Cosmetic";
 import { useCosmetics } from "./useCosmetics";
 import { useUrlSync } from "./useUrlSync";
 import "./styles.css";
+// Premium billing switch / student toggle styles. This file existed but was
+// never imported, so the paywall rendered with unstyled controls.
+import "./styles-additions.css";
 
 const GIPHY_API_KEY = import.meta.env.VITE_GIPHY_API_KEY;
+
+// Stripe returns the buyer to /?premium=1 (or ?premium=0 if they backed out).
+// Read it at module load: useUrlSync rewrites the URL as soon as the app
+// mounts, so by the time an effect runs the flag is already gone.
+const CHECKOUT_RETURN =
+  typeof window === "undefined"
+    ? null
+    : new URLSearchParams(window.location.search).get("premium");
 
 // Usernames allowed to use fast account-switching. Only these accounts get
 // remembered on the device — everyone else's password is never stored.
@@ -90,6 +106,89 @@ function ageFromBirthday(birthday) {
 // The palettes themselves are still plain CSS — [data-theme="x"] in styles.css.
 // The database only tracks who has unlocked what.
 
+// --- MESSAGE LIST SHAPING ---------------------------------------------
+// A flat list of bubbles all stamped "01:15 AM" is unreadable — you can't
+// tell a message from ten minutes ago from one from last Tuesday. These
+// helpers add the two things that make a transcript scannable: a day
+// separator whenever the date changes, and grouping so a run of messages
+// from one person renders as a block with a single timestamp at the end.
+
+const GROUP_WINDOW_MS = 5 * 60 * 1000;
+
+function sameDay(a, b) {
+  const x = new Date(a);
+  const y = new Date(b);
+  return (
+    x.getFullYear() === y.getFullYear() &&
+    x.getMonth() === y.getMonth() &&
+    x.getDate() === y.getDate()
+  );
+}
+
+// "Today" / "Yesterday" / "Tuesday" / "12 Jul 2024"
+function dayLabel(ts) {
+  const d = new Date(ts);
+  const today = new Date();
+  if (sameDay(d, today)) return "Today";
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (sameDay(d, yesterday)) return "Yesterday";
+  const days = (today - d) / 86400000;
+  if (days < 7) return d.toLocaleDateString([], { weekday: "long" });
+  return d.toLocaleDateString([], {
+    day: "numeric",
+    month: "short",
+    ...(d.getFullYear() === today.getFullYear() ? {} : { year: "numeric" }),
+  });
+}
+
+/**
+ * Annotate a chronological message list for rendering.
+ * `flat` (used while searching) turns grouping off, because a filtered list
+ * has gaps in it and pretending neighbours are consecutive would lie.
+ */
+function decorateMessages(list, flat = false) {
+  return list.map((msg, i) => {
+    const prev = list[i - 1];
+    const next = list[i + 1];
+    const t = new Date(msg.created_at).getTime();
+    const newDay = !prev || !sameDay(prev.created_at, msg.created_at);
+    if (flat) return { msg, newDay, startsRun: true, endsRun: true };
+    const startsRun =
+      newDay ||
+      prev.sender_id !== msg.sender_id ||
+      t - new Date(prev.created_at).getTime() > GROUP_WINDOW_MS;
+    const endsRun =
+      !next ||
+      next.sender_id !== msg.sender_id ||
+      !sameDay(msg.created_at, next.created_at) ||
+      new Date(next.created_at).getTime() - t > GROUP_WINDOW_MS;
+    return { msg, newDay, startsRun, endsRun };
+  });
+}
+
+// The newest message you sent, so the read receipt appears once at the
+// bottom of the thread instead of on every single outgoing bubble.
+function lastOwnMessageId(list, myId) {
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (list[i].sender_id === myId && !list[i].deleted_at) return list[i].id;
+  }
+  return null;
+}
+
+const initial = (name) => (name?.trim()?.[0] || "?").toUpperCase();
+
+// Avatar lives out here deliberately. Declared inside App() it was a brand
+// new component type on every render, so React tore down and rebuilt every
+// <img> on each keystroke — avatars visibly flickered and refetched.
+function Avatar({ url, name, size }) {
+  return (
+    <div className={`avatar ${size === "sm" ? "sm" : ""}`}>
+      {url ? <img className="avatar-img" src={url} alt="" /> : initial(name)}
+    </div>
+  );
+}
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -97,6 +196,9 @@ export default function App() {
   const [showAuth, setShowAuth] = useState(false);
   const [showPremium, setShowPremium] = useState(false);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
+  // Result of coming back from Stripe: null | "pending" | "ok" | "cancelled"
+  const [premiumReturn, setPremiumReturn] = useState(null);
   const [auth, setAuth] = useState({
     firstName: "",
     lastName: "",
@@ -143,7 +245,6 @@ export default function App() {
   const [theme, setTheme] = useState(
     () => localStorage.getItem("wavo-theme") || "dusk"
   );
-  const [themeOpen, setThemeOpen] = useState(false);
 
   // cosmetics / stats / streaks — server decides what's unlocked
   const premiumActive =
@@ -193,23 +294,52 @@ export default function App() {
     if (data !== false) await loadProfile();
   }
 
-  async function startCheckout(plan = "standard") {
+  // `plan` used to arrive as a React click event, because the CTA was wired
+  // up as onClick={onSubscribe}. Guard the value so a stray caller can't put
+  // an object into the request body.
+  async function startCheckout(plan) {
+    const planId = typeof plan === "string" && PLANS[plan] ? plan : DEFAULT_PLAN;
     setCheckoutBusy(true);
+    setCheckoutError("");
     try {
       const { data: sess } = await supabase.auth.getSession();
+      const token = sess?.session?.access_token;
+      if (!token) {
+        setCheckoutError("You're signed out. Sign in again and retry.");
+        return;
+      }
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${sess?.session?.access_token || ""}`,
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({ plan: planId }),
       });
-      const json = await res.json();
-      if (json.url) window.location.href = json.url;
-      else alert(json.error || "Couldn't start checkout.");
+      // A platform-level failure (a Vercel 500, a cold-start timeout) returns
+      // HTML, not JSON. res.json() then throws a parse error that reads like
+      // a bug in Wavo, so read text and decode it ourselves.
+      const raw = await res.text();
+      let json = null;
+      try {
+        json = JSON.parse(raw);
+      } catch {
+        /* not JSON — handled below */
+      }
+      if (json?.url) {
+        window.location.href = json.url;
+        return;
+      }
+      setCheckoutError(
+        json?.error ||
+          (res.ok
+            ? "Checkout didn't return a payment link. Try again."
+            : `Checkout failed (${res.status}). Try again in a minute.`)
+      );
     } catch (err) {
-      alert("Couldn't start checkout: " + err.message);
+      setCheckoutError(
+        err?.message ? `Couldn't reach checkout: ${err.message}` : "Couldn't reach checkout."
+      );
     } finally {
       setCheckoutBusy(false);
     }
@@ -225,6 +355,13 @@ export default function App() {
     if (req?.kind === "earned" && req.met) {
       const ok = await claim(item.id);
       if (ok) setTheme(item.id);
+      return;
+    }
+    // Premium-locked themes (Aurora, Sunset) used to fall off the end of this
+    // function, so tapping one did nothing at all — no theme, no paywall, no
+    // feedback. Badges and name colours already open the paywall via equip().
+    if (req?.kind === "premium" && !req.met) {
+      setShowPremium(true);
     }
   }
 
@@ -294,13 +431,17 @@ export default function App() {
     setView,
     selectedUser,
     setSelectedUserByUsername,
-    friends,
   });
 
   const [messages, setMessages] = useState([]);
   const [messageText, setMessageText] = useState("");
   const [loadingChat, setLoadingChat] = useState(false);
   const [isFocused, setIsFocused] = useState(true);
+  // Overflow menu for the rarely-used, destructive chat actions (report/block)
+  const [showChatMenu, setShowChatMenu] = useState(false);
+  // True while you're scrolled up reading history — suppresses auto-scroll
+  // and shows a "jump to latest" button instead of yanking you down.
+  const [stuckToBottom, setStuckToBottom] = useState(true);
 
   // batch 5: group chats
   const [groups, setGroups] = useState([]);
@@ -328,12 +469,17 @@ export default function App() {
   const [giphyLoading, setGiphyLoading] = useState(false);
 
   const bottomRef = useRef(null);
+  const messagesRef = useRef(null);
   const selectedUserRef = useRef(null);
   const isFocusedRef = useRef(true);
+  const stuckToBottomRef = useRef(true);
   const avatarInputRef = useRef(null);
   const longPressRef = useRef(null);
   const chatChannelRef = useRef(null);
+  // DM and group typing indicators need their own timers — sharing one meant
+  // a group message could cancel the DM indicator and vice versa.
   const typingTimerRef = useRef(null);
+  const groupTypingTimerRef = useRef(null);
   const lastTypingSentRef = useRef(0);
   const chatFileInputRef = useRef(null);
   const groupChannelRef = useRef(null);
@@ -351,6 +497,27 @@ export default function App() {
   useEffect(() => {
     isFocusedRef.current = isFocused;
   }, [isFocused]);
+  useEffect(() => {
+    stuckToBottomRef.current = stuckToBottom;
+  }, [stuckToBottom]);
+
+  // Track whether the transcript is parked at the bottom. Everything else
+  // about auto-scrolling keys off this: if you've scrolled up to read, a new
+  // message must not drag you back down.
+  function onMessagesScroll(e) {
+    const el = e.currentTarget;
+    const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setStuckToBottom(gap < 120);
+  }
+
+  function scrollToBottom(behavior = "smooth") {
+    bottomRef.current?.scrollIntoView({ behavior, block: "end" });
+  }
+
+  function jumpToLatest() {
+    setStuckToBottom(true);
+    scrollToBottom();
+  }
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
   const bellCount = unreadCount + incomingRequests.length;
@@ -365,9 +532,22 @@ export default function App() {
     return map;
   }, [notifications]);
 
-  // --- UTILITIES ---
-  const initial = (name) => (name?.trim()?.[0] || "?").toUpperCase();
+  const searchActive = !!msgSearch.trim();
 
+  const visibleMessages = useMemo(() => {
+    const q = msgSearch.trim().toLowerCase();
+    if (!q) return messages;
+    return messages.filter(
+      (m) => !m.deleted_at && (m.content || "").toLowerCase().includes(q)
+    );
+  }, [messages, msgSearch]);
+
+  const lastMineId = useMemo(
+    () => lastOwnMessageId(messages, currentUser?.id),
+    [messages, currentUser?.id]
+  );
+
+  // --- UTILITIES ---
   const markAsRead = async (msgId) => {
     await supabase
       .from("messages")
@@ -436,6 +616,44 @@ export default function App() {
     };
   }, []);
 
+  // Escape closes whatever is on top, innermost first. Every panel in here
+  // used to be dismissable only by finding and hitting its own little X.
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key !== "Escape") return;
+      if (reactPickerMsg) return setReactPickerMsg(null);
+      if (showNewGroup) return setShowNewGroup(false);
+      if (showSettings) return setShowSettings(false);
+      if (showPremium) return setShowPremium(false);
+      if (showGiphy) return setShowGiphy(false);
+      if (showEmoji) return setShowEmoji(false);
+      if (showGames) return setShowGames(false);
+      if (showChatMenu) return setShowChatMenu(false);
+      if (showNotifs) return setShowNotifs(false);
+      if (editingMsg) return cancelEdit();
+      if (replyingTo) return setReplyingTo(null);
+      if (showSearch) {
+        setShowSearch(false);
+        setMsgSearch("");
+        return;
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  // Click anywhere outside an open dropdown to dismiss it.
+  useEffect(() => {
+    if (!showNotifs && !showChatMenu) return;
+    function onDown(e) {
+      if (showNotifs && !e.target.closest?.(".notif-wrap")) setShowNotifs(false);
+      if (showChatMenu && !e.target.closest?.(".chat-menu-wrap"))
+        setShowChatMenu(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [showNotifs, showChatMenu]);
+
   useEffect(() => {
     if (!currentUser) return;
     loadProfile();
@@ -481,6 +699,44 @@ export default function App() {
     if (announcement) localStorage.setItem("wavo-seen-announce", announcement.id);
     setAnnouncement(null);
   }
+
+  // --- RETURN FROM STRIPE CHECKOUT ---
+  // Paying used to look like it had failed: Stripe sends you back to
+  // /?premium=1, nothing read that, and is_premium only flips when the
+  // webhook lands — which the already-loaded tab never noticed. So you paid,
+  // came back, and still saw "Get Premium".
+  useEffect(() => {
+    if (!currentUser || !CHECKOUT_RETURN) return;
+
+    if (CHECKOUT_RETURN === "0") {
+      setPremiumReturn("cancelled");
+      return;
+    }
+    if (CHECKOUT_RETURN !== "1") return;
+
+    setShowPremium(false);
+    setPremiumReturn("pending");
+
+    let stopped = false;
+    (async () => {
+      // The webhook is out of band, so poll instead of trusting the
+      // redirect. ~30s, then say so rather than spinning forever.
+      for (let i = 0; i < 15 && !stopped; i++) {
+        const fresh = await loadProfile();
+        if (fresh?.is_premium) {
+          if (!stopped) setPremiumReturn("ok");
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+      if (!stopped) setPremiumReturn("slow");
+    })();
+
+    return () => {
+      stopped = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser]);
 
   // --- LAST ONLINE heartbeat ---
   useEffect(() => {
@@ -618,7 +874,10 @@ export default function App() {
           const newMsg = payload.new;
           setMessages((prev) => [...prev.filter((m) => m.id !== newMsg.id), newMsg]);
 
-          if (newMsg.receiver_id === currentUser.id && isFocused) {
+          // Read the focus flag from a ref, not from state: putting
+          // `isFocused` in this effect's deps tore the channel down and
+          // refetched the whole thread every time you tabbed away and back.
+          if (newMsg.receiver_id === currentUser.id && isFocusedRef.current) {
             markAsRead(newMsg.id);
           }
         }
@@ -664,11 +923,26 @@ export default function App() {
       clearTimeout(typingTimerRef.current);
       supabase.removeChannel(channel);
     };
-  }, [chatId, isFocused]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatId]);
 
+  // Follow new messages only when you're already at the bottom, and never
+  // while a search filter is narrowing the list (jumping to the end of a
+  // filtered view is disorienting).
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (msgSearch.trim()) return;
+    if (!stuckToBottomRef.current) return;
+    scrollToBottom();
+  }, [messages, theirTyping, msgSearch]);
+
+  // Opening a chat should land at the newest message immediately — no
+  // smooth-scrolling through the whole history first.
+  useEffect(() => {
+    if (!chatId) return;
+    setStuckToBottom(true);
+    stuckToBottomRef.current = true;
+    requestAnimationFrame(() => scrollToBottom("auto"));
+  }, [chatId]);
 
   // --- GROUP CHAT REALTIME ---
   useEffect(() => {
@@ -704,8 +978,11 @@ export default function App() {
       .on("broadcast", { event: "typing" }, ({ payload }) => {
         if (payload?.userId && payload.userId !== currentUser.id) {
           setGroupTyping(payload.name || "Someone");
-          clearTimeout(typingTimerRef.current);
-          typingTimerRef.current = setTimeout(() => setGroupTyping(null), 2500);
+          clearTimeout(groupTypingTimerRef.current);
+          groupTypingTimerRef.current = setTimeout(
+            () => setGroupTyping(null),
+            2500
+          );
         }
       })
       .subscribe();
@@ -714,14 +991,23 @@ export default function App() {
 
     return () => {
       groupChannelRef.current = null;
-      clearTimeout(typingTimerRef.current);
+      clearTimeout(groupTypingTimerRef.current);
       supabase.removeChannel(channel);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedGroup]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [groupMessages]);
+    if (!stuckToBottomRef.current) return;
+    scrollToBottom();
+  }, [groupMessages, groupTyping]);
+
+  useEffect(() => {
+    if (!selectedGroup) return;
+    setStuckToBottom(true);
+    stuckToBottomRef.current = true;
+    requestAnimationFrame(() => scrollToBottom("auto"));
+  }, [selectedGroup]);
 
   // --- DATA FETCHING ---
   async function loadProfile() {
@@ -731,6 +1017,7 @@ export default function App() {
       .eq("id", currentUser.id)
       .single();
     if (data) setProfile(data);
+    return data;
   }
 
   async function loadMyStrikes() {
@@ -760,11 +1047,14 @@ export default function App() {
       .select("*")
       .in("id", otherIds);
     setFriends(profs || []);
-    // keep the open chat's presence fresh too
+    // Keep the open chat's presence fresh too — but only hand back a new
+    // object when something actually changed. This runs every 30s, and
+    // returning a fresh object each time re-rendered the whole chat pane.
     setSelectedUser((cur) => {
       if (!cur) return cur;
       const updated = (profs || []).find((p) => p.id === cur.id);
-      return updated ? { ...cur, last_active: updated.last_active } : cur;
+      if (!updated || updated.last_active === cur.last_active) return cur;
+      return { ...cur, last_active: updated.last_active };
     });
   }
 
@@ -1205,14 +1495,26 @@ export default function App() {
   }
 
   // --- ACTIONS ---
-  function openChat(user) {
-    setSelectedGroup(null);
+  // Everything that belongs to "the conversation you were just in" has to be
+  // cleared here. Leaving the message-search filter behind was the worst of
+  // these: you'd open a new chat and see an all-but-empty thread.
+  function resetConversationState() {
     setEditingMsg(null);
     setReplyingTo(null);
     setMessageText("");
-    setSelectedUser(user);
     setShowGiphy(false);
     setShowGames(false);
+    setShowEmoji(false);
+    setShowSearch(false);
+    setMsgSearch("");
+    setReactPickerMsg(null);
+    setShowChatMenu(false);
+  }
+
+  function openChat(user) {
+    setSelectedGroup(null);
+    resetConversationState();
+    setSelectedUser(user);
     setShowSidebar(false); // mobile: reveal the chat
     clearNotifsFromSender(user.id);
   }
@@ -1264,11 +1566,7 @@ export default function App() {
 
   function openGroup(group) {
     setSelectedUser(null);
-    setEditingMsg(null);
-    setReplyingTo(null);
-    setMessageText("");
-    setShowGiphy(false);
-    setShowEmoji(false);
+    resetConversationState();
     setGroupMessages([]);
     setSelectedGroup(group);
     setShowSidebar(false); // mobile: reveal the chat
@@ -1399,7 +1697,7 @@ export default function App() {
     }
     setUploadingFile(true);
     try {
-      const safeName = file.name.replace(/[^\w.\-]/g, "_");
+      const safeName = file.name.replace(/[^\w.-]/g, "_");
       const folder = selectedGroup ? `group_${selectedGroup.id}` : chatId;
       const path = `${folder}/${Date.now()}-${safeName}`;
       const { error: upErr } = await supabase.storage
@@ -1651,15 +1949,6 @@ export default function App() {
     if (hrs < 24) return `${hrs}h ago`;
     return `${Math.floor(hrs / 24)}d ago`;
   };
-
-  // avatar = picture if they have one, otherwise their initial
-  function Avatar({ url, name, size }) {
-    return (
-      <div className={`avatar ${size === "sm" ? "sm" : ""}`}>
-        {url ? <img className="avatar-img" src={url} alt="" /> : initial(name)}
-      </div>
-    );
-  }
 
   // --- LANDING ---
   // A stranger arriving at wavo.lol used to get a login box and the word
@@ -2527,6 +2816,7 @@ export default function App() {
                     setShowSearch((s) => !s);
                     setMsgSearch("");
                   }}
+                  aria-label="Search this chat"
                   title="Search this chat"
                 >
                   <Search size={16} />
@@ -2534,24 +2824,55 @@ export default function App() {
                 <button
                   className={`icon-btn ${showGames ? "active" : ""}`}
                   onClick={() => setShowGames((s) => !s)}
+                  aria-label="Play a game"
                   title="Play a game"
                 >
                   <Gamepad2 size={16} />
                 </button>
-                <button
-                  className="report-user-btn"
-                  onClick={() => reportUser(selectedUser)}
-                  title={`Report ${selectedUser.username}`}
-                >
-                  <Flag size={14} /> <span className="btn-label">Report</span>
-                </button>
-                <button
-                  className="report-user-btn"
-                  onClick={() => blockUser(selectedUser)}
-                  title={`Block ${selectedUser.username}`}
-                >
-                  <Ban size={14} /> <span className="btn-label">Block</span>
-                </button>
+                {/* Report and Block are rare and destructive — they sit in an
+                    overflow menu rather than competing with Search and Games
+                    for the same visual weight (and crowding out the name on
+                    a phone). */}
+                <div className="chat-menu-wrap">
+                  <button
+                    className={`icon-btn ${showChatMenu ? "active" : ""}`}
+                    onClick={() => setShowChatMenu((s) => !s)}
+                    aria-label="More options"
+                    aria-expanded={showChatMenu}
+                    title="More"
+                  >
+                    <MoreVertical size={16} />
+                  </button>
+                  {showChatMenu && (
+                    <div className="chat-menu">
+                      <button
+                        onClick={() => {
+                          setShowChatMenu(false);
+                          setNickname(selectedUser);
+                        }}
+                      >
+                        <Pencil size={14} /> Set nickname
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowChatMenu(false);
+                          reportUser(selectedUser);
+                        }}
+                      >
+                        <Flag size={14} /> Report {selectedUser.username}
+                      </button>
+                      <button
+                        className="danger"
+                        onClick={() => {
+                          setShowChatMenu(false);
+                          blockUser(selectedUser);
+                        }}
+                      >
+                        <Ban size={14} /> Block {selectedUser.username}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </header>
             {showSearch && (
@@ -2570,17 +2891,22 @@ export default function App() {
                 )}
               </div>
             )}
-            <div className="messages">
-              {(msgSearch.trim()
-                ? messages.filter(
-                    (m) =>
-                      !m.deleted_at &&
-                      (m.content || "")
-                        .toLowerCase()
-                        .includes(msgSearch.trim().toLowerCase())
-                  )
-                : messages
-              ).map((msg) => {
+            <div className="messages" ref={messagesRef} onScroll={onMessagesScroll}>
+              {loadingChat && messages.length === 0 && (
+                <div className="messages-status">Loading messages…</div>
+              )}
+              {!loadingChat && messages.length === 0 && (
+                <div className="messages-status">
+                  No messages yet — say hi to {displayName(selectedUser)}.
+                </div>
+              )}
+              {searchActive && visibleMessages.length === 0 && (
+                <div className="messages-status">
+                  No messages match “{msgSearch.trim()}”.
+                </div>
+              )}
+              {decorateMessages(visibleMessages, searchActive).map(
+                ({ msg, newDay, startsRun, endsRun }) => {
                 const mine = msg.sender_id === currentUser.id;
                 const isImage = msg.type === "image";
                 const chips = reactionsFor(msg.id);
@@ -2588,10 +2914,20 @@ export default function App() {
                 const repliedTo = msg.reply_to
                   ? messages.find((m) => m.id === msg.reply_to)
                   : null;
+                // The receipt belongs on the newest thing you sent, not on
+                // every outgoing bubble in the thread.
+                const showReceipt = mine && msg.id === lastMineId;
                 return (
+                  <Fragment key={msg.id}>
+                  {newDay && (
+                    <div className="day-divider">
+                      <span>{dayLabel(msg.created_at)}</span>
+                    </div>
+                  )}
                   <div
-                    key={msg.id}
-                    className={`bubble-wrap ${mine ? "mine" : "theirs"}`}
+                    className={`bubble-wrap ${mine ? "mine" : "theirs"} ${
+                      startsRun ? "run-start" : ""
+                    } ${endsRun ? "run-end" : ""}`}
                   >
                     {repliedTo && (
                       <div className="reply-quote">
@@ -2648,31 +2984,47 @@ export default function App() {
                       ) : (
                         <p>{msg.content}</p>
                       )}
-                      {!deleted && (
+                      {!deleted && (endsRun || showReceipt) && (
                         <div className="msg-footer">
                           <span>
                             {fmtTime(msg.created_at)}
                             {msg.edited_at ? " · edited" : ""}
                           </span>
-                          {mine ? (
+                          {showReceipt && (
                             <span
                               className={`receipt ${msg.is_read ? "read" : ""}`}
+                              title={
+                                msg.is_read
+                                  ? msg.read_at
+                                    ? `Read ${fmtTime(msg.read_at)}`
+                                    : "Read"
+                                  : "Sent"
+                              }
                             >
-                              {msg.is_read
-                                ? msg.read_at
-                                  ? `Read ${fmtTime(msg.read_at)}`
-                                  : "✓✓"
-                                : "✓"}
+                              {msg.is_read ? "Read" : "Sent"}
                             </span>
-                          ) : (
-                            <button
-                              className="report-btn"
-                              onClick={() => reportMessage(msg)}
-                              title="Report message"
-                            >
-                              <Flag size={12} />
-                            </button>
                           )}
+                        </div>
+                      )}
+
+                      {/* Hover affordance: holding a bubble to get this menu
+                          is invisible on a desktop, so show a handle. */}
+                      {!deleted && (
+                        <div className="bubble-actions">
+                          <button
+                            aria-label="React"
+                            title="React"
+                            onClick={() => setReactPickerMsg(msg.id)}
+                          >
+                            <SmilePlus size={14} />
+                          </button>
+                          <button
+                            aria-label="Reply"
+                            title="Reply"
+                            onClick={() => startReply(msg)}
+                          >
+                            <CornerUpLeft size={14} />
+                          </button>
                         </div>
                       )}
 
@@ -2698,6 +3050,17 @@ export default function App() {
                                 🗑️ Unsend
                               </button>
                             )}
+                            {!mine && (
+                              <button
+                                className="danger"
+                                onClick={() => {
+                                  setReactPickerMsg(null);
+                                  reportMessage(msg);
+                                }}
+                              >
+                                🚩 Report
+                              </button>
+                            )}
                           </div>
                         </div>
                       )}
@@ -2717,10 +3080,11 @@ export default function App() {
                       </div>
                     )}
                   </div>
+                  </Fragment>
                 );
               })}
-              {theirTyping && !msgSearch.trim() && (
-                <div className="bubble-wrap theirs">
+              {theirTyping && !searchActive && (
+                <div className="bubble-wrap theirs run-start run-end">
                   <div className="bubble typing-bubble">
                     <span className="typing-dot" />
                     <span className="typing-dot" />
@@ -2736,6 +3100,12 @@ export default function App() {
                 />
               )}
             </div>
+
+            {!stuckToBottom && !searchActive && (
+              <button className="jump-latest" onClick={jumpToLatest}>
+                <ArrowDown size={14} /> Jump to latest
+              </button>
+            )}
 
             {showGames && (
               <Games
@@ -2936,8 +3306,17 @@ export default function App() {
               isAdmin={!!profile?.is_admin}
             />
 
-            <div className="messages">
-              {groupMessages.map((msg) => {
+            <div className="messages" ref={messagesRef} onScroll={onMessagesScroll}>
+              {loadingChat && groupMessages.length === 0 && (
+                <div className="messages-status">Loading messages…</div>
+              )}
+              {!loadingChat && groupMessages.length === 0 && (
+                <div className="messages-status">
+                  Nothing here yet — start the conversation.
+                </div>
+              )}
+              {decorateMessages(groupMessages).map(
+                ({ msg, newDay, startsRun, endsRun }) => {
                 const mine = msg.sender_id === currentUser.id;
                 const isImage = msg.type === "image";
                 const deleted = !!msg.deleted_at;
@@ -2946,11 +3325,20 @@ export default function App() {
                   ? groupMessages.find((m) => m.id === msg.reply_to)
                   : null;
                 return (
+                  <Fragment key={msg.id}>
+                  {newDay && (
+                    <div className="day-divider">
+                      <span>{dayLabel(msg.created_at)}</span>
+                    </div>
+                  )}
                   <div
-                    key={msg.id}
-                    className={`bubble-wrap ${mine ? "mine" : "theirs"}`}
+                    className={`bubble-wrap ${mine ? "mine" : "theirs"} ${
+                      startsRun ? "run-start" : ""
+                    } ${endsRun ? "run-end" : ""}`}
                   >
-                    {!mine && (
+                    {/* Only label the first message of a run — repeating the
+                        sender's name above every bubble is pure noise. */}
+                    {!mine && startsRun && (
                       <span className="group-sender">
                         <UserLabel user={sender} name={sender?.username || "Unknown"} />
                       </span>
@@ -3011,12 +3399,24 @@ export default function App() {
                       ) : (
                         <p>{msg.content}</p>
                       )}
-                      {!deleted && (
+                      {!deleted && endsRun && (
                         <div className="msg-footer">
                           <span>
                             {fmtTime(msg.created_at)}
                             {msg.edited_at ? " · edited" : ""}
                           </span>
+                        </div>
+                      )}
+
+                      {!deleted && (
+                        <div className="bubble-actions">
+                          <button
+                            aria-label="Reply"
+                            title="Reply"
+                            onClick={() => startReply(msg)}
+                          >
+                            <CornerUpLeft size={14} />
+                          </button>
                         </div>
                       )}
 
@@ -3044,10 +3444,11 @@ export default function App() {
                       )}
                     </div>
                   </div>
+                  </Fragment>
                 );
               })}
               {groupTyping && (
-                <div className="bubble-wrap theirs">
+                <div className="bubble-wrap theirs run-start run-end">
                   <div className="bubble typing-bubble">
                     <span className="typing-dot" />
                     <span className="typing-dot" />
@@ -3063,6 +3464,12 @@ export default function App() {
                 />
               )}
             </div>
+
+            {!stuckToBottom && (
+              <button className="jump-latest" onClick={jumpToLatest}>
+                <ArrowDown size={14} /> Jump to latest
+              </button>
+            )}
 
             {showEmoji && (
               <div className="emoji-panel">
@@ -3148,7 +3555,18 @@ export default function App() {
           </>
         ) : (
           <div className="empty-chat">
-            <h1>Select a friend or group to start Wavo-ing</h1>
+            <h1>Pick a chat to get started</h1>
+            <p>
+              {friends.length === 0 && groups.length === 0
+                ? "Search a username in the sidebar to add your first friend, or start a group."
+                : "Choose a friend or group on the left. Plans, games and photos all live inside the chat."}
+            </p>
+            <button
+              className="empty-chat-cta"
+              onClick={() => setShowSidebar(true)}
+            >
+              <Users size={15} /> Browse chats
+            </button>
           </div>
         )}
       </section>
@@ -3216,12 +3634,41 @@ export default function App() {
         </div>
       )}
 
+      {premiumReturn && (
+        <div className={`premium-return ${premiumReturn === "ok" ? "ok" : ""}`}>
+          {premiumReturn === "ok" ? (
+            <>
+              <Star size={16} />
+              <span>You're a Supporter. Thank you.</span>
+            </>
+          ) : premiumReturn === "pending" ? (
+            <span>Confirming your payment with Stripe…</span>
+          ) : premiumReturn === "slow" ? (
+            <span>
+              Payment received — it's taking a moment to show up. Refresh in a
+              minute.
+            </span>
+          ) : (
+            <span>Checkout cancelled — you haven't been charged.</span>
+          )}
+          {premiumReturn !== "pending" && (
+            <button onClick={() => setPremiumReturn(null)} aria-label="Dismiss">
+              <X size={15} />
+            </button>
+          )}
+        </div>
+      )}
+
       <Premium
         open={showPremium}
-        onClose={() => setShowPremium(false)}
+        onClose={() => {
+          setShowPremium(false);
+          setCheckoutError("");
+        }}
         onSubscribe={startCheckout}
         isPremium={isPremium}
         busy={checkoutBusy}
+        error={checkoutError}
       />
     </main>
   );

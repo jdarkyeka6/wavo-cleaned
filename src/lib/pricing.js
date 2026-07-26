@@ -9,6 +9,11 @@
 // If a price changes: edit it ONCE, below. The subtitle, the plan card,
 // and the checkout button all follow automatically.
 
+// KEEP IN SYNC with the PLANS table in api/checkout.js, which holds the same
+// amounts in cents and is what Stripe actually charges. The API builds each
+// line item with inline `price_data`, so there are no Stripe price IDs to
+// configure — an earlier version of this file referenced
+// VITE_STRIPE_PRICE_STANDARD / _STUDENT env vars that nothing ever read.
 export const CURRENCY = 'AUD';
 
 export const PLANS = {
@@ -16,7 +21,6 @@ export const PLANS = {
     id: 'standard',
     label: 'Premium',
     price: 4.99,
-    priceId: import.meta.env.VITE_STRIPE_PRICE_STANDARD,
     blurb: 'Keeps the lights on.',
     requiresStudentDeclaration: false,
   },
@@ -24,7 +28,6 @@ export const PLANS = {
     id: 'student',
     label: 'Student',
     price: 3.49,
-    priceId: import.meta.env.VITE_STRIPE_PRICE_STUDENT,
     blurb: 'Same everything, cheaper if you\'re at school.',
     // Honour system — no verification, just a declaration at checkout.
     requiresStudentDeclaration: true,
@@ -65,20 +68,5 @@ export function priceSubtitle(id = DEFAULT_PLAN) {
   return `${formatMonthly(plan.price)}. ${plan.blurb}`;
 }
 
-/**
- * Fails loudly in dev if the Stripe price IDs aren't wired up, rather
- * than silently sending an undefined priceId to checkout.
- */
-export function assertPricingConfigured() {
-  const missing = Object.values(PLANS)
-    .filter((p) => !p.priceId)
-    .map((p) => p.id);
-
-  if (missing.length && import.meta.env.DEV) {
-    console.error(
-      `[wavo] Missing Stripe price ID env vars for: ${missing.join(', ')}. ` +
-      'Check VITE_STRIPE_PRICE_STANDARD / VITE_STRIPE_PRICE_STUDENT.'
-    );
-  }
-  return missing.length === 0;
-}
+/** Plan ids the checkout API will accept. */
+export const PLAN_IDS = Object.keys(PLANS);
