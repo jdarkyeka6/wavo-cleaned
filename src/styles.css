@@ -3832,3 +3832,131 @@ body::before {
 @media (max-width: 720px) {
   .settings-layout { min-height: min(52vh, 380px); }
 }
+
+/* ============================================================
+   THEME PALETTES — ROUND 2
+   Every id here must have a matching row in the `cosmetics` table;
+   the DB decides who may wear one, this file decides what it looks like.
+   ============================================================ */
+
+/* ── SHERBET · pastel on plum (earned: 14 day streak) ── */
+[data-theme="sherbet"] {
+  --bg:#1a1018; --bg-deep:#110a10; --on-accent:#110a10;
+  --panel:#261722; --panel-2:#331f2d; --card:#402839;
+  --coral:#FDA4AF; --coral-soft:rgba(253,164,175,.16); --amber:#FCD5A5;
+  --read:#93C5FD; --online:#6EE7B7;
+}
+
+/* ── SAGE · muted green (earned: 30 days active) ── */
+[data-theme="sage"] {
+  --bg:#101613; --bg-deep:#0a0f0c; --on-accent:#0a0f0c;
+  --panel:#18211c; --panel-2:#202c25; --card:#2a3930;
+  --coral:#86EFAC; --coral-soft:rgba(134,239,172,.14); --amber:#BEF264;
+  --read:#7DD3FC; --online:#4ADE80;
+}
+
+/* ── OBSIDIAN · sharp white on near-black (earned: 1000 messages) ── */
+[data-theme="obsidian"] {
+  --bg:#0b0b0d; --bg-deep:#050506; --on-accent:#050506;
+  --panel:#131316; --panel-2:#1b1b20; --card:#24242b;
+  --line:rgba(255,255,255,.10); --line-soft:rgba(255,255,255,.05);
+  --text:#FAFAFA; --text-dim:#A1A1AA; --text-faint:#5B5B66;
+  --coral:#FAFAFA; --coral-soft:rgba(250,250,250,.10); --amber:#D4D4D8;
+  --read:#7DD3FC; --online:#4ADE80;
+}
+
+/* ── SOLSTICE · warm gold (earned: 30 day streak) ── */
+[data-theme="solstice"] {
+  --bg:#171208; --bg-deep:#0f0b05; --on-accent:#0f0b05;
+  --panel:#241c0f; --panel-2:#312716; --card:#3f331e;
+  --coral:#FCD34D; --coral-soft:rgba(252,211,77,.16); --amber:#FDBA74;
+  --read:#7DD3FC; --online:#A3E635;
+}
+
+/* ── ECLIPSE · deep indigo (earned: 100 days active) ── */
+[data-theme="eclipse"] {
+  --bg:#0c0a1a; --bg-deep:#070511; --on-accent:#070511;
+  --panel:#141029; --panel-2:#1d1739; --card:#28204d;
+  --coral:#818CF8; --coral-soft:rgba(129,140,248,.17); --amber:#C4B5FD;
+  --read:#67E8F9; --online:#4ADE80;
+}
+
+/* ── EVERGLOW · the one-year reward (earned: 365 day streak) ──
+   Deliberately the richest palette in the app. If someone has opened
+   Wavo every day for a year, the app should look different. */
+[data-theme="everglow"] {
+  --bg:#14100a; --bg-deep:#0b0805; --on-accent:#0b0805;
+  --panel:#211a0f; --panel-2:#2e2415; --card:#3d301c;
+  --line:rgba(255,214,138,.14); --line-soft:rgba(255,214,138,.07);
+  --text:#FBF3E2; --text-dim:#C7B48C; --text-faint:#8A7855;
+  --coral:#F5C56B; --coral-soft:rgba(245,197,107,.18); --amber:#FFE9A8;
+  --read:#8ED8FF; --online:#9BE37D;
+  --shadow-lg:0 24px 48px -12px rgba(80,55,10,.55);
+}
+
+/* ── VAPOR · synthwave (premium) ── */
+[data-theme="vapor"] {
+  --bg:#150b1f; --bg-deep:#0d0614; --on-accent:#0d0614;
+  --panel:#211130; --panel-2:#2e1842; --card:#3c2156;
+  --coral:#E879F9; --coral-soft:rgba(232,121,249,.17); --amber:#22D3EE;
+  --read:#22D3EE; --online:#4ADE80;
+}
+
+/* ── SAKURA · blossom (premium) ── */
+[data-theme="sakura"] {
+  --bg:#1b1116; --bg-deep:#120a0e; --on-accent:#120a0e;
+  --panel:#281920; --panel-2:#36222c; --card:#452d39;
+  --coral:#FBCFE8; --coral-soft:rgba(251,207,232,.16); --amber:#F9A8D4;
+  --read:#A5B4FC; --online:#86EFAC;
+}
+
+/* ── CARBON · true black, good on OLED (premium) ── */
+[data-theme="carbon"] {
+  --bg:#000000; --bg-deep:#000000; --on-accent:#000000;
+  --panel:#0a0a0a; --panel-2:#141414; --card:#1c1c1c;
+  --line:rgba(255,255,255,.12); --line-soft:rgba(255,255,255,.06);
+  --text:#F4F4F5; --text-dim:#8F8F96; --text-faint:#57575E;
+  --coral:#F97316; --coral-soft:rgba(249,115,22,.16); --amber:#FBBF24;
+  --read:#38BDF8; --online:#4ADE80;
+}
+
+/* ── LAGOON · deep cyan (premium) ── */
+[data-theme="lagoon"] {
+  --bg:#07161a; --bg-deep:#040e11; --on-accent:#040e11;
+  --panel:#0d2229; --panel-2:#123039; --card:#18424e;
+  --coral:#22D3EE; --coral-soft:rgba(34,211,238,.15); --amber:#5EEAD4;
+  --read:#7DD3FC; --online:#4ADE80;
+}
+
+/* ============================================================
+   GRADIENT NAME STYLES
+   A name colour is one CSS property, which caps how special the top
+   rewards can feel. A cosmetic may now carry payload.gradient (any CSS
+   background-image) instead of payload.color, and payload.animated to
+   make it drift.
+   ============================================================ */
+
+.user-label-name.is-gradient {
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  background-size: 220% 100%;
+  background-position: 0% 50%;
+}
+
+.user-label-name.is-animated {
+  animation: name-shimmer 6s ease-in-out infinite;
+}
+
+@keyframes name-shimmer {
+  0%,
+  100% { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+}
+
+/* A gradient swatch needs to show the whole ramp, not a slice of it */
+.cos-dot.is-gradient { background-size: 100% 100%; }
+
+@media (prefers-reduced-motion: reduce) {
+  .user-label-name.is-animated { animation: none; }
+}

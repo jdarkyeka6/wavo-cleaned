@@ -43,6 +43,7 @@ import Premium from "./Premium";
 import { isNativeApp } from "./lib/platform";
 import { PLANS, DEFAULT_PLAN } from "./lib/pricing";
 import { UserLabel } from "./Cosmetic";
+import { swatchStyle } from "./lib/cosmeticStyles";
 import { useCosmetics } from "./useCosmetics";
 import { useUrlSync } from "./useUrlSync";
 import "./styles.css";
@@ -2580,7 +2581,7 @@ export default function App() {
                             >
                               <span
                                 className="theme-swatch"
-                                style={{ background: t.payload?.swatch || "#888" }}
+                                style={swatchStyle(t)}
                               />
                               <span className="theme-name">{t.name}</span>
                               {!usable && (
@@ -2660,8 +2661,10 @@ export default function App() {
                                 onClick={() => equip(n, "name_style")}
                               >
                                 <span
-                                  className="cos-dot"
-                                  style={{ background: n.payload?.color }}
+                                  className={`cos-dot ${
+                                    n.payload?.gradient ? "is-gradient" : ""
+                                  }`}
+                                  style={swatchStyle(n)}
                                 />
                                 {n.name.replace(" name", "")}
                                 {!usable && <span className="cos-lock">Premium</span>}

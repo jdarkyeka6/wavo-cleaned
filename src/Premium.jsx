@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Check, Star, X } from "lucide-react";
 import { useCosmeticCatalogue } from "./useCosmetics";
+import { nameStyleProps } from "./lib/cosmeticStyles";
 import { isNativeApp } from "./lib/platform";
 import { PLANS, DEFAULT_PLAN, CURRENCY, formatMonthly } from "./lib/pricing";
 
@@ -17,21 +18,52 @@ import { PLANS, DEFAULT_PLAN, CURRENCY, formatMonthly } from "./lib/pricing";
  * into this file as copy ("$2/mo", three times) while the checkout API
  * charged $4.99 — so the paywall quoted a price Stripe never honoured.
  */
-const FREE = [
-  "Unlimited chat, groups and DMs",
-  "All 10 games",
-  "Plans and RSVPs",
-  "7 themes, plus 3 more you can earn",
-  "Badges you earn by turning up",
-];
-const PREMIUM = [
-  "The Supporter badge, next to your name",
-  "Coloured name — coral, aurora, sunset or gold",
-  "Aurora and Sunset themes",
-  "Everything in Free, obviously",
-];
-
 const PLAN_LIST = Object.values(PLANS);
+
+/**
+ * Feature lists counted from the live catalogue rather than typed out here.
+ * The hardcoded version claimed "7 themes, plus 3 more you can earn" and
+ * "Aurora and Sunset themes" long after the catalogue had moved on — the
+ * same way the price sat at $2 while Stripe charged $4.99. Anything that
+ * can drift out of sync with the database gets counted, not written.
+ */
+function featureLists(list) {
+  const n = (kind, type) =>
+    list.filter((c) => c.kind === kind && c.unlock_type === type).length;
+
+  const freeThemes = n("theme", "default");
+  const earnedThemes = n("theme", "earned");
+  const premiumThemes = n("theme", "premium");
+  const premiumNames = n("name_style", "premium");
+  const premiumBadges = n("badge", "premium");
+  const earnedBadges = n("badge", "earned");
+
+  return {
+    free: [
+      "Unlimited chat, groups and DMs",
+      "All 10 games",
+      "Plans and RSVPs",
+      freeThemes
+        ? `${freeThemes} themes, plus ${earnedThemes} more you can earn`
+        : "Themes you can earn",
+      earnedBadges
+        ? `${earnedBadges} badges you earn by turning up`
+        : "Badges you earn by turning up",
+    ],
+    premium: [
+      premiumBadges > 1
+        ? `${premiumBadges} exclusive badges, next to your name`
+        : "The Supporter badge, next to your name",
+      premiumNames
+        ? `${premiumNames} name colours, including animated gradients`
+        : "A coloured name",
+      premiumThemes
+        ? `${premiumThemes} premium-only themes`
+        : "Premium-only themes",
+      "Everything in Free, obviously",
+    ],
+  };
+}
 
 export default function Premium({
   open,
@@ -50,6 +82,7 @@ export default function Premium({
 
   const nameStyles = list.filter((c) => c.kind === "name_style");
   const chosen = PLANS[plan] ?? PLANS[DEFAULT_PLAN];
+  const { free: FREE, premium: PREMIUM } = featureLists(list);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -66,14 +99,19 @@ export default function Premium({
         <div className="premium-demo">
           <span className="premium-demo-label">What people see:</span>
           <div className="premium-demo-names">
-            {nameStyles.map((s) => (
-              <span key={s.id} className="premium-demo-name">
-                <span style={{ color: s.payload?.color }}>Jake</span>
-                <span className="user-badge" style={{ color: "#FFB454" }}>
-                  ⭐
+            {nameStyles.map((s) => {
+              const n = nameStyleProps(s);
+              return (
+                <span key={s.id} className="premium-demo-name">
+                  <span className={n.className} style={n.style}>
+                    Jake
+                  </span>
+                  <span className="user-badge" style={{ color: "#FFB454" }}>
+                    ⭐
+                  </span>
                 </span>
-              </span>
-            ))}
+              );
+            })}
           </div>
         </div>
         <div className="premium-cols">
