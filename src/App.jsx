@@ -26,6 +26,9 @@ import {
   CornerUpLeft,
   ArrowDown,
   Star,
+  User,
+  Palette,
+  LogOut,
 } from "lucide-react";
 import {
   registerServiceWorker,
@@ -175,6 +178,16 @@ function lastOwnMessageId(list, myId) {
   }
   return null;
 }
+
+// Settings used to be one 1700px scroll through six unlabelled sections, so
+// finding anything meant hunting. Four tabs instead, ordered by how often
+// people actually need them.
+const SETTINGS_TABS = [
+  { id: "profile", label: "Profile", Icon: User },
+  { id: "appearance", label: "Appearance", Icon: Palette },
+  { id: "notifications", label: "Notifications", Icon: Bell },
+  { id: "account", label: "Account", Icon: ShieldCheck },
+];
 
 const initial = (name) => (name?.trim()?.[0] || "?").toUpperCase();
 
@@ -389,6 +402,8 @@ export default function App() {
   // batch 2: status + nicknames
   const [statusDraft, setStatusDraft] = useState("");
   const [savingStatus, setSavingStatus] = useState(false);
+  const [statusMsg, setStatusMsg] = useState("");
+  const [settingsTab, setSettingsTab] = useState("profile");
   const [nicknames, setNicknames] = useState({});
   // batch 3: latest announcement banner
   const [announcement, setAnnouncement] = useState(null);
@@ -621,10 +636,13 @@ export default function App() {
   useEffect(() => {
     function onKey(e) {
       if (e.key !== "Escape") return;
+      // Order must match what's painted on top, or Escape dismisses the
+      // wrong layer: the paywall opens from inside Settings and sits above
+      // it, so it has to be checked first.
       if (reactPickerMsg) return setReactPickerMsg(null);
+      if (showPremium) return setShowPremium(false);
       if (showNewGroup) return setShowNewGroup(false);
       if (showSettings) return setShowSettings(false);
-      if (showPremium) return setShowPremium(false);
       if (showGiphy) return setShowGiphy(false);
       if (showEmoji) return setShowEmoji(false);
       if (showGames) return setShowGames(false);
@@ -1231,6 +1249,8 @@ export default function App() {
     setUsernameDraft(profile?.username || "");
     setStatusDraft(profile?.status || "");
     setNameMsg("");
+    setStatusMsg("");
+    setSettingsTab("profile");
     setShowSettings(true);
   }
 
@@ -1252,14 +1272,18 @@ export default function App() {
 
   async function saveStatus() {
     setSavingStatus(true);
+    setStatusMsg("");
     const { error } = await supabase.rpc("set_status", {
       new_status: statusDraft.trim(),
     });
     if (!error) {
+      // Saving your status gave no feedback at all — the button just
+      // un-disabled itself and you were left guessing.
+      setStatusMsg("Saved!");
       await loadProfile();
       await loadFriends();
     } else {
-      alert(error.message);
+      setStatusMsg(error.message);
     }
     setSavingStatus(false);
   }
@@ -2232,398 +2256,6 @@ export default function App() {
           onChange={uploadAvatar}
         />
 
-        {showSettings && (
-          <div className="settings-overlay" onClick={() => setShowSettings(false)}>
-            <div className="settings-card" onClick={(e) => e.stopPropagation()}>
-              <header className="settings-head">
-                <h3>Settings</h3>
-                <button
-                  className="icon-btn"
-                  onClick={() => setShowSettings(false)}
-                  aria-label="Close settings"
-                >
-                  <X size={18} />
-                </button>
-              </header>
-
-              <div className="settings-body">
-                {/* PROFILE */}
-                <section className="settings-section">
-                  <h4>Profile</h4>
-                  <div className="settings-pfp-row">
-                    <Avatar url={profile?.avatar_url} name={profile?.username} />
-                    <div className="settings-pfp-actions">
-                      <button
-                        className="mini-btn"
-                        onClick={() => avatarInputRef.current?.click()}
-                        disabled={uploadingAvatar}
-                      >
-                        <Camera size={14} />
-                        {uploadingAvatar ? "Uploading…" : "Change photo"}
-                      </button>
-                      {profile?.avatar_url && (
-                        <button className="mini-btn ghost" onClick={removeAvatar}>
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <label className="settings-label">Username</label>
-                  <div className="settings-name-row">
-                    <input
-                      className="settings-input"
-                      value={usernameDraft}
-                      onChange={(e) => setUsernameDraft(e.target.value)}
-                      maxLength={20}
-                    />
-                    <button
-                      className="mini-btn"
-                      onClick={saveUsername}
-                      disabled={
-                        savingName || usernameDraft.trim() === profile?.username
-                      }
-                    >
-                      {savingName ? "Saving…" : "Save"}
-                    </button>
-                  </div>
-                  {nameMsg && (
-                    <p
-                      className={`settings-msg ${
-                        nameMsg === "Saved!" ? "ok" : "err"
-                      }`}
-                    >
-                      {nameMsg}
-                    </p>
-                  )}
-
-                  <label className="settings-label">Status</label>
-                  <div className="settings-name-row">
-                    <input
-                      className="settings-input"
-                      value={statusDraft}
-                      onChange={(e) => setStatusDraft(e.target.value)}
-                      placeholder="e.g. 📚 studying"
-                      maxLength={40}
-                    />
-                    <button
-                      className="mini-btn"
-                      onClick={saveStatus}
-                      disabled={
-                        savingStatus ||
-                        statusDraft.trim() === (profile?.status || "")
-                      }
-                    >
-                      {savingStatus ? "Saving…" : "Save"}
-                    </button>
-                  </div>
-                </section>
-
-                {/* APPEARANCE */}
-                <section className="settings-section">
-                  <h4>Appearance</h4>
-
-                  {stats && (
-                    <div className="streak-line">
-                      <span className="streak-flame">🔥</span>
-                      {stats.current_streak > 0
-                        ? `${stats.current_streak} day streak`
-                        : "Open Wavo tomorrow to start a streak"}
-                      <span style={{ marginLeft: "auto", fontWeight: 500 }}>
-                        {stats.messages_sent} sent
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="theme-grid">
-                    {themeItems.map((t) => {
-                      const req = requirement(t);
-                      const usable = isUsable(t);
-                      const claimable = req?.kind === "earned" && req.met;
-
-                      let cls = "theme-option";
-                      if (theme === t.id && usable) cls += " active";
-                      if (!usable && !claimable) cls += " locked";
-                      if (claimable) cls += " claimable";
-
-                      return (
-                        <button
-                          key={t.id}
-                          className={cls}
-                          onClick={() => pickTheme(t)}
-                          title={
-                            usable
-                              ? t.name
-                              : req?.kind === "premium"
-                              ? "Premium theme"
-                              : `${req?.have ?? 0} / ${req?.need ?? 0}`
-                          }
-                        >
-                          <span
-                            className="theme-swatch"
-                            style={{ background: t.payload?.swatch || "#888" }}
-                          />
-                          {t.name}
-                          {!usable && (
-                            <span className="theme-lock">
-                              {claimable
-                                ? "Claim"
-                                : req?.kind === "premium"
-                                ? "Premium"
-                                : `${req?.have ?? 0}/${req?.need ?? 0}`}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <p className="theme-hint">
-                    Keep using Wavo to unlock more. Streaks, days active and
-                    messages sent all count.
-                  </p>
-                </section>
-
-                {/* BADGES + NAME — the bits other people actually see */}
-                <section className="settings-section">
-                  <h4>Your name in chat</h4>
-
-                  <div className="cos-preview">
-                    <UserLabel user={profile} />
-                    <span className="cos-preview-hint">what everyone sees</span>
-                  </div>
-
-                  <h5 className="cos-sub">Badge</h5>
-                  <div className="cos-grid">
-                    {catalogue
-                      .filter((c) => c.kind === "badge")
-                      .map((b) => {
-                        const req = requirement(b);
-                        const usable = isUsable(b);
-                        const on = profile?.equipped_badge === b.id;
-                        return (
-                          <button
-                            key={b.id}
-                            className={`cos-chip ${on ? "on" : ""} ${
-                              usable ? "" : "locked"
-                            }`}
-                            onClick={() => equip(b, "badge")}
-                            title={usable ? b.name : b.description}
-                          >
-                            <span style={{ color: b.payload?.color }}>
-                              {b.payload?.emoji}
-                            </span>
-                            {b.name}
-                            {!usable && (
-                              <span className="cos-lock">
-                                {req?.kind === "premium"
-                                  ? "Premium"
-                                  : `${req?.have ?? 0}/${req?.need ?? 0}`}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                  </div>
-
-                  <h5 className="cos-sub">Name colour</h5>
-                  <div className="cos-grid">
-                    {catalogue
-                      .filter((c) => c.kind === "name_style")
-                      .map((n) => {
-                        const usable = isUsable(n);
-                        const on = profile?.equipped_name_style === n.id;
-                        return (
-                          <button
-                            key={n.id}
-                            className={`cos-chip ${on ? "on" : ""} ${
-                              usable ? "" : "locked"
-                            }`}
-                            onClick={() => equip(n, "name_style")}
-                          >
-                            <span
-                              className="cos-dot"
-                              style={{ background: n.payload?.color }}
-                            />
-                            {n.name.replace(" name", "")}
-                            {!usable && <span className="cos-lock">Premium</span>}
-                          </button>
-                        );
-                      })}
-                  </div>
-
-                  {!isPremium && !isNativeApp && (
-                    <button
-                      className="cos-upsell"
-                      onClick={() => setShowPremium(true)}
-                    >
-                      ⭐ Get Premium
-                    </button>
-                  )}
-                </section>
-
-                {/* NOTIFICATIONS */}
-                <section className="settings-section">
-                  <h4>Notifications</h4>
-                  <button className="settings-toggle" onClick={toggleDesktopNotifs}>
-                    <span>Desktop notifications</span>
-                    <span className={`switch ${desktopNotifs ? "on" : ""}`}>
-                      <span className="knob" />
-                    </span>
-                  </button>
-                  <p className="settings-hint">
-                    Popup alerts when a message arrives and Wavo isn't focused.
-                  </p>
-                </section>
-
-                {/* SWITCH ACCOUNTS */}
-                {SWITCHER_USERS.includes(profile?.username) && (
-                  <section className="settings-section">
-                    <h4>Accounts</h4>
-                    <div className="acct-list">
-                      {accounts.map((a) => {
-                        const active = a.username === profile?.username;
-                        return (
-                          <div
-                            key={a.username}
-                            className={`acct-row ${active ? "active" : ""}`}
-                          >
-                            <Avatar
-                              url={active ? profile?.avatar_url : undefined}
-                              name={a.username}
-                              size="sm"
-                            />
-                            <div className="acct-info">
-                              <strong>{a.username}</strong>
-                              <span>{active ? "Active now" : "Saved account"}</span>
-                            </div>
-                            {active ? (
-                              <span
-                                className="acct-active-dot"
-                                title="Current account"
-                              />
-                            ) : (
-                              <>
-                                <button
-                                  className="mini-btn"
-                                  onClick={() => switchTo(a)}
-                                >
-                                  Switch
-                                </button>
-                                <button
-                                  className="acct-remove"
-                                  onClick={() => removeAccount(a.username)}
-                                  title="Forget this account"
-                                >
-                                  <X size={14} />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <button className="mini-btn ghost" onClick={addAccount}>
-                      + Add another account
-                    </button>
-                    <p className="settings-hint">
-                      Switching signs you straight into the saved account. Accounts
-                      are stored on this device only.
-                    </p>
-                  </section>
-                )}
-
-                {/* ACCOUNT */}
-                <section className="settings-section">
-                  <h4>Account</h4>
-                  <div className="settings-info">
-                    <span>Username</span>
-                    <strong>{profile?.username}</strong>
-                  </div>
-                  {profile?.created_at && (
-                    <div className="settings-info">
-                      <span>Member since</span>
-                      <strong>
-                        {new Date(profile.created_at).toLocaleDateString()}
-                      </strong>
-                    </div>
-                  )}
-                  <div className="settings-info">
-                    <span>Role</span>
-                    <strong>{profile?.is_admin ? "Admin" : "Member"}</strong>
-                  </div>
-
-                  {/* Blocked users */}
-                  <h5 className="cos-sub">Blocked</h5>
-                  {blockedProfiles.length === 0 ? (
-                    <p className="settings-hint">You haven't blocked anyone.</p>
-                  ) : (
-                    <div className="acct-list">
-                      {blockedProfiles.map((b) => (
-                        <div key={b.id} className="acct-row">
-                          <Avatar url={b.avatar_url} name={b.username} size="sm" />
-                          <div className="acct-info">
-                            <strong>{b.username}</strong>
-                            <span>Blocked</span>
-                          </div>
-                          <button
-                            className="mini-btn"
-                            onClick={() => unblockUser(b.id)}
-                          >
-                            Unblock
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <button
-                    className="settings-signout"
-                    onClick={() => supabase.auth.signOut()}
-                  >
-                    Sign out
-                  </button>
-
-                  <a
-                    className="settings-hint"
-                    href="/privacy.html"
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ display: "block", marginTop: "14px" }}
-                  >
-                    Privacy Policy
-                  </a>
-                  <a
-                    className="settings-hint"
-                    href="/terms.html"
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ display: "block", marginTop: "6px" }}
-                  >
-                    Terms of Service
-                  </a>
-
-                  {/* Delete account — Apple requires in-app deletion */}
-                  <button
-                    className="settings-signout"
-                    onClick={deleteAccount}
-                    disabled={deletingAccount}
-                    style={{
-                      marginTop: "10px",
-                      color: "#fff",
-                      background: "#c0392b",
-                      borderColor: "#c0392b",
-                    }}
-                  >
-                    <Trash2 size={14} style={{ marginRight: "6px", verticalAlign: "-2px" }} />
-                    {deletingAccount ? "Deleting…" : "Delete my account"}
-                  </button>
-                </section>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Add-a-friend search */}
         <form className="add-search" onSubmit={runSearch}>
           <Search size={15} />
@@ -2755,6 +2387,468 @@ export default function App() {
           ))}
         </div>
       </aside>
+
+      {/* Settings lives here, as a sibling of the sidebar rather than inside
+          it. On mobile .sidebar carries a transform, and a transformed
+          ancestor makes position:fixed resolve against that ancestor instead
+          of the viewport — so this panel was being squeezed into the
+          sidebar's 330px and its content clipped off the right edge. */}
+      {showSettings && (
+        <div className="settings-overlay" onClick={() => setShowSettings(false)}>
+          <div
+            className="settings-card"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Settings"
+          >
+            <header className="settings-head">
+              <h3>Settings</h3>
+              <button
+                className="icon-btn"
+                onClick={() => setShowSettings(false)}
+                aria-label="Close settings"
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="settings-layout">
+              <nav
+                className="settings-nav"
+                role="tablist"
+                aria-label="Settings sections"
+              >
+                {SETTINGS_TABS.map(({ id, label, Icon }) => (
+                  <button
+                    key={id}
+                    role="tab"
+                    id={`settings-tab-${id}`}
+                    aria-selected={settingsTab === id}
+                    aria-controls="settings-panel"
+                    className={`settings-nav-item ${
+                      settingsTab === id ? "on" : ""
+                    }`}
+                    onClick={() => setSettingsTab(id)}
+                  >
+                    <Icon size={15} />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </nav>
+
+              <div
+                className="settings-body"
+                id="settings-panel"
+                role="tabpanel"
+                aria-labelledby={`settings-tab-${settingsTab}`}
+              >
+                {/* ---------------- PROFILE ---------------- */}
+                {settingsTab === "profile" && (
+                  <section className="settings-section">
+                    <div className="settings-pfp-row">
+                      <Avatar url={profile?.avatar_url} name={profile?.username} />
+                      <div className="settings-pfp-actions">
+                        <button
+                          className="mini-btn"
+                          onClick={() => avatarInputRef.current?.click()}
+                          disabled={uploadingAvatar}
+                        >
+                          <Camera size={14} />
+                          {uploadingAvatar ? "Uploading…" : "Change photo"}
+                        </button>
+                        {profile?.avatar_url && (
+                          <button className="mini-btn ghost" onClick={removeAvatar}>
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <label className="settings-label" htmlFor="set-username">
+                      Username
+                    </label>
+                    <div className="settings-name-row">
+                      <input
+                        id="set-username"
+                        className="settings-input"
+                        value={usernameDraft}
+                        onChange={(e) => setUsernameDraft(e.target.value)}
+                        maxLength={20}
+                      />
+                      <button
+                        className="mini-btn"
+                        onClick={saveUsername}
+                        disabled={
+                          savingName || usernameDraft.trim() === profile?.username
+                        }
+                      >
+                        {savingName ? "Saving…" : "Save"}
+                      </button>
+                    </div>
+                    <p className="settings-hint">
+                      This is how people find and add you.
+                    </p>
+                    {nameMsg && (
+                      <p
+                        className={`settings-msg ${
+                          nameMsg === "Saved!" ? "ok" : "err"
+                        }`}
+                      >
+                        {nameMsg}
+                      </p>
+                    )}
+
+                    <label className="settings-label" htmlFor="set-status">
+                      Status
+                    </label>
+                    <div className="settings-name-row">
+                      <input
+                        id="set-status"
+                        className="settings-input"
+                        value={statusDraft}
+                        onChange={(e) => setStatusDraft(e.target.value)}
+                        placeholder="e.g. 📚 studying"
+                        maxLength={40}
+                      />
+                      <button
+                        className="mini-btn"
+                        onClick={saveStatus}
+                        disabled={
+                          savingStatus ||
+                          statusDraft.trim() === (profile?.status || "")
+                        }
+                      >
+                        {savingStatus ? "Saving…" : "Save"}
+                      </button>
+                    </div>
+                    <p className="settings-hint">
+                      Shows under your name in your friends' chat list.
+                    </p>
+                    {statusMsg && (
+                      <p
+                        className={`settings-msg ${
+                          statusMsg === "Saved!" ? "ok" : "err"
+                        }`}
+                      >
+                        {statusMsg}
+                      </p>
+                    )}
+                  </section>
+                )}
+
+                {/* ---------------- APPEARANCE ---------------- */}
+                {settingsTab === "appearance" && (
+                  <>
+                    <section className="settings-section">
+                      {stats && (
+                        <div className="streak-line">
+                          <span className="streak-flame">🔥</span>
+                          {stats.current_streak > 0
+                            ? `${stats.current_streak} day streak`
+                            : "Open Wavo tomorrow to start a streak"}
+                          <span style={{ marginLeft: "auto", fontWeight: 500 }}>
+                            {stats.messages_sent} sent
+                          </span>
+                        </div>
+                      )}
+
+                      <h4>Theme</h4>
+                      <div className="theme-grid">
+                        {themeItems.map((t) => {
+                          const req = requirement(t);
+                          const usable = isUsable(t);
+                          const claimable = req?.kind === "earned" && req.met;
+
+                          let cls = "theme-option";
+                          if (theme === t.id && usable) cls += " active";
+                          if (!usable && !claimable) cls += " locked";
+                          if (claimable) cls += " claimable";
+
+                          return (
+                            <button
+                              key={t.id}
+                              className={cls}
+                              onClick={() => pickTheme(t)}
+                              title={
+                                usable
+                                  ? t.name
+                                  : req?.kind === "premium"
+                                  ? "Premium theme"
+                                  : `${req?.have ?? 0} / ${req?.need ?? 0}`
+                              }
+                            >
+                              <span
+                                className="theme-swatch"
+                                style={{ background: t.payload?.swatch || "#888" }}
+                              />
+                              <span className="theme-name">{t.name}</span>
+                              {!usable && (
+                                <span className="theme-lock">
+                                  {claimable
+                                    ? "Claim"
+                                    : req?.kind === "premium"
+                                    ? "Premium"
+                                    : `${req?.have ?? 0}/${req?.need ?? 0}`}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="settings-hint">
+                        Keep using Wavo to unlock more. Streaks, days active and
+                        messages sent all count.
+                      </p>
+                    </section>
+
+                    {/* The bits other people actually see */}
+                    <section className="settings-section">
+                      <h4>Your name in chat</h4>
+
+                      <div className="cos-preview">
+                        <UserLabel user={profile} />
+                        <span className="cos-preview-hint">what everyone sees</span>
+                      </div>
+
+                      <h5 className="cos-sub">Badge</h5>
+                      <div className="cos-grid">
+                        {catalogue
+                          .filter((c) => c.kind === "badge")
+                          .map((b) => {
+                            const req = requirement(b);
+                            const usable = isUsable(b);
+                            const on = profile?.equipped_badge === b.id;
+                            return (
+                              <button
+                                key={b.id}
+                                className={`cos-chip ${on ? "on" : ""} ${
+                                  usable ? "" : "locked"
+                                }`}
+                                onClick={() => equip(b, "badge")}
+                                title={usable ? b.name : b.description}
+                              >
+                                <span style={{ color: b.payload?.color }}>
+                                  {b.payload?.emoji}
+                                </span>
+                                {b.name}
+                                {!usable && (
+                                  <span className="cos-lock">
+                                    {req?.kind === "premium"
+                                      ? "Premium"
+                                      : `${req?.have ?? 0}/${req?.need ?? 0}`}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                      </div>
+
+                      <h5 className="cos-sub">Name colour</h5>
+                      <div className="cos-grid">
+                        {catalogue
+                          .filter((c) => c.kind === "name_style")
+                          .map((n) => {
+                            const usable = isUsable(n);
+                            const on = profile?.equipped_name_style === n.id;
+                            return (
+                              <button
+                                key={n.id}
+                                className={`cos-chip ${on ? "on" : ""} ${
+                                  usable ? "" : "locked"
+                                }`}
+                                onClick={() => equip(n, "name_style")}
+                              >
+                                <span
+                                  className="cos-dot"
+                                  style={{ background: n.payload?.color }}
+                                />
+                                {n.name.replace(" name", "")}
+                                {!usable && <span className="cos-lock">Premium</span>}
+                              </button>
+                            );
+                          })}
+                      </div>
+
+                      {!isPremium && !isNativeApp && (
+                        <button
+                          className="cos-upsell"
+                          onClick={() => setShowPremium(true)}
+                        >
+                          ⭐ Get Premium
+                        </button>
+                      )}
+                    </section>
+                  </>
+                )}
+
+                {/* ---------------- NOTIFICATIONS ---------------- */}
+                {settingsTab === "notifications" && (
+                  <section className="settings-section">
+                    <button className="settings-toggle" onClick={toggleDesktopNotifs}>
+                      <span>Desktop notifications</span>
+                      <span className={`switch ${desktopNotifs ? "on" : ""}`}>
+                        <span className="knob" />
+                      </span>
+                    </button>
+                    <p className="settings-hint">
+                      Popup alerts when a message arrives and Wavo isn't focused.
+                    </p>
+                  </section>
+                )}
+
+                {/* ---------------- ACCOUNT ---------------- */}
+                {settingsTab === "account" && (
+                  <>
+                    <section className="settings-section">
+                      <div className="settings-info">
+                        <span>Username</span>
+                        <strong>{profile?.username}</strong>
+                      </div>
+                      {profile?.created_at && (
+                        <div className="settings-info">
+                          <span>Member since</span>
+                          <strong>
+                            {new Date(profile.created_at).toLocaleDateString()}
+                          </strong>
+                        </div>
+                      )}
+                      <div className="settings-info">
+                        <span>Role</span>
+                        <strong>{profile?.is_admin ? "Admin" : "Member"}</strong>
+                      </div>
+                      <div className="settings-info">
+                        <span>Plan</span>
+                        <strong>{isPremium ? "Premium" : "Free"}</strong>
+                      </div>
+                    </section>
+
+                    {/* SWITCH ACCOUNTS */}
+                    {SWITCHER_USERS.includes(profile?.username) && (
+                      <section className="settings-section">
+                        <h4>Saved accounts</h4>
+                        <div className="acct-list">
+                          {accounts.map((a) => {
+                            const active = a.username === profile?.username;
+                            return (
+                              <div
+                                key={a.username}
+                                className={`acct-row ${active ? "active" : ""}`}
+                              >
+                                <Avatar
+                                  url={active ? profile?.avatar_url : undefined}
+                                  name={a.username}
+                                  size="sm"
+                                />
+                                <div className="acct-info">
+                                  <strong>{a.username}</strong>
+                                  <span>
+                                    {active ? "Active now" : "Saved account"}
+                                  </span>
+                                </div>
+                                {active ? (
+                                  <span
+                                    className="acct-active-dot"
+                                    title="Current account"
+                                  />
+                                ) : (
+                                  <>
+                                    <button
+                                      className="mini-btn"
+                                      onClick={() => switchTo(a)}
+                                    >
+                                      Switch
+                                    </button>
+                                    <button
+                                      className="acct-remove"
+                                      onClick={() => removeAccount(a.username)}
+                                      title="Forget this account"
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <button className="mini-btn ghost" onClick={addAccount}>
+                          + Add another account
+                        </button>
+                        <p className="settings-hint">
+                          Switching signs you straight into the saved account.
+                          Accounts are stored on this device only.
+                        </p>
+                      </section>
+                    )}
+
+                    {/* BLOCKED */}
+                    <section className="settings-section">
+                      <h4>Blocked</h4>
+                      {blockedProfiles.length === 0 ? (
+                        <p className="settings-hint">You haven't blocked anyone.</p>
+                      ) : (
+                        <div className="acct-list">
+                          {blockedProfiles.map((b) => (
+                            <div key={b.id} className="acct-row">
+                              <Avatar url={b.avatar_url} name={b.username} size="sm" />
+                              <div className="acct-info">
+                                <strong>{b.username}</strong>
+                                <span>Blocked</span>
+                              </div>
+                              <button
+                                className="mini-btn"
+                                onClick={() => unblockUser(b.id)}
+                              >
+                                Unblock
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+
+                    <section className="settings-section">
+                      <button
+                        className="settings-signout"
+                        onClick={() => supabase.auth.signOut()}
+                      >
+                        <LogOut size={14} /> Sign out
+                      </button>
+                      <div className="settings-legal">
+                        <a href="/privacy.html" target="_blank" rel="noreferrer">
+                          Privacy Policy
+                        </a>
+                        <span aria-hidden="true">·</span>
+                        <a href="/terms.html" target="_blank" rel="noreferrer">
+                          Terms of Service
+                        </a>
+                      </div>
+                    </section>
+
+                    {/* Apple requires in-app deletion */}
+                    <section className="settings-section danger">
+                      <h4>Danger zone</h4>
+                      <p className="settings-hint">
+                        Deleting erases your profile, messages, friends and groups.
+                        This cannot be undone.
+                      </p>
+                      <button
+                        className="settings-danger"
+                        onClick={deleteAccount}
+                        disabled={deletingAccount}
+                      >
+                        <Trash2 size={14} />
+                        {deletingAccount ? "Deleting…" : "Delete my account"}
+                      </button>
+                    </section>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showSidebar && (selectedUser || selectedGroup) && (
         <div

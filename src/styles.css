@@ -3665,3 +3665,170 @@ body::before {
   .premium-plans { grid-template-columns: 1fr; }
   .modal { padding: 20px 16px; }
 }
+
+/* ============================================================
+   SETTINGS — TABBED LAYOUT
+   Settings was one ~1700px scroll through six unlabelled sections, so
+   finding anything meant scrolling and hoping. It's now four tabs: a
+   nav rail on desktop, a scrollable strip on a phone.
+   ============================================================ */
+
+.settings-card {
+  /* Wider, because the nav rail now sits beside the content. The card also
+     no longer scrolls as a whole — only the panel does — so the header and
+     tabs stay put while you read. */
+  max-width: 680px;
+  max-height: min(88vh, 720px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 178px minmax(0, 1fr);
+  min-height: 0;
+  flex: 1;
+}
+
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 10px;
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+}
+.settings-nav-item svg { flex-shrink: 0; }
+.settings-nav-item:hover { background: var(--panel-2); color: var(--text); }
+.settings-nav-item.on {
+  background: var(--coral-soft);
+  color: var(--coral);
+  font-weight: 600;
+}
+
+.settings-body {
+  padding: 6px 22px 22px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* The first section in a panel shouldn't push a heading off the top */
+.settings-body > .settings-section:first-child,
+.settings-body > *:first-child > .settings-section:first-child {
+  padding-top: 12px;
+}
+
+/* Theme names were clipped mid-word next to a lock chip */
+.theme-option { min-width: 0; }
+.theme-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.theme-lock { margin-left: auto; flex-shrink: 0; }
+
+/* ---------- SIGN OUT / DANGER ZONE ---------- */
+/* The delete button used to carry a hardcoded #c0392b in a style prop,
+   which ignored the theme entirely. */
+.settings-signout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.settings-section.danger { border-bottom: none; }
+.settings-section.danger h4 { color: var(--coral); }
+
+.settings-danger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: #c0392b;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.14s;
+}
+.settings-danger:hover { filter: brightness(1.1); }
+.settings-danger:disabled { opacity: 0.6; cursor: default; }
+
+.settings-legal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+.settings-legal a { color: var(--text-faint); text-decoration: none; }
+.settings-legal a:hover { color: var(--coral); text-decoration: underline; }
+
+/* ---------- MOBILE ---------- */
+@media (max-width: 720px) {
+  .settings-card { max-width: none; max-height: 92vh; }
+
+  /* Rail becomes a scrollable strip across the top */
+  .settings-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .settings-nav {
+    flex-direction: row;
+    gap: 4px;
+    padding: 10px 12px;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .settings-nav::-webkit-scrollbar { display: none; }
+  .settings-nav-item {
+    flex-shrink: 0;
+    gap: 7px;
+    padding: 8px 13px;
+    border-radius: 999px;
+    background: var(--panel-2);
+    font-size: 0.83rem;
+  }
+  .settings-nav-item.on { background: var(--coral-soft); }
+
+  .settings-body { padding: 4px 16px 20px; }
+}
+
+/* Keep the dialog a stable size as you move between tabs — Notifications is
+   one toggle and Account is long, and letting the card resize made it jump
+   around under the cursor. */
+.settings-layout { min-height: min(58vh, 430px); }
+
+/* A label following a hint needs air, or the two runs of text collide */
+.settings-hint + .settings-label { margin-top: 14px; display: block; }
+
+@media (max-width: 720px) {
+  .settings-layout { min-height: min(52vh, 380px); }
+}
