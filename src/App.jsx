@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "./supabaseClient";
 import {
   Bell,
@@ -31,6 +32,7 @@ import {
   LogOut,
   Trophy,
   ChevronRight,
+  SendHorizontal,
 } from "lucide-react";
 import {
   registerServiceWorker,
@@ -46,6 +48,7 @@ import { isNativeApp } from "./lib/platform";
 import { PLANS, DEFAULT_PLAN } from "./lib/pricing";
 import { UserLabel } from "./Cosmetic";
 import { UnlockGuide } from "./UnlockGuide";
+import { useIsPhone } from "./lib/useIsPhone";
 import { swatchStyle } from "./lib/cosmeticStyles";
 import { useCosmetics } from "./useCosmetics";
 import { useUrlSync } from "./useUrlSync";
@@ -192,6 +195,30 @@ const SETTINGS_TABS = [
   { id: "notifications", label: "Notifications", Icon: Bell },
   { id: "account", label: "Account", Icon: ShieldCheck },
 ];
+
+/**
+ * Where the chat menu renders.
+ *
+ * On a desktop it's a dropdown, absolutely positioned against the button, so
+ * it has to stay inside `.chat-menu-wrap`.
+ *
+ * On a phone it's a bottom sheet — and it cannot stay there. `.chat-header`
+ * carries a `backdrop-filter`, which makes it a containing block for
+ * `position: fixed` descendants, so a sheet asking for `bottom: 0` pinned
+ * itself to the bottom of the 68px header instead of the screen. (Same trap
+ * that clipped the settings panel inside the transformed sidebar.) A portal
+ * to <body> puts it back on the viewport.
+ */
+function ChatMenuLayer({ isPhone, onDismiss, children }) {
+  if (!isPhone) return children;
+  return createPortal(
+    <>
+      <div className="chat-menu-backdrop" onClick={onDismiss} />
+      {children}
+    </>,
+    document.body
+  );
+}
 
 const initial = (name) => (name?.trim()?.[0] || "?").toUpperCase();
 
@@ -474,6 +501,9 @@ export default function App() {
   const [isFocused, setIsFocused] = useState(true);
   // Overflow menu for the rarely-used, destructive chat actions (report/block)
   const [showChatMenu, setShowChatMenu] = useState(false);
+  // Some things need to *behave* differently on a phone, not just look
+  // different — the chat menu is a dropdown or a sheet, not one styled twice.
+  const isPhone = useIsPhone();
   // True while you're scrolled up reading history — suppresses auto-scroll
   // and shows a "jump to latest" button instead of yanking you down.
   const [stuckToBottom, setStuckToBottom] = useState(true);
@@ -688,7 +718,15 @@ export default function App() {
     if (!showNotifs && !showChatMenu) return;
     function onDown(e) {
       if (showNotifs && !e.target.closest?.(".notif-wrap")) setShowNotifs(false);
-      if (showChatMenu && !e.target.closest?.(".chat-menu-wrap"))
+      // `.chat-menu` is checked separately from its wrapper: on a phone the
+      // sheet is portaled to <body>, so it is no longer a descendant of
+      // `.chat-menu-wrap` and this would close it before a tap on one of its
+      // own buttons ever landed.
+      if (
+        showChatMenu &&
+        !e.target.closest?.(".chat-menu-wrap") &&
+        !e.target.closest?.(".chat-menu")
+      )
         setShowChatMenu(false);
     }
     document.addEventListener("mousedown", onDown);
@@ -3006,33 +3044,47 @@ export default function App() {
                     <MoreVertical size={16} />
                   </button>
                   {showChatMenu && (
-                    <div className="chat-menu">
-                      <button
-                        onClick={() => {
-                          setShowChatMenu(false);
-                          setNickname(selectedUser);
-                        }}
-                      >
-                        <Pencil size={14} /> Set nickname
-                      </button>
-                      <button
-                        onClick={() => {
-                          setShowChatMenu(false);
-                          reportUser(selectedUser);
-                        }}
-                      >
-                        <Flag size={14} /> Report {selectedUser.username}
-                      </button>
-                      <button
-                        className="danger"
-                        onClick={() => {
-                          setShowChatMenu(false);
-                          blockUser(selectedUser);
-                        }}
-                      >
-                        <Ban size={14} /> Block {selectedUser.username}
-                      </button>
-                    </div>
+                    <ChatMenuLayer
+                      isPhone={isPhone}
+                      onDismiss={() => setShowChatMenu(false)}
+                    >
+                      <div className="chat-menu">
+                        <span className="chat-menu-title">
+                          {displayName(selectedUser)}
+                        </span>
+                        <button
+                          onClick={() => {
+                            setShowChatMenu(false);
+                            setNickname(selectedUser);
+                          }}
+                        >
+                          <Pencil size={14} /> Set nickname
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowChatMenu(false);
+                            reportUser(selectedUser);
+                          }}
+                        >
+                          <Flag size={14} /> Report {selectedUser.username}
+                        </button>
+                        <button
+                          className="danger"
+                          onClick={() => {
+                            setShowChatMenu(false);
+                            blockUser(selectedUser);
+                          }}
+                        >
+                          <Ban size={14} /> Block {selectedUser.username}
+                        </button>
+                        <button
+                          className="chat-menu-cancel"
+                          onClick={() => setShowChatMenu(false)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </ChatMenuLayer>
                   )}
                 </div>
               </div>
@@ -3413,7 +3465,12 @@ export default function App() {
                     : "Type a message…"
                 }
               />
-              <button>{editingMsg ? "Save" : "Send"}</button>
+              <button aria-label={editingMsg ? "Save edit" : "Send message"}>
+                <span className="composer-send-text">
+                  {editingMsg ? "Save" : "Send"}
+                </span>
+                <SendHorizontal className="composer-send-icon" size={18} />
+              </button>
             </form>
           </>
         ) : selectedGroup ? (
@@ -3712,7 +3769,12 @@ export default function App() {
                   uploadingFile ? "Uploading…" : "Message the group…"
                 }
               />
-              <button>{editingMsg ? "Save" : "Send"}</button>
+              <button aria-label={editingMsg ? "Save edit" : "Send message"}>
+                <span className="composer-send-text">
+                  {editingMsg ? "Save" : "Send"}
+                </span>
+                <SendHorizontal className="composer-send-icon" size={18} />
+              </button>
             </form>
           </>
         ) : (
