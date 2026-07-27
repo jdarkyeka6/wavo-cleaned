@@ -3154,7 +3154,7 @@ export default function App() {
               </div>
               <div className="chat-header-right">
                 <button
-                  className={`icon-btn ${showSearch ? "active" : ""}`}
+                  className={`icon-btn header-optional ${showSearch ? "active" : ""}`}
                   onClick={() => {
                     setShowSearch((s) => !s);
                     setMsgSearch("");
@@ -3165,7 +3165,7 @@ export default function App() {
                   <Search size={16} />
                 </button>
                 <button
-                  className={`icon-btn ${social.pinsOpen ? "active" : ""}`}
+                  className={`icon-btn header-optional ${social.pinsOpen ? "active" : ""}`}
                   onClick={() => social.setPinsOpen((v) => !v)}
                   aria-label="Pinned messages"
                   title={
@@ -3180,7 +3180,7 @@ export default function App() {
                   )}
                 </button>
                 <button
-                  className={`icon-btn ${showGames ? "active" : ""}`}
+                  className={`icon-btn header-optional ${showGames ? "active" : ""}`}
                   onClick={() => setShowGames((s) => !s)}
                   aria-label="Play a game"
                   title="Play a game"
@@ -3213,6 +3213,34 @@ export default function App() {
                         {/* Phone only: the composer can hold three icons and
                             a readable message field, not four. Send later is
                             the least frequent of them, so it lives here. */}
+                        <button
+                          className="chat-menu-phone"
+                          onClick={() => {
+                            setShowChatMenu(false);
+                            setShowSearch(true);
+                          }}
+                        >
+                          <Search size={14} /> Search this chat
+                        </button>
+                        <button
+                          className="chat-menu-phone"
+                          onClick={() => {
+                            setShowChatMenu(false);
+                            social.setPinsOpen(true);
+                          }}
+                        >
+                          <Pin size={14} /> Pinned messages
+                          {social.messagePins.length > 0 && ` (${social.messagePins.length})`}
+                        </button>
+                        <button
+                          className="chat-menu-phone"
+                          onClick={() => {
+                            setShowChatMenu(false);
+                            setShowGames(true);
+                          }}
+                        >
+                          <Gamepad2 size={14} /> Play a game
+                        </button>
                         <button
                           className="chat-menu-later"
                           onClick={() => {
@@ -3719,7 +3747,7 @@ export default function App() {
                     ))}
                 </div>
                 <button
-                  className={`icon-btn ${social.pinsOpen ? "active" : ""}`}
+                  className={`icon-btn header-optional ${social.pinsOpen ? "active" : ""}`}
                   onClick={() => social.setPinsOpen((v) => !v)}
                   aria-label="Pinned messages"
                   title={

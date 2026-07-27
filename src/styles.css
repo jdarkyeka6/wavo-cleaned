@@ -4656,3 +4656,51 @@ body::before {
 /* The nickname pencil sits in a header that gained buttons; without this it
    gets flex-shrunk to 12px wide and is effectively untappable. */
 .nickname-btn { flex-shrink: 0; }
+
+/* ============================================================
+   CHAT HEADER ON A PHONE
+   Five controls and a name in 390px meant "noah / at the gym" wrapped onto
+   three lines. Search, pinned messages and games move into the sheet — the
+   header keeps back, avatar, name and the overflow button.
+   ============================================================ */
+
+.chat-menu button.chat-menu-phone { display: none; }
+
+@media (max-width: 720px) {
+  .header-optional { display: none; }
+  .chat-menu button.chat-menu-phone { display: flex; }
+
+  /* A name and a status line, each on one line, ellipsised rather than
+     wrapped — a header that changes height as you switch chats is worse
+     than a truncated status. */
+  .chat-header-name { min-width: 0; flex: 1; }
+  .chat-header-name h3 {
+    font-size: 1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chat-header-name .presence-line {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chat-header-left { min-width: 0; flex: 1; gap: 10px; }
+  .chat-header-right { flex-shrink: 0; }
+
+  /* Bubbles were taking more room than they needed: wider max, slightly
+     tighter type and padding fits noticeably more conversation on screen. */
+  .bubble {
+    max-width: 78%;
+    padding: 9px 13px;
+    font-size: 0.9rem;
+    line-height: 1.4;
+  }
+}
+
+/* Timestamps were competing with the message. They're reference information,
+   not content — quieter, and closer to the text they belong to. */
+.msg-footer { margin-top: 2px; }
+.msg-footer span { font-size: 0.64rem; }
+.mine .msg-footer span { color: rgba(255, 255, 255, 0.62); }
+.theirs .msg-footer span { color: var(--text-faint); opacity: 0.8; }
