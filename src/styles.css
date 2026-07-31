@@ -439,7 +439,12 @@ body::before {
   box-shadow: 0 0 0 3px var(--coral-soft);
 }
 
-.composer button {
+/* Send only. This used to be `.composer button`, which also matched the GIF,
+   emoji and attach buttons — and at (0,1,1) it outspecificed `.composer-icon`
+   below, so all three rendered as filled coral slabs instead of the quiet
+   outlined controls they were written to be. Three shouting buttons beside
+   the send button, and the text input squeezed to fit around them. */
+.composer button:not(.composer-icon) {
   flex-shrink: 0;
   background: linear-gradient(135deg, var(--coral), #ff8366);
   border: none;
@@ -452,11 +457,11 @@ body::before {
   transition: transform 0.15s, box-shadow 0.2s;
 }
 
-.composer button:hover {
+.composer button:not(.composer-icon):hover {
   transform: translateY(-1px);
   box-shadow: 0 8px 20px -6px rgba(255, 107, 91, 0.5);
 }
-.composer button:active { transform: translateY(0); }
+.composer button:not(.composer-icon):active { transform: translateY(0); }
 
 /* ---------- ANIMATIONS ---------- */
 @keyframes rise {
@@ -503,7 +508,7 @@ body::before {
   /* keep the composer inside the screen */
   .composer { padding: 12px 10px; gap: 7px; }
   .composer-icon { width: 38px; }
-  .composer button { padding: 0 16px; }
+  .composer button:not(.composer-icon) { padding: 0 16px; }
 
   /* keep the chat header inside the screen (was overflowing to the Block btn) */
   .chat-header { padding: 0 10px; }
@@ -4183,6 +4188,126 @@ body::before {
    fitting side by side. */
 @media (max-width: 420px) {
   .unlock-progress { margin-left: 0; width: 100%; }
+}
+
+/* ============================================================
+   MOBILE — tap targets, drawer width, and the chat menu sheet
+   ============================================================ */
+
+@media (max-width: 720px) {
+  /* Apple's floor for a touch target is 44x44. Most controls here were 34px,
+     and the nickname pencil was 16px — small enough to be a coin flip. */
+  .icon-btn,
+  .mobile-back {
+    width: 44px;
+    height: 44px;
+  }
+  .nickname-btn {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+  }
+  .composer-icon { width: 44px; min-height: 44px; }
+  .composer button:not(.composer-icon) { min-height: 44px; }
+  .new-group-btn { padding: 8px 12px; min-height: 36px; }
+  .ghost-btn { min-height: 38px; }
+
+  /* The drawer was min(86vw, 330px), so on a 390px phone it left a 60px strip
+     of the chat behind it — too narrow to read, wide enough to look broken. */
+  .sidebar { width: 100%; max-width: 420px; }
+
+  /* Give the message field the room the three coral slabs were taking. */
+  .composer { padding: 10px 12px; gap: 8px; }
+  .composer input { min-width: 0; }
+}
+
+/* The chat menu is a dropdown on a desktop and a bottom sheet on a phone:
+   a 180px-wide list of 34px rows is a mouse target, not a thumb target. */
+.chat-menu-backdrop { display: none; }
+
+/* Desktop keeps the plain dropdown, so the sheet-only chrome stays hidden.
+   These must precede the media query below: media queries add no specificity,
+   so whichever rule comes last in the file wins. */
+.chat-menu-title { display: none; }
+/* Qualified with `button` on purpose: the plain `.chat-menu-cancel` selector
+   loses to `.chat-menu button { display: flex }` on specificity, so Cancel
+   turned up on the desktop dropdown too. */
+.chat-menu button.chat-menu-cancel { display: none; }
+
+@media (max-width: 720px) {
+  .chat-menu-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 60;
+    animation: rise 0.18s ease-out;
+  }
+  .chat-menu {
+    position: fixed;
+    inset: auto 0 0 0;
+    width: auto;
+    min-width: 0;
+    z-index: 61;
+    border-radius: 18px 18px 0 0;
+    padding: 8px 10px calc(10px + env(safe-area-inset-bottom));
+    box-shadow: var(--shadow-lg);
+    animation: sheet-up 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .chat-menu-title {
+    display: block;
+    padding: 10px 14px 8px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  .chat-menu button {
+    width: 100%;
+    min-height: 50px;
+    gap: 12px;
+    padding: 0 14px;
+    font-size: 0.95rem;
+    border-radius: var(--r-sm);
+  }
+  .chat-menu button.chat-menu-cancel {
+    display: flex;
+    align-items: center;
+    margin-top: 6px;
+    justify-content: center;
+    font-weight: 700;
+    color: var(--text-dim);
+    /* --panel-2 is the sheet's own background, so it read as a bare word
+       rather than a button. */
+    background: var(--panel);
+    border: 1px solid var(--line);
+  }
+}
+
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-menu { animation: none; }
+}
+
+/* Send is a word on a desktop and a glyph on a phone. Spelling it out costs
+   ~30px of a 390px composer, and that came straight off the message field —
+   which was down to 129px, narrow enough to truncate its own placeholder. */
+.composer-send-icon { display: none; }
+
+@media (max-width: 720px) {
+  .composer-send-text { display: none; }
+  .composer-send-icon { display: block; }
+  .composer button:not(.composer-icon) {
+    width: 44px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+  }
 }
 
 /* ============================================================
