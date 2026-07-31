@@ -12,13 +12,18 @@
 
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <!-- viewport-fit=cover is what makes env(safe-area-inset-*) return real
+    <!-- maximum-scale/user-scalable stop pinch zoom in the Capacitor WebView
+         and on Android. iOS Safari deliberately ignores them for
+         accessibility, which is why the CSS below also stops the *causes* of
+         accidental zoom rather than relying on this alone.
+
+         viewport-fit=cover is what makes env(safe-area-inset-*) return real
          numbers. Without it they are all 0, and in the Capacitor WebView the
          page still draws edge to edge - so the top of the landing nav sat
          under the notch with nothing reserving space for it. -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
     <meta name="theme-color" content="#14131f" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />

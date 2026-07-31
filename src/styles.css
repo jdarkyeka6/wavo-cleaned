@@ -224,6 +224,7 @@ body::before {
 .user-list {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -323,6 +324,7 @@ body::before {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -648,6 +650,7 @@ body::before {
 
 .notif-list {
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .notif-empty {
@@ -823,6 +826,7 @@ body::before {
 
 .giphy-grid {
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px 16px;
   /* masonry-style columns so GIFs keep their natural shape */
   column-count: 4;
@@ -1111,6 +1115,7 @@ body::before {
 .admin-body {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 22px;
   max-width: 880px;
   width: 100%;
@@ -1415,6 +1420,7 @@ body::before {
 .viewas-friends {
   border-right: 1px solid var(--line);
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -1447,6 +1453,7 @@ body::before {
 
 .viewas-thread {
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 22px;
   display: flex;
   flex-direction: column;
@@ -1754,6 +1761,7 @@ body::before {
   max-width: 440px;
   max-height: 88vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
@@ -2154,6 +2162,7 @@ body::before {
   background: var(--panel-2);
   max-height: 160px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .emoji-panel button {
   background: none;
@@ -2458,6 +2467,7 @@ body::before {
   flex-direction: column;
   gap: 4px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   max-height: 40vh;
 }
 .new-group-empty { color: var(--text-dim); font-size: 0.86rem; }
@@ -3548,6 +3558,7 @@ body::before {
   place-items: center;
   padding: 20px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .modal {
@@ -3556,6 +3567,7 @@ body::before {
   max-width: 480px;
   max-height: 88vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 24px;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -3703,6 +3715,7 @@ body::before {
   padding: 12px 10px;
   border-right: 1px solid var(--line);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .settings-nav-item {
@@ -3732,6 +3745,7 @@ body::before {
 .settings-body {
   padding: 6px 22px 22px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   min-height: 0;
 }
 
@@ -4311,6 +4325,279 @@ body::before {
 }
 
 /* ============================================================
+   PINNED CHATS, PINNED MESSAGES, PROFILE TRIGGERS
+   ============================================================ */
+
+/* A sidebar row is a button, so the pin can't live inside it — nested buttons
+   are invalid and swallow each other's clicks. It's a sibling instead. */
+.row-wrap { position: relative; }
+.row-wrap .user-row { width: 100%; }
+.row-pin {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.14s, color 0.14s, background 0.14s;
+}
+.row-wrap:hover .row-pin,
+.row-pin:focus-visible { opacity: 1; }
+.row-pin:hover { background: var(--panel-2); color: var(--text); }
+/* An already-pinned row keeps its pin visible — otherwise the only way to
+   know a chat is pinned is to notice where it sits in the list. */
+.row-pin.on {
+  opacity: 1;
+  color: var(--coral);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+/* Count on the header pin button */
+.icon-btn { position: relative; }
+.icon-btn-count {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--coral);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* Landing on a pinned message: say which one without moving anything. */
+@keyframes msg-flash {
+  0%   { background: var(--coral-soft); }
+  100% { background: transparent; }
+}
+.bubble-wrap.flash { animation: msg-flash 1.6s ease-out; border-radius: var(--r-md); }
+@media (prefers-reduced-motion: reduce) {
+  .bubble-wrap.flash { animation: none; outline: 2px solid var(--coral); }
+}
+
+/* An avatar that opens a profile is a button, but shouldn't look like one. */
+.as-button {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.as-button:hover { filter: brightness(1.12); }
+
+.msg-image { cursor: zoom-in; }
+
+/* ============================================================
+   SEND LATER
+   ============================================================ */
+
+.composer-icon { position: relative; }
+.composer-icon.has-pending { border-color: var(--coral); color: var(--coral); }
+
+.send-later-modal {
+  width: min(94vw, 460px);
+  max-height: 88vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg, 16px);
+  padding: 18px;
+  box-shadow: var(--shadow-lg);
+}
+.send-later-modal header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.send-later-modal header > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--coral);
+}
+.send-later-modal h3 { margin: 0; font-size: 1.02rem; color: var(--text); }
+
+.send-later-preview {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  font-size: 0.86rem;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+.send-later-empty {
+  margin: 0 0 14px;
+  font-size: 0.82rem;
+  color: var(--text-faint);
+}
+
+.send-later-presets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.send-later-presets button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-height: 44px;
+}
+.send-later-presets button:hover:not(:disabled) { border-color: var(--coral); }
+.send-later-presets button:disabled { opacity: 0.5; cursor: default; }
+.send-later-presets strong { font-size: 0.84rem; font-weight: 700; }
+.send-later-presets span { font-size: 0.72rem; color: var(--text-faint); }
+
+.send-later-custom { display: block; margin-top: 14px; }
+.send-later-custom > span {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.send-later-custom > div { display: flex; gap: 8px; }
+.send-later-custom input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 10px;
+  background: var(--bg-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+.send-later-custom .social-primary { min-height: 44px; }
+
+.send-later-error {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  color: var(--coral);
+}
+
+.send-later-pending { margin-top: 16px; }
+.send-later-pending h4 {
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.send-later-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.send-later-row > div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.send-later-row strong {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.send-later-row span { font-size: 0.72rem; color: var(--text-faint); }
+.send-later-row button {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.send-later-row button:hover { border-color: var(--coral); color: var(--coral); }
+
+.send-later-note {
+  margin: 14px 0 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+@media (max-width: 480px) {
+  .send-later-presets { grid-template-columns: 1fr; }
+  .send-later-custom > div { flex-direction: column; }
+}
+
+/* The streak, in the sidebar rather than buried in Settings */
+.streak-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  width: fit-content;
+}
+.streak-pill svg { color: var(--amber); }
+.streak-pill.none { color: var(--text-faint); font-weight: 600; }
+.streak-pill.none svg { color: var(--text-faint); }
+/* Amber, not red: a run you can still save today isn't a failure. */
+.streak-pill.at-risk {
+  border-color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  color: var(--text);
+}
+.streak-pill em {
+  font-style: normal;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--amber);
+}
+.streak-freezes {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 6px;
+  border-left: 1px solid var(--line);
+  font-size: 0.7rem;
+  color: var(--text-faint);
+}
+.streak-freezes svg { color: #7DD3FC; }
+
+/* ============================================================
    SAFE AREAS — notch, Dynamic Island, home indicator
    The web app never needed these; the iOS build draws edge to edge and
    the top of every screen was landing underneath the status bar.
@@ -4354,5 +4641,149 @@ body::before {
   }
   .composer {
     padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ============================================================
+   WHERE THE TWO MOBILE CHANGES COLLIDE
+   The composer was widened to 158px by removing visual weight; send later
+   then added a fourth icon and took it back down to 106px — worse than the
+   129px that started the whole thing. On a phone the composer keeps three
+   icons and send later moves into the chat menu sheet.
+   ============================================================ */
+
+/* Qualified with `button` — the third time this file has needed it. A bare
+   `.chat-menu-later` is (0,1,0) and loses to `.chat-menu button { display:
+   flex }` at (0,1,1), so it showed on the desktop dropdown alongside the
+   composer clock. Same mistake as .chat-menu-cancel. */
+.chat-menu button.chat-menu-later { display: none; }
+
+@media (max-width: 720px) {
+  .composer-later { display: none; }
+  .chat-menu button.chat-menu-later { display: flex; }
+
+  /* Targets introduced with the pins and profile cards, held to the same
+     44px floor as everything else. */
+  .row-pin { width: 44px; height: 44px; }
+  .avatar-presence.as-button { min-width: 44px; min-height: 44px; }
+}
+
+/* The nickname pencil sits in a header that gained buttons; without this it
+   gets flex-shrunk to 12px wide and is effectively untappable. */
+.nickname-btn { flex-shrink: 0; }
+
+/* ============================================================
+   CHAT HEADER ON A PHONE
+   Five controls and a name in 390px meant "noah / at the gym" wrapped onto
+   three lines. Search, pinned messages and games move into the sheet — the
+   header keeps back, avatar, name and the overflow button.
+   ============================================================ */
+
+.chat-menu button.chat-menu-phone { display: none; }
+
+@media (max-width: 720px) {
+  .header-optional { display: none; }
+  .chat-menu button.chat-menu-phone { display: flex; }
+
+  /* A name and a status line, each on one line, ellipsised rather than
+     wrapped — a header that changes height as you switch chats is worse
+     than a truncated status. */
+  .chat-header-name { min-width: 0; flex: 1; }
+  .chat-header-name h3 {
+    font-size: 1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chat-header-name .presence-line {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chat-header-left { min-width: 0; flex: 1; gap: 10px; }
+  .chat-header-right { flex-shrink: 0; }
+
+  /* Bubbles were taking more room than they needed: wider max, slightly
+     tighter type and padding fits noticeably more conversation on screen. */
+  .bubble {
+    max-width: 78%;
+    padding: 9px 13px;
+    font-size: 0.9rem;
+    line-height: 1.4;
+  }
+}
+
+/* Timestamps were competing with the message. They're reference information,
+   not content — quieter, and closer to the text they belong to. */
+.msg-footer { margin-top: 2px; }
+.msg-footer span { font-size: 0.64rem; }
+.mine .msg-footer span { color: rgba(255, 255, 255, 0.62); }
+.theirs .msg-footer span { color: var(--text-faint); opacity: 0.8; }
+
+/* ============================================================
+   ZOOM AND SCROLL WHERE THEY AREN'T WANTED
+   ============================================================ */
+
+/* Text selection belongs in messages, not on the furniture. Long-pressing a
+   button on a phone was selecting its label and popping up the copy menu. */
+button,
+.user-row,
+.theme-option,
+.cos-chip,
+.settings-nav-item,
+.unlock-row,
+.chat-menu button,
+.streak-pill {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Messages stay selectable — copying what someone said is the point. */
+.bubble p,
+.bubble,
+.msg-content,
+.pin-preview {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Full-screen layers must not let the page behind them move. */
+.settings-overlay,
+.social-overlay,
+.media-viewer,
+.chat-menu-backdrop,
+.sidebar-backdrop {
+  overscroll-behavior: contain;
+  touch-action: none;
+}
+
+/* …but their own scrollable innards still need to scroll. */
+.settings-body,
+.send-later-modal,
+.profile-card-modal,
+.group-manage-modal {
+  touch-action: pan-y;
+}
+
+/* The image in the viewer is the one place a pinch is legitimate. */
+.media-viewer-image {
+  touch-action: pinch-zoom;
+}
+
+/* iOS zooms the viewport when you focus an input whose font-size is under
+   16px, and does not reliably zoom back out afterwards. Every field here was
+   between 14 and 15px, so tapping the message box zoomed the page every
+   single time.
+   
+   Attribute-qualified on purpose: a bare `input` is (0,0,1) and loses to
+   `.composer input` at (0,1,1). `input:not([type="file"])` is itself (0,1,1)
+   — :not() takes its argument's specificity — so it ties and wins on order.
+   Touch devices only; the desktop sizes are deliberate. */
+@media (pointer: coarse) {
+  input:not([type="file"]),
+  textarea:not([disabled]),
+  select:not([disabled]) {
+    font-size: 16px;
   }
 }
