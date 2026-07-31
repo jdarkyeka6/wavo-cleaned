@@ -193,6 +193,11 @@ export default function Landing({ onGetStarted, onLogin }) {
 
       <footer className="landing-foot">
         <span>Wavo</span>
+        <nav className="landing-foot-links">
+          <a href="/support.html">Support</a>
+          <a href="/privacy.html">Privacy</a>
+          <a href="/terms.html">Terms</a>
+        </nav>
         <span>Made in Perth</span>
       </footer>
     </main>
