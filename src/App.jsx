@@ -3085,6 +3085,10 @@ export default function App() {
                         <LogOut size={14} /> Sign out
                       </button>
                       <div className="settings-legal">
+                        <a href="/support.html" target="_blank" rel="noreferrer">
+                          Support
+                        </a>
+                        <span aria-hidden="true">·</span>
                         <a href="/privacy.html" target="_blank" rel="noreferrer">
                           Privacy Policy
                         </a>

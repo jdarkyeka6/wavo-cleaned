@@ -3072,6 +3072,9 @@ body::before {
 .landing-foot {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
   max-width: 1180px;
   width: 100%;
   margin: 0 auto;
@@ -3080,6 +3083,16 @@ body::before {
   font-size: 0.78rem;
   color: var(--text-faint);
 }
+
+/* Support sits with the legal links rather than in the app, because someone
+   who can't sign in can't reach anything that lives behind the login. */
+.landing-foot-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.landing-foot-links a { color: var(--text-faint); text-decoration: none; }
+.landing-foot-links a:hover { color: var(--coral); text-decoration: underline; }
 
 /* ── mobile: most of your users ── */
 @media (max-width: 880px) {
@@ -3822,6 +3835,7 @@ body::before {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 14px;
   font-size: 0.78rem;
