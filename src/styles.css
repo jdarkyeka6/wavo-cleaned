@@ -607,13 +607,28 @@ body::before {
   position: relative;
 }
 
-.notif-panel {
-  position: absolute;
-  top: 44px;
+/* The only way to read the notch and home-indicator insets from JavaScript:
+   env() is not exposed to script, but the computed padding of an element that
+   uses it is. useAnchoredPanel measures this. */
+#safe-area-probe {
+  position: fixed;
+  top: 0;
   left: 0;
-  right: auto;
-  width: min(320px, calc(100vw - 28px));
-  max-height: 440px;
+  width: 0;
+  height: 0;
+  visibility: hidden;
+  pointer-events: none;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+
+/* Position, size and height cap all come from useAnchoredPanel as inline
+   styles — they depend on where the bell actually is and how much room is
+   left beside it, which CSS alone cannot work out. Everything here is
+   appearance only. The panel is portalled to <body>, so it is no longer
+   inside .notif-wrap and needs no ancestor to position against. */
+.notif-panel {
+  position: fixed;
   background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
@@ -651,6 +666,11 @@ body::before {
 .notif-list {
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* A flex item defaults to min-height:auto and refuses to shrink below its
+     content, which would push the list past the panel's height cap instead of
+     scrolling inside it — exactly what a short landscape window needs. */
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
 }
 
 .notif-empty {

@@ -52,6 +52,7 @@ import { PLANS, DEFAULT_PLAN } from "./lib/pricing";
 import { UserLabel } from "./Cosmetic";
 import { UnlockGuide } from "./UnlockGuide";
 import { useIsPhone } from "./lib/useIsPhone";
+import { useAnchoredPanel } from "./lib/useAnchoredPanel";
 import { useSocialUpgrades } from "./useSocialUpgrades";
 import {
   ProfileCardModal,
@@ -557,6 +558,10 @@ export default function App() {
   const [notifications, setNotifications] = useState([]);
   const [showNotifs, setShowNotifs] = useState(false);
   const [notifTab, setNotifTab] = useState("notifs"); // notifs | requests
+  // The panel is measured against the bell and portalled to <body>; see
+  // useAnchoredPanel for why it can't simply be absolutely positioned here.
+  const notifBtnRef = useRef(null);
+  const notifStyle = useAnchoredPanel(notifBtnRef, showNotifs);
 
   // games
   const [showGames, setShowGames] = useState(false);
@@ -814,7 +819,16 @@ export default function App() {
   useEffect(() => {
     if (!showNotifs && !showChatMenu) return;
     function onDown(e) {
-      if (showNotifs && !e.target.closest?.(".notif-wrap")) setShowNotifs(false);
+      // `.notif-panel` is checked separately from its wrapper for the same
+      // reason as the chat menu below: it is portalled to <body>, so it is no
+      // longer a descendant of `.notif-wrap` and a tap on one of its own
+      // buttons would otherwise dismiss it before the click landed.
+      if (
+        showNotifs &&
+        !e.target.closest?.(".notif-wrap") &&
+        !e.target.closest?.(".notif-panel")
+      )
+        setShowNotifs(false);
       // `.chat-menu` is checked separately from its wrapper: on a phone the
       // sheet is portaled to <body>, so it is no longer a descendant of
       // `.chat-menu-wrap` and this would close it before a tap on one of its
@@ -2298,10 +2312,12 @@ export default function App() {
           <div className="brand-actions">
             <div className="notif-wrap">
               <button
+                ref={notifBtnRef}
                 className="icon-btn"
                 onClick={() => setShowNotifs((s) => !s)}
                 aria-label="Notifications"
                 title="Notifications & friend requests"
+                aria-expanded={showNotifs}
               >
                 <Bell size={18} />
                 {bellCount > 0 && (
@@ -2309,8 +2325,14 @@ export default function App() {
                 )}
               </button>
 
-              {showNotifs && (
-                <div className="notif-panel">
+              {showNotifs &&
+                createPortal(
+                  <div
+                    className="notif-panel"
+                    // Hidden for the one render before useLayoutEffect has
+                    // measured, so it can never flash at the wrong place.
+                    style={notifStyle || { position: "fixed", visibility: "hidden" }}
+                  >
                   <div className="notif-tabs">
                     <button
                       className={notifTab === "notifs" ? "active" : ""}
@@ -2391,8 +2413,9 @@ export default function App() {
                       ))}
                     </div>
                   )}
-                </div>
-              )}
+                  </div>,
+                  document.body
+                )}
             </div>
 
             {profile?.is_admin && (
