@@ -14,6 +14,32 @@ body,
   height: 100%;
 }
 
+html,
+body {
+  /* Kills the rubber-band bounce past the top and bottom. Layout-neutral. */
+  overscroll-behavior: none;
+  /* Stop iOS resizing text on rotate, which reflows the whole layout. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Deliberately NOT `overflow-x: hidden` on html/body. Setting overflow on one
+   axis makes the other compute to `auto` rather than `visible`, and with
+   `height: 100%` above that turns the document into a fixed-height clipping
+   box — which silently stopped the landing page scrolling past 780px while
+   its content was still 1603px tall. Sideways drift is prevented on the app
+   shell instead, which is the only place that can produce it. */
+.app-shell {
+  overflow-x: hidden;
+}
+
+/* Removes the double-tap-to-zoom gesture (and the 300ms click delay that
+   comes with waiting to see if a second tap is coming). Panning and normal
+   scrolling still work. */
+#root {
+  touch-action: manipulation;
+}
+
 body {
   font-family: "Outfit", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -26,6 +52,7 @@ input,
 textarea {
   font-family: inherit;
 }
+
 /* Shown when a build has no Supabase config — see src/ConfigError.jsx.
    Lives in index.css, not styles.css, because a build broken this early may
    not have got as far as loading the app's stylesheet. */

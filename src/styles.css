@@ -224,6 +224,7 @@ body::before {
 .user-list {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -323,6 +324,7 @@ body::before {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -648,6 +650,7 @@ body::before {
 
 .notif-list {
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .notif-empty {
@@ -823,6 +826,7 @@ body::before {
 
 .giphy-grid {
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px 16px;
   /* masonry-style columns so GIFs keep their natural shape */
   column-count: 4;
@@ -1111,6 +1115,7 @@ body::before {
 .admin-body {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 22px;
   max-width: 880px;
   width: 100%;
@@ -1415,6 +1420,7 @@ body::before {
 .viewas-friends {
   border-right: 1px solid var(--line);
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -1447,6 +1453,7 @@ body::before {
 
 .viewas-thread {
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 22px;
   display: flex;
   flex-direction: column;
@@ -1754,6 +1761,7 @@ body::before {
   max-width: 440px;
   max-height: 88vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
@@ -2154,6 +2162,7 @@ body::before {
   background: var(--panel-2);
   max-height: 160px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .emoji-panel button {
   background: none;
@@ -2458,6 +2467,7 @@ body::before {
   flex-direction: column;
   gap: 4px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   max-height: 40vh;
 }
 .new-group-empty { color: var(--text-dim); font-size: 0.86rem; }
@@ -3548,6 +3558,7 @@ body::before {
   place-items: center;
   padding: 20px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .modal {
@@ -3556,6 +3567,7 @@ body::before {
   max-width: 480px;
   max-height: 88vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 24px;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -3703,6 +3715,7 @@ body::before {
   padding: 12px 10px;
   border-right: 1px solid var(--line);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .settings-nav-item {
@@ -3732,6 +3745,7 @@ body::before {
 .settings-body {
   padding: 6px 22px 22px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   min-height: 0;
 }
 
@@ -4398,6 +4412,7 @@ body::before {
   width: min(94vw, 460px);
   max-height: 88vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--r-lg, 16px);
@@ -4704,3 +4719,71 @@ body::before {
 .msg-footer span { font-size: 0.64rem; }
 .mine .msg-footer span { color: rgba(255, 255, 255, 0.62); }
 .theirs .msg-footer span { color: var(--text-faint); opacity: 0.8; }
+
+/* ============================================================
+   ZOOM AND SCROLL WHERE THEY AREN'T WANTED
+   ============================================================ */
+
+/* Text selection belongs in messages, not on the furniture. Long-pressing a
+   button on a phone was selecting its label and popping up the copy menu. */
+button,
+.user-row,
+.theme-option,
+.cos-chip,
+.settings-nav-item,
+.unlock-row,
+.chat-menu button,
+.streak-pill {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Messages stay selectable — copying what someone said is the point. */
+.bubble p,
+.bubble,
+.msg-content,
+.pin-preview {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Full-screen layers must not let the page behind them move. */
+.settings-overlay,
+.social-overlay,
+.media-viewer,
+.chat-menu-backdrop,
+.sidebar-backdrop {
+  overscroll-behavior: contain;
+  touch-action: none;
+}
+
+/* …but their own scrollable innards still need to scroll. */
+.settings-body,
+.send-later-modal,
+.profile-card-modal,
+.group-manage-modal {
+  touch-action: pan-y;
+}
+
+/* The image in the viewer is the one place a pinch is legitimate. */
+.media-viewer-image {
+  touch-action: pinch-zoom;
+}
+
+/* iOS zooms the viewport when you focus an input whose font-size is under
+   16px, and does not reliably zoom back out afterwards. Every field here was
+   between 14 and 15px, so tapping the message box zoomed the page every
+   single time.
+   
+   Attribute-qualified on purpose: a bare `input` is (0,0,1) and loses to
+   `.composer input` at (0,1,1). `input:not([type="file"])` is itself (0,1,1)
+   — :not() takes its argument's specificity — so it ties and wins on order.
+   Touch devices only; the desktop sizes are deliberate. */
+@media (pointer: coarse) {
+  input:not([type="file"]),
+  textarea:not([disabled]),
+  select:not([disabled]) {
+    font-size: 16px;
+  }
+}
