@@ -4821,3 +4821,142 @@ button,
     font-size: 16px;
   }
 }
+
+/* ── Voice notes ──────────────────────────────────────────────────────────
+   The mic takes the Send button's place when the field is empty, so the
+   composer gains no width — the phone layout only has room for three icons,
+   which an earlier pass established the hard way. */
+.composer .composer-mic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: var(--coral);
+  color: #fff;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.composer .composer-mic:hover { filter: brightness(1.08); }
+
+/* While recording, this replaces the input and Send entirely. */
+.voice-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 22px;
+  background: var(--bg-soft, rgba(255, 255, 255, 0.06));
+}
+.composer .voice-bar .voice-bar-icon,
+.composer .voice-bar .voice-bar-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.composer .voice-bar .voice-bar-icon.danger:hover { color: #ff6b6b; }
+.composer .voice-bar .voice-bar-send { background: var(--coral); color: #fff; }
+.composer .voice-bar .voice-bar-send:disabled { opacity: 0.5; cursor: default; }
+
+.voice-bar-live {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.voice-bar-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ff5c5c;
+  flex: 0 0 auto;
+  animation: voice-pulse 1.1s ease-in-out infinite;
+}
+@keyframes voice-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+.voice-bar-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+  color: var(--text-faint);
+  flex: 0 0 auto;
+}
+.voice-bar-track {
+  flex: 1 1 auto;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+  min-width: 0;
+}
+.voice-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--coral);
+}
+
+/* The bubble. Bars are decorative and seeded from the message id — a real
+   waveform would mean downloading and decoding every note just to scroll. */
+.voice-note {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 180px;
+  max-width: 260px;
+}
+.composer .voice-note .voice-note-btn,
+.voice-note .voice-note-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  color: inherit;
+  cursor: pointer;
+}
+.voice-note.mine .voice-note-btn { background: rgba(0, 0, 0, 0.18); }
+.voice-note-bars {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 26px;
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: pointer;
+}
+.voice-note-bar {
+  flex: 1 1 auto;
+  min-width: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.32;
+}
+.voice-note-bar.on { opacity: 1; }
+.voice-note-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.74rem;
+  opacity: 0.75;
+  flex: 0 0 auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-bar-dot { animation: none; }
+}
