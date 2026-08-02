@@ -969,6 +969,45 @@ export default function App() {
     };
   }, [currentUser]);
 
+  // --- NOTIFICATION TAP ---
+  // sw.js has always posted this message on notificationclick and nothing has
+  // ever listened, so tapping a notification focused the tab and left you
+  // wherever you were. A full navigation rather than setState: the URL is the
+  // thing that opens a specific DM (useUrlSync reads it on load), and this
+  // path runs when the tab may have been backgrounded for hours.
+  useEffect(() => {
+    const go = (url) => {
+      if (!url) return;
+      if (window.location.pathname === url) return;
+      window.location.assign(url);
+    };
+
+    const onSwMessage = (event) => {
+      if (event.data?.type === "notification-click") go(event.data.url);
+    };
+    navigator.serviceWorker?.addEventListener("message", onSwMessage);
+
+    // The native shell gets the equivalent event from the plugin instead.
+    let removeNative;
+    if (isNativeApp) {
+      import("@capacitor/push-notifications")
+        .then(({ PushNotifications }) =>
+          PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
+            go(action.notification?.data?.url);
+          })
+        )
+        .then((handle) => {
+          removeNative = () => handle.remove();
+        })
+        .catch(() => {});
+    }
+
+    return () => {
+      navigator.serviceWorker?.removeEventListener("message", onSwMessage);
+      removeNative?.();
+    };
+  }, []);
+
   // --- NOTIFICATIONS REALTIME ---
   useEffect(() => {
     if (!currentUser) return;

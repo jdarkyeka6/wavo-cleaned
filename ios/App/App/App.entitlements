@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Debug builds run against APNs sandbox. A token minted here is rejected
+	     by api.push.apple.com, which is why send-push has APNS_ENV. -->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>
