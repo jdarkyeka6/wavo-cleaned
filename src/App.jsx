@@ -36,7 +36,16 @@ import {
   Pin,
   Settings as SettingsIcon,
   Clock,
+  Mic,
+  Square,
 } from "lucide-react";
+import VoiceNote from "./VoiceNote";
+import {
+  useVoiceRecorder,
+  voiceSupported,
+  formatDuration,
+  MAX_MS,
+} from "./useVoiceRecorder";
 import {
   registerServiceWorker,
   ensureNotificationPermission,
@@ -491,6 +500,8 @@ export default function App() {
   const [announcement, setAnnouncement] = useState(null);
   // batch 4: file upload
   const [uploadingFile, setUploadingFile] = useState(false);
+  const voice = useVoiceRecorder();
+  const canRecord = voiceSupported();
   const [desktopNotifs, setDesktopNotifs] = useState(
     () => localStorage.getItem("wavo-desktop-notifs") === "on"
   );
@@ -1856,7 +1867,7 @@ export default function App() {
     setCreatingGroup(false);
   }
 
-  async function insertGroupMessage(content, type, fileName = null) {
+  async function insertGroupMessage(content, type, fileName = null, durationMs = null) {
     if (!selectedGroup) return;
     const { error } = await supabase.from("group_messages").insert({
       group_id: selectedGroup.id,
@@ -1864,6 +1875,7 @@ export default function App() {
       content,
       type,
       file_name: fileName,
+      duration_ms: durationMs,
       reply_to: replyingTo?.id || null,
     });
     if (error) alert(error.message);
@@ -1923,7 +1935,7 @@ export default function App() {
     loadGroups();
   }
 
-  async function insertMessage(content, type, fileName = null) {
+  async function insertMessage(content, type, fileName = null, durationMs = null) {
     if (!chatId || !selectedUser) return;
     const { error } = await supabase.from("messages").insert({
       chat_id: chatId,
@@ -1934,9 +1946,119 @@ export default function App() {
       is_read: false,
       reply_to: replyingTo?.id || null,
       file_name: fileName,
+      duration_ms: durationMs,
     });
     if (error) alert(error.message);
     setReplyingTo(null);
+  }
+
+  // While recording (or holding a clip you haven't sent), the text field and
+  // Send button are replaced rather than crowded — the composer only has room
+  // for three icons on a phone, which a previous pass established the hard
+  // way, and a recorder needs cancel, a timer and a send of its own.
+  function voiceBar() {
+    const held = !!voice.clip;
+    return (
+      <div className="voice-bar">
+        <button
+          type="button"
+          className="voice-bar-icon danger"
+          onClick={voice.cancel}
+          aria-label="Discard voice note"
+          title="Discard"
+        >
+          <Trash2 size={17} />
+        </button>
+
+        {held ? (
+          // Hear it back before it goes. A voice note you can't review is a
+          // voice note you record twice.
+          <VoiceNote
+            src={voice.clip.url}
+            durationMs={voice.clip.ms}
+            messageId="draft"
+            mine
+          />
+        ) : (
+          <div className="voice-bar-live">
+            <span className="voice-bar-dot" aria-hidden="true" />
+            <span className="voice-bar-time">{formatDuration(voice.elapsed)}</span>
+            <span className="voice-bar-track" aria-hidden="true">
+              <span
+                className="voice-bar-fill"
+                style={{ width: `${Math.min(100, (voice.elapsed / MAX_MS) * 100)}%` }}
+              />
+            </span>
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="voice-bar-send"
+          onClick={held ? sendVoiceNote : voice.stop}
+          disabled={uploadingFile}
+          aria-label={held ? "Send voice note" : "Stop recording"}
+          title={held ? "Send" : "Stop"}
+        >
+          {held ? <SendHorizontal size={18} /> : <Square size={16} />}
+        </button>
+      </div>
+    );
+  }
+
+  // Send when there's something to send, mic when there isn't. Costs the
+  // composer no width, and it's the gesture people already know.
+  function composerTail() {
+    const hasText = !!messageText.trim();
+    if (!hasText && !editingMsg && canRecord) {
+      return (
+        <button
+          type="button"
+          className="composer-mic"
+          onClick={voice.start}
+          aria-label="Record a voice note"
+          title="Record a voice note"
+        >
+          <Mic size={18} />
+        </button>
+      );
+    }
+    return (
+      <button aria-label={editingMsg ? "Save edit" : "Send message"}>
+        <span className="composer-send-text">{editingMsg ? "Save" : "Send"}</span>
+        <SendHorizontal className="composer-send-icon" size={18} />
+      </button>
+    );
+  }
+
+  // Voice notes ride the same storage bucket and the same insert helpers as
+  // any other attachment — the only thing that makes them special is the
+  // duration, which the browser can't recover from the file afterwards.
+  async function sendVoiceNote() {
+    const clip = voice.clip;
+    if (!clip) return;
+    setUploadingFile(true);
+    try {
+      const folder = selectedGroup ? `group_${selectedGroup.id}` : chatId;
+      const path = `${folder}/${Date.now()}-voice.${clip.ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("chat-files")
+        .upload(path, clip.blob, { contentType: clip.blob.type });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage
+        .from("chat-files")
+        .getPublicUrl(path);
+
+      if (selectedGroup) {
+        await insertGroupMessage(pub.publicUrl, "audio", null, clip.ms);
+      } else {
+        await insertMessage(pub.publicUrl, "audio", null, clip.ms);
+      }
+      voice.reset();
+    } catch (err) {
+      alert("Couldn't send voice note: " + err.message);
+    }
+    setUploadingFile(false);
   }
 
   async function uploadChatFile(e) {
@@ -3433,6 +3555,8 @@ export default function App() {
                             ? "message removed"
                             : repliedTo.type === "image"
                             ? "📷 photo"
+                            : repliedTo.type === "audio"
+                            ? "🎤 voice note"
                             : repliedTo.type === "file"
                             ? `📄 ${repliedTo.file_name || "file"}`
                             : repliedTo.content}
@@ -3459,6 +3583,13 @@ export default function App() {
                           alt="Shared image — open viewer"
                           loading="lazy"
                           onClick={() => setViewerImageId(msg.id)}
+                        />
+                      ) : msg.type === "audio" ? (
+                        <VoiceNote
+                          src={msg.content}
+                          durationMs={msg.duration_ms}
+                          messageId={msg.id}
+                          mine={mine}
                         />
                       ) : msg.type === "file" ? (
                         <a
@@ -3680,6 +3811,8 @@ export default function App() {
                   <span>
                     {replyingTo.type === "image"
                       ? "📷 photo"
+                      : replyingTo.type === "audio"
+                      ? "🎤 voice note"
                       : replyingTo.type === "file"
                       ? `📄 ${replyingTo.file_name || "file"}`
                       : replyingTo.content}
@@ -3754,26 +3887,27 @@ export default function App() {
                   <span className="icon-btn-count">{scheduled.pending.length}</span>
                 )}
               </button>
-              <input
-                value={messageText}
-                onChange={(e) => {
-                  setMessageText(e.target.value);
-                  if (!editingMsg) notifyTyping();
-                }}
-                placeholder={
-                  uploadingFile
-                    ? "Uploading…"
-                    : editingMsg
-                    ? "Edit your message…"
-                    : "Type a message…"
-                }
-              />
-              <button aria-label={editingMsg ? "Save edit" : "Send message"}>
-                <span className="composer-send-text">
-                  {editingMsg ? "Save" : "Send"}
-                </span>
-                <SendHorizontal className="composer-send-icon" size={18} />
-              </button>
+              {voice.recording || voice.clip ? (
+                voiceBar()
+              ) : (
+                <>
+                  <input
+                    value={messageText}
+                    onChange={(e) => {
+                      setMessageText(e.target.value);
+                      if (!editingMsg) notifyTyping();
+                    }}
+                    placeholder={
+                      uploadingFile
+                        ? "Uploading…"
+                        : editingMsg
+                        ? "Edit your message…"
+                        : "Type a message…"
+                    }
+                  />
+                  {composerTail()}
+                </>
+              )}
             </form>
           </>
         ) : selectedGroup ? (
@@ -3917,6 +4051,8 @@ export default function App() {
                             ? "message removed"
                             : repliedTo.type === "image"
                             ? "Image"
+                            : repliedTo.type === "audio"
+                            ? "🎤 voice note"
                             : repliedTo.type === "file"
                             ? `📄 ${repliedTo.file_name || "file"}`
                             : repliedTo.content}
@@ -3943,6 +4079,13 @@ export default function App() {
                           alt="Shared image — open viewer"
                           loading="lazy"
                           onClick={() => setViewerImageId(msg.id)}
+                        />
+                      ) : msg.type === "audio" ? (
+                        <VoiceNote
+                          src={msg.content}
+                          durationMs={msg.duration_ms}
+                          messageId={msg.id}
+                          mine={mine}
                         />
                       ) : msg.type === "file" ? (
                         <a
@@ -4071,6 +4214,8 @@ export default function App() {
                   <span>
                     {replyingTo.type === "image"
                       ? "Image"
+                      : replyingTo.type === "audio"
+                      ? "🎤 voice note"
                       : replyingTo.type === "file"
                       ? `📄 ${replyingTo.file_name || "file"}`
                       : replyingTo.content}
@@ -4130,22 +4275,23 @@ export default function App() {
                   <span className="icon-btn-count">{scheduled.pending.length}</span>
                 )}
               </button>
-              <input
-                value={messageText}
-                onChange={(e) => {
-                  setMessageText(e.target.value);
-                  if (!editingMsg) notifyGroupTyping();
-                }}
-                placeholder={
-                  uploadingFile ? "Uploading…" : "Message the group…"
-                }
-              />
-              <button aria-label={editingMsg ? "Save edit" : "Send message"}>
-                <span className="composer-send-text">
-                  {editingMsg ? "Save" : "Send"}
-                </span>
-                <SendHorizontal className="composer-send-icon" size={18} />
-              </button>
+              {voice.recording || voice.clip ? (
+                voiceBar()
+              ) : (
+                <>
+                  <input
+                    value={messageText}
+                    onChange={(e) => {
+                      setMessageText(e.target.value);
+                      if (!editingMsg) notifyGroupTyping();
+                    }}
+                    placeholder={
+                      uploadingFile ? "Uploading…" : "Message the group…"
+                    }
+                  />
+                  {composerTail()}
+                </>
+              )}
             </form>
           </>
         ) : (
