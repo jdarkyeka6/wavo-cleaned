@@ -97,6 +97,21 @@ const CHECKOUT_RETURN =
 // Add your own usernames here (e.g. "admin", "jake").
 const SWITCHER_USERS = ["admin"];
 
+// Render text with clickable links
+function renderTextWithLinks(text) {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, i) =>
+    urlRegex.test(part) ? (
+      <a key={i} href={part} target="_blank" rel="noreferrer">
+        {part}
+      </a>
+    ) : (
+      part
+    )
+  );
+}
+
 // Reject keyboard-mash / junk names while allowing real ones.
 const NAME_BLOCKLIST = [
   "test", "testing", "asdf", "asdfgh", "qwer", "qwerty", "zxcv", "wasd",
@@ -2064,8 +2079,9 @@ export default function App() {
   async function uploadChatFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      alert("That file is too big (max 10 MB).");
+    const maxSize = isPremium ? 100 : 10;
+    if (file.size > maxSize * 1024 * 1024) {
+      alert(`That file is too big (max ${maxSize} MB).`);
       e.target.value = "";
       return;
     }
@@ -3606,7 +3622,7 @@ export default function App() {
                           <Download size={15} />
                         </a>
                       ) : (
-                        <p>{msg.content}</p>
+                        <p>{renderTextWithLinks(msg.content)}</p>
                       )}
                       {!deleted && (endsRun || showReceipt) && (
                         <div className="msg-footer">
@@ -4102,7 +4118,7 @@ export default function App() {
                           <Download size={15} />
                         </a>
                       ) : (
-                        <p>{msg.content}</p>
+                        <p>{renderTextWithLinks(msg.content)}</p>
                       )}
                       {!deleted && endsRun && (
                         <div className="msg-footer">
