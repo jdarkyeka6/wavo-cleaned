@@ -354,6 +354,21 @@ body::before {
   word-break: break-word;
 }
 
+/* Links in a message inherit the bubble's colour instead of taking the
+   browser's blue: a sent bubble is a coral gradient with white text, and blue
+   on coral is close to unreadable. The underline is what marks it as a link,
+   so it has to stay. */
+.bubble p a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
+.bubble p a:hover {
+  text-decoration-thickness: 2px;
+}
+
 .mine .bubble {
   background: linear-gradient(135deg, var(--coral), #ff8467);
   color: white;
