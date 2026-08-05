@@ -97,12 +97,20 @@ const CHECKOUT_RETURN =
 // Add your own usernames here (e.g. "admin", "jake").
 const SWITCHER_USERS = ["admin"];
 
-// Render text with clickable links
+// Turn the URLs inside a message into links, leaving the rest as plain text.
+//
+// split() with a capturing group hands back [text, url, text, url, …], so the
+// odd indices are the matches — cheaper and more reliable than re-testing each
+// piece, since a /g regex carries lastIndex between calls and would answer
+// differently for the same string depending on what was asked before it.
+// The tail class keeps a trailing "." or ")" out of the href, so "see
+// https://wavo.app." links to the site rather than to a 404 with a full stop.
+const URL_RE = /(https?:\/\/[^\s<]*[^\s<.,:;"')\]}])/g;
+
 function renderTextWithLinks(text) {
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  const parts = text.split(urlRegex);
-  return parts.map((part, i) =>
-    urlRegex.test(part) ? (
+  if (!text) return text;
+  return text.split(URL_RE).map((part, i) =>
+    i % 2 === 1 ? (
       <a key={i} href={part} target="_blank" rel="noreferrer">
         {part}
       </a>
