@@ -1424,28 +1424,97 @@ export default function App() {
   }
 
   // --- AVATAR UPLOAD ---
+
+  // An avatar is drawn at 40–96px and never larger. A photo straight off a
+  // phone is 3–12 MB of detail nobody sees, and sending it whole is what makes
+  // this fail on a weak connection.
+  //
+  // Re-encoding solves three things at once that guarding separately would not:
+  // the size drops to a few tens of KB, the output is always JPEG (iPhones hand
+  // over HEIC, which most browsers will not draw), and the object key stops
+  // depending on what the file happened to be called.
+  async function toAvatarBlob(file) {
+    // imageOrientation honours the EXIF rotation flag, without which photos
+    // taken in portrait upload sideways.
+    const bitmap = await createImageBitmap(file, {
+      imageOrientation: "from-image",
+    });
+    const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
+    bitmap.close?.();
+
+    const blob = await new Promise((res) =>
+      canvas.toBlob(res, "image/jpeg", 0.9)
+    );
+    if (!blob) throw new Error("this image couldn't be processed");
+    return blob;
+  }
+
   async function uploadAvatar(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Reset the input now rather than at the end: picking the same file twice
+    // in a row fires no change event otherwise, so a failed upload could not be
+    // retried with the same photo.
+    e.target.value = "";
     setUploadingAvatar(true);
+
+    // The upload and the refresh that follows it fail for different reasons and
+    // must not share a message — reporting "couldn't upload" after the picture
+    // is already saved sends people back to do it again.
+    let saved = false;
     try {
-      const ext = (file.name.split(".").pop() || "png").toLowerCase();
-      const path = `${currentUser.id}.${ext}`;
+      // 40 MB of camera roll never becomes a 96px circle worth waiting for, and
+      // decoding one on a phone is what actually falls over.
+      if (file.size > 25 * 1024 * 1024) {
+        throw new Error("that picture is too big (25 MB max)");
+      }
+      const blob = await toAvatarBlob(file);
+
+      // One key per person, always .jpg, because toAvatarBlob only ever
+      // produces JPEG. The old code keyed on the uploaded file's extension, so
+      // changing format left the previous avatar behind as an orphan — the
+      // bucket still holds three files for one user from exactly that.
+      const path = `${currentUser.id}.jpg`;
       const { error: upErr } = await supabase.storage
         .from("avatars")
-        .upload(path, file, { upsert: true });
+        .upload(path, blob, {
+          upsert: true,
+          contentType: "image/jpeg",
+          cacheControl: "3600",
+        });
       if (upErr) throw upErr;
+
       const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
+      // Now that the path is stable the cache-buster is load-bearing: same URL,
+      // new bytes. It is stored on the profile, so everyone else's next read
+      // gets a URL the CDN treats as new.
       const url = `${pub.publicUrl}?t=${Date.now()}`;
       const { error: rpcErr } = await supabase.rpc("set_avatar", { url });
       if (rpcErr) throw rpcErr;
-      await loadProfile();
-      await loadFriends();
+      saved = true;
     } catch (err) {
-      alert("Couldn't upload picture: " + err.message);
+      // Storage errors carry the useful part in statusCode/error rather than
+      // message, and "Couldn't upload picture: undefined" told nobody anything.
+      const detail =
+        err?.message || err?.error || err?.statusCode || "unknown error";
+      alert(`Couldn't upload picture: ${detail}`);
     }
     setUploadingAvatar(false);
-    e.target.value = "";
+
+    // Outside the try: a refresh that fails leaves the new picture saved and
+    // showing on the next load, which is not worth an error box.
+    if (saved) {
+      await loadProfile();
+      await loadFriends();
+    }
   }
 
   // --- SETTINGS ---
