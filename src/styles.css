@@ -4,6 +4,11 @@
    ============================================================ */
 
 :root {
+  /* The app is dark unless a light theme says otherwise. Native controls —
+     date pickers, scrollbars, autofill — read this and would otherwise render
+     light-on-dark. */
+  color-scheme: dark;
+
   /* surfaces */
   --bg:         #14131f;
   --bg-deep:    #0d0c15;
@@ -25,6 +30,15 @@
   --amber:      #FFB454;
   --read:       #4FB8FF;   /* read-receipt blue */
   --online:     #4ADE80;
+
+  /* Overlays tinted for a dark canvas. Anything that lightens a surface
+     rather than colouring it goes through these, so a light theme can flip
+     them once instead of every component fighting its background. Flipped in
+     the light-theme block further down. */
+  --ring:        rgba(255, 255, 255, 0.15);  /* hairline around a swatch */
+  --fill-soft:   rgba(255, 255, 255, 0.06);
+  --fill:        rgba(255, 255, 255, 0.14);
+  --fill-strong: rgba(255, 255, 255, 0.16);
 
   /* effects */
   --glass:      blur(16px) saturate(140%);
@@ -352,6 +366,21 @@ body::before {
   margin: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+/* Links in a message inherit the bubble's colour instead of taking the
+   browser's blue: a sent bubble is a coral gradient with white text, and blue
+   on coral is close to unreadable. The underline is what marks it as a link,
+   so it has to stay. */
+.bubble p a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
+.bubble p a:hover {
+  text-decoration-thickness: 2px;
 }
 
 .mine .bubble {
@@ -1743,7 +1772,7 @@ body::before {
   height: 18px;
   border-radius: 50%;
   flex-shrink: 0;
-  border: 1px solid rgba(255,255,255,0.15);
+  border: 1px solid var(--ring);
 }
 
 /* ============================================================
@@ -2557,8 +2586,12 @@ body::before {
   letter-spacing: 0.06em;
   margin: 2px 0 -4px 4px;
 }
-.auth-date { color-scheme: dark; }
-[data-theme="daylight"] .auth-date { color-scheme: light; }
+/* Native date pickers, scrollbars and autofill follow color-scheme, which is
+   an inherited property — :root declares dark, the light-theme block declares
+   light, and this just takes whichever is in force. It used to be pinned to
+   dark with a single [data-theme="daylight"] exception, which would have
+   needed a new selector for every light theme added. */
+.auth-date { color-scheme: inherit; }
 
 /* ============================================================
    STEP 10 — UNLOCKABLE THEMES
@@ -3986,6 +4019,111 @@ body::before {
 }
 
 /* ============================================================
+   LIGHT THEMES
+   Daylight was the only one of these, which meant that liking light mode
+   cost you the whole reward catalogue — every streak and premium theme was
+   dark, so there was nothing to work towards and nothing to buy. These are
+   the same three tiers again, on a light canvas.
+
+   A light palette has to override more than a dark one: the base :root is
+   dark, so --line, --text*, the overlays and the shadows all have to be
+   restated or the theme inherits white-on-white.
+   ============================================================ */
+
+/* Everything that assumes a dark canvas, flipped once for every light theme.
+   A new light theme must be added to this list as well as getting a palette,
+   or its swatch rings and voice-note controls come out invisible. */
+[data-theme="daylight"],
+[data-theme="parchment"],
+[data-theme="porcelain"],
+[data-theme="meadow"],
+[data-theme="blossom"],
+[data-theme="linen"],
+[data-theme="arctic"] {
+  --ring:        rgba(0, 0, 0, 0.18);
+  --fill-soft:   rgba(0, 0, 0, 0.05);
+  --fill:        rgba(0, 0, 0, 0.12);
+  --fill-strong: rgba(0, 0, 0, 0.10);
+  /* Native scrollbars, date pickers and autofill follow this. It inherits, so
+     .auth-date no longer needs a per-theme rule of its own. */
+  color-scheme: light;
+}
+
+/* ── PARCHMENT · warm paper, sepia ink (free) ── */
+[data-theme="parchment"] {
+  --bg:#F6F1E6; --bg-deep:#FFFCF5; --on-accent:#FFFCF5;
+  --panel:#FFFCF5; --panel-2:#F0E9DA; --card:#FBF7EE;
+  --line:rgba(60,45,20,.12); --line-soft:rgba(60,45,20,.06);
+  --text:#2A2318; --text-dim:#6A5E4C; --text-faint:#968A76;
+  --coral:#B4502F; --coral-soft:rgba(180,80,47,.12); --amber:#A8720E;
+  --read:#2C74B8; --online:#2F7D45;
+  --shadow-lg:0 24px 48px -12px rgba(90,70,30,.18);
+  --shadow-sm:0 4px 16px -4px rgba(90,70,30,.12);
+}
+
+/* ── PORCELAIN · cool blue-grey, crisp (free) ── */
+[data-theme="porcelain"] {
+  --bg:#EDF1F7; --bg-deep:#FFFFFF; --on-accent:#FFFFFF;
+  --panel:#FFFFFF; --panel-2:#E4EAF3; --card:#F7F9FC;
+  --line:rgba(20,35,60,.11); --line-soft:rgba(20,35,60,.05);
+  --text:#1B2430; --text-dim:#586576; --text-faint:#7B8695;
+  --coral:#2E63C8; --coral-soft:rgba(46,99,200,.11); --amber:#0E7490;
+  --read:#1F6FB8; --online:#177A4C;
+  --shadow-lg:0 24px 48px -12px rgba(30,50,90,.16);
+  --shadow-sm:0 4px 16px -4px rgba(30,50,90,.10);
+}
+
+/* ── MEADOW · soft green (earned: 7 day streak) ──
+   Deliberately the same milestone as Ember, the 7-day dark theme, so the
+   first streak reward exists on both canvases. */
+[data-theme="meadow"] {
+  --bg:#EDF4EA; --bg-deep:#FBFDF9; --on-accent:#FBFDF9;
+  --panel:#FBFDF9; --panel-2:#E3EEDF; --card:#F4F9F2;
+  --line:rgba(25,55,25,.12); --line-soft:rgba(25,55,25,.06);
+  --text:#1B2A1B; --text-dim:#546A52; --text-faint:#758C73;
+  --coral:#2E7D4F; --coral-soft:rgba(46,125,79,.12); --amber:#6B8E23;
+  --read:#2C74B8; --online:#1F7A3D;
+  --shadow-lg:0 24px 48px -12px rgba(30,70,30,.16);
+  --shadow-sm:0 4px 16px -4px rgba(30,70,30,.10);
+}
+
+/* ── BLOSSOM · pale rose (earned: 14 day streak) ── */
+[data-theme="blossom"] {
+  --bg:#FBEFF2; --bg-deep:#FFFAFB; --on-accent:#FFFAFB;
+  --panel:#FFFAFB; --panel-2:#F6E3E9; --card:#FDF5F7;
+  --line:rgba(70,25,40,.11); --line-soft:rgba(70,25,40,.05);
+  --text:#2B1A20; --text-dim:#6D5259; --text-faint:#9E8288;
+  --coral:#BE185D; --coral-soft:rgba(190,24,93,.10); --amber:#B45309;
+  --read:#2C74B8; --online:#2F7D45;
+  --shadow-lg:0 24px 48px -12px rgba(100,40,60,.16);
+  --shadow-sm:0 4px 16px -4px rgba(100,40,60,.10);
+}
+
+/* ── LINEN · off-white and gold (premium) ── */
+[data-theme="linen"] {
+  --bg:#F3F0E9; --bg-deep:#FDFCF8; --on-accent:#FDFCF8;
+  --panel:#FDFCF8; --panel-2:#EAE5DA; --card:#F9F7F1;
+  --line:rgba(60,50,25,.12); --line-soft:rgba(60,50,25,.06);
+  --text:#221E17; --text-dim:#665D4C; --text-faint:#8A806D;
+  --coral:#9A6B1F; --coral-soft:rgba(154,107,31,.12); --amber:#B8862B;
+  --read:#2C74B8; --online:#2F7D45;
+  --shadow-lg:0 24px 48px -12px rgba(80,65,25,.18);
+  --shadow-sm:0 4px 16px -4px rgba(80,65,25,.11);
+}
+
+/* ── ARCTIC · icy white-blue (premium) ── */
+[data-theme="arctic"] {
+  --bg:#EBF5F9; --bg-deep:#FDFEFF; --on-accent:#FDFEFF;
+  --panel:#FDFEFF; --panel-2:#E0EDF3; --card:#F4FAFC;
+  --line:rgba(10,45,60,.11); --line-soft:rgba(10,45,60,.05);
+  --text:#10262E; --text-dim:#4B6570; --text-faint:#6F8992;
+  --coral:#0E6E88; --coral-soft:rgba(14,110,136,.11); --amber:#0891B2;
+  --read:#1F6FB8; --online:#177A4C;
+  --shadow-lg:0 24px 48px -12px rgba(15,60,80,.16);
+  --shadow-sm:0 4px 16px -4px rgba(15,60,80,.10);
+}
+
+/* ============================================================
    GRADIENT NAME STYLES
    A name colour is one CSS property, which caps how special the top
    rewards can feel. A cosmetic may now carry payload.gradient (any CSS
@@ -4176,7 +4314,7 @@ body::before {
   height: 15px;
   border-radius: 50%;
   flex-shrink: 0;
-  border: 1px solid rgba(255,255,255,0.15);
+  border: 1px solid var(--ring);
 }
 .unlock-emoji {
   width: 15px;
@@ -4850,7 +4988,7 @@ button,
   min-width: 0;
   padding: 4px 6px;
   border-radius: 22px;
-  background: var(--bg-soft, rgba(255, 255, 255, 0.06));
+  background: var(--fill-soft);
 }
 .composer .voice-bar .voice-bar-icon,
 .composer .voice-bar .voice-bar-send {
@@ -4899,7 +5037,7 @@ button,
   flex: 1 1 auto;
   height: 3px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--fill);
   overflow: hidden;
   min-width: 0;
 }
@@ -4928,7 +5066,7 @@ button,
   flex: 0 0 auto;
   border: none;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--fill-strong);
   color: inherit;
   cursor: pointer;
 }
@@ -4959,4 +5097,118 @@ button,
 
 @media (prefers-reduced-motion: reduce) {
   .voice-bar-dot { animation: none; }
+}
+
+/* ============================================================
+   AVATAR CROPPER
+   ============================================================ */
+
+.modal.crop-modal { max-width: 380px; padding: 22px; }
+
+.crop-title {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.crop-hint {
+  margin: 0 0 14px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+/* Square by definition — the crop is a square region and the frame has to be
+   the same shape as the thing being chosen, or the preview lies. */
+.crop-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-deep);
+  cursor: grab;
+  /* Without this the browser claims the gesture and pans the page instead of
+     the image, which makes dragging on a phone impossible. */
+  touch-action: none;
+  user-select: none;
+}
+.crop-frame:active { cursor: grabbing; }
+
+.crop-canvas { display: block; width: 100%; height: 100%; }
+
+/* The circle. A ring of shadow rather than a real hole, so there is nothing
+   stacked over the image that could intercept a pointer. */
+.crop-mask {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 12px;
+  box-shadow:
+    inset 0 0 0 9999px rgba(0, 0, 0, 0.5);
+  -webkit-mask: radial-gradient(circle at 50% 50%, transparent 49.5%, #000 50%);
+  mask: radial-gradient(circle at 50% 50%, transparent 49.5%, #000 50%);
+}
+/* The rim, drawn on top of the dimming so the edge stays legible on a light
+   photo as well as a dark one. */
+.crop-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+
+.crop-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.crop-error {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  color: var(--coral);
+}
+
+.crop-zoom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+.crop-zoom input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--coral);
+}
+
+.crop-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.crop-icon-btn:hover:not(:disabled) { border-color: var(--coral); color: var(--coral); }
+.crop-icon-btn:disabled { opacity: 0.45; cursor: default; }
+
+.crop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+@media (max-width: 420px) {
+  .modal.crop-modal { padding: 18px 14px; }
 }

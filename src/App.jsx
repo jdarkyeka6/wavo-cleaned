@@ -40,6 +40,7 @@ import {
   Square,
 } from "lucide-react";
 import VoiceNote from "./VoiceNote";
+import AvatarCropper from "./AvatarCropper";
 import {
   useVoiceRecorder,
   voiceSupported,
@@ -96,6 +97,29 @@ const CHECKOUT_RETURN =
 // remembered on the device — everyone else's password is never stored.
 // Add your own usernames here (e.g. "admin", "jake").
 const SWITCHER_USERS = ["admin"];
+
+// Turn the URLs inside a message into links, leaving the rest as plain text.
+//
+// split() with a capturing group hands back [text, url, text, url, …], so the
+// odd indices are the matches — cheaper and more reliable than re-testing each
+// piece, since a /g regex carries lastIndex between calls and would answer
+// differently for the same string depending on what was asked before it.
+// The tail class keeps a trailing "." or ")" out of the href, so "see
+// https://wavo.app." links to the site rather than to a 404 with a full stop.
+const URL_RE = /(https?:\/\/[^\s<]*[^\s<.,:;"')\]}])/g;
+
+function renderTextWithLinks(text) {
+  if (!text) return text;
+  return text.split(URL_RE).map((part, i) =>
+    i % 2 === 1 ? (
+      <a key={i} href={part} target="_blank" rel="noreferrer">
+        {part}
+      </a>
+    ) : (
+      part
+    )
+  );
+}
 
 // Reject keyboard-mash / junk names while allowing real ones.
 const NAME_BLOCKLIST = [
@@ -328,6 +352,8 @@ export default function App() {
 
   // avatar upload
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  // The photo waiting to be framed. Non-null while the cropper is open.
+  const [cropFile, setCropFile] = useState(null);
 
   // theme
   const [theme, setTheme] = useState(
@@ -1401,28 +1427,74 @@ export default function App() {
   }
 
   // --- AVATAR UPLOAD ---
-  async function uploadAvatar(e) {
+
+  // Picking a file no longer uploads it. It opens the cropper, which hands back
+  // a finished 512px JPEG — so the framing is the user's choice rather than
+  // whatever the middle of their photo happened to be.
+  function pickAvatar(e) {
     const file = e.target.files?.[0];
+    // Reset the input now rather than later: picking the same file twice in a
+    // row fires no change event otherwise, so cancelling a crop would make that
+    // photo unpickable until you chose a different one.
+    e.target.value = "";
     if (!file) return;
+    // 25 MB of camera roll never becomes a 96px circle worth waiting for, and
+    // decoding one on a phone is the part that actually falls over.
+    if (file.size > 25 * 1024 * 1024) {
+      alert("That picture is too big (25 MB max).");
+      return;
+    }
+    setCropFile(file);
+  }
+
+  async function saveAvatarBlob(blob) {
     setUploadingAvatar(true);
+
+    // The upload and the refresh that follows it fail for different reasons and
+    // must not share a message — reporting "couldn't upload" after the picture
+    // is already saved sends people back to do it again.
+    let saved = false;
     try {
-      const ext = (file.name.split(".").pop() || "png").toLowerCase();
-      const path = `${currentUser.id}.${ext}`;
+      // One key per person, always .jpg, because the cropper only ever produces
+      // JPEG. The old code keyed on the uploaded file's extension, so changing
+      // format left the previous avatar behind as an orphan — the bucket still
+      // holds three files for one user from exactly that.
+      const path = `${currentUser.id}.jpg`;
       const { error: upErr } = await supabase.storage
         .from("avatars")
-        .upload(path, file, { upsert: true });
+        .upload(path, blob, {
+          upsert: true,
+          contentType: "image/jpeg",
+          cacheControl: "3600",
+        });
       if (upErr) throw upErr;
+
       const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
+      // Now that the path is stable the cache-buster is load-bearing: same URL,
+      // new bytes. It is stored on the profile, so everyone else's next read
+      // gets a URL the CDN treats as new.
       const url = `${pub.publicUrl}?t=${Date.now()}`;
       const { error: rpcErr } = await supabase.rpc("set_avatar", { url });
       if (rpcErr) throw rpcErr;
-      await loadProfile();
-      await loadFriends();
+      saved = true;
     } catch (err) {
-      alert("Couldn't upload picture: " + err.message);
+      // Storage errors carry the useful part in statusCode/error rather than
+      // message, and "Couldn't upload picture: undefined" told nobody anything.
+      const detail =
+        err?.message || err?.error || err?.statusCode || "unknown error";
+      alert(`Couldn't upload picture: ${detail}`);
     }
     setUploadingAvatar(false);
-    e.target.value = "";
+
+    // Outside the try: a refresh that fails leaves the new picture saved and
+    // showing on the next load, which is not worth an error box.
+    if (saved) {
+      setCropFile(null);
+      await loadProfile();
+      await loadFriends();
+    }
+    // On failure the cropper stays open with the crop intact, so a retry
+    // doesn't mean framing the photo again.
   }
 
   // --- SETTINGS ---
@@ -2064,8 +2136,9 @@ export default function App() {
   async function uploadChatFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      alert("That file is too big (max 10 MB).");
+    const maxSize = isPremium ? 100 : 10;
+    if (file.size > maxSize * 1024 * 1024) {
+      alert(`That file is too big (max ${maxSize} MB).`);
       e.target.value = "";
       return;
     }
@@ -2618,7 +2691,7 @@ export default function App() {
           type="file"
           accept="image/*"
           hidden
-          onChange={uploadAvatar}
+          onChange={pickAvatar}
         />
 
         {/* Add-a-friend search */}
@@ -3606,7 +3679,7 @@ export default function App() {
                           <Download size={15} />
                         </a>
                       ) : (
-                        <p>{msg.content}</p>
+                        <p>{renderTextWithLinks(msg.content)}</p>
                       )}
                       {!deleted && (endsRun || showReceipt) && (
                         <div className="msg-footer">
@@ -4102,7 +4175,7 @@ export default function App() {
                           <Download size={15} />
                         </a>
                       ) : (
-                        <p>{msg.content}</p>
+                        <p>{renderTextWithLinks(msg.content)}</p>
                       )}
                       {!deleted && endsRun && (
                         <div className="msg-footer">
@@ -4398,6 +4471,16 @@ export default function App() {
             </button>
           )}
         </div>
+      )}
+
+      {/* Framing the avatar. Sits above Settings, which is where it's opened
+          from, and unmounts on cancel so the decoded bitmap is released. */}
+      {cropFile && (
+        <AvatarCropper
+          file={cropFile}
+          onCancel={() => setCropFile(null)}
+          onSave={saveAvatarBlob}
+        />
       )}
 
       {/* ---- social layers: profile card, media viewer, group management ---- */}
