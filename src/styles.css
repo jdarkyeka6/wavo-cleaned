@@ -5098,3 +5098,117 @@ button,
 @media (prefers-reduced-motion: reduce) {
   .voice-bar-dot { animation: none; }
 }
+
+/* ============================================================
+   AVATAR CROPPER
+   ============================================================ */
+
+.modal.crop-modal { max-width: 380px; padding: 22px; }
+
+.crop-title {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.crop-hint {
+  margin: 0 0 14px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+/* Square by definition — the crop is a square region and the frame has to be
+   the same shape as the thing being chosen, or the preview lies. */
+.crop-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-deep);
+  cursor: grab;
+  /* Without this the browser claims the gesture and pans the page instead of
+     the image, which makes dragging on a phone impossible. */
+  touch-action: none;
+  user-select: none;
+}
+.crop-frame:active { cursor: grabbing; }
+
+.crop-canvas { display: block; width: 100%; height: 100%; }
+
+/* The circle. A ring of shadow rather than a real hole, so there is nothing
+   stacked over the image that could intercept a pointer. */
+.crop-mask {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 12px;
+  box-shadow:
+    inset 0 0 0 9999px rgba(0, 0, 0, 0.5);
+  -webkit-mask: radial-gradient(circle at 50% 50%, transparent 49.5%, #000 50%);
+  mask: radial-gradient(circle at 50% 50%, transparent 49.5%, #000 50%);
+}
+/* The rim, drawn on top of the dimming so the edge stays legible on a light
+   photo as well as a dark one. */
+.crop-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+
+.crop-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.crop-error {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  color: var(--coral);
+}
+
+.crop-zoom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+.crop-zoom input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--coral);
+}
+
+.crop-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.crop-icon-btn:hover:not(:disabled) { border-color: var(--coral); color: var(--coral); }
+.crop-icon-btn:disabled { opacity: 0.45; cursor: default; }
+
+.crop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+@media (max-width: 420px) {
+  .modal.crop-modal { padding: 18px 14px; }
+}

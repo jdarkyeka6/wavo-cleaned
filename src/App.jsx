@@ -40,6 +40,7 @@ import {
   Square,
 } from "lucide-react";
 import VoiceNote from "./VoiceNote";
+import AvatarCropper from "./AvatarCropper";
 import {
   useVoiceRecorder,
   voiceSupported,
@@ -351,6 +352,8 @@ export default function App() {
 
   // avatar upload
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  // The photo waiting to be framed. Non-null while the cropper is open.
+  const [cropFile, setCropFile] = useState(null);
 
   // theme
   const [theme, setTheme] = useState(
@@ -1425,45 +1428,26 @@ export default function App() {
 
   // --- AVATAR UPLOAD ---
 
-  // An avatar is drawn at 40–96px and never larger. A photo straight off a
-  // phone is 3–12 MB of detail nobody sees, and sending it whole is what makes
-  // this fail on a weak connection.
-  //
-  // Re-encoding solves three things at once that guarding separately would not:
-  // the size drops to a few tens of KB, the output is always JPEG (iPhones hand
-  // over HEIC, which most browsers will not draw), and the object key stops
-  // depending on what the file happened to be called.
-  async function toAvatarBlob(file) {
-    // imageOrientation honours the EXIF rotation flag, without which photos
-    // taken in portrait upload sideways.
-    const bitmap = await createImageBitmap(file, {
-      imageOrientation: "from-image",
-    });
-    const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
-    const w = Math.max(1, Math.round(bitmap.width * scale));
-    const h = Math.max(1, Math.round(bitmap.height * scale));
-
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
-    bitmap.close?.();
-
-    const blob = await new Promise((res) =>
-      canvas.toBlob(res, "image/jpeg", 0.9)
-    );
-    if (!blob) throw new Error("this image couldn't be processed");
-    return blob;
+  // Picking a file no longer uploads it. It opens the cropper, which hands back
+  // a finished 512px JPEG — so the framing is the user's choice rather than
+  // whatever the middle of their photo happened to be.
+  function pickAvatar(e) {
+    const file = e.target.files?.[0];
+    // Reset the input now rather than later: picking the same file twice in a
+    // row fires no change event otherwise, so cancelling a crop would make that
+    // photo unpickable until you chose a different one.
+    e.target.value = "";
+    if (!file) return;
+    // 25 MB of camera roll never becomes a 96px circle worth waiting for, and
+    // decoding one on a phone is the part that actually falls over.
+    if (file.size > 25 * 1024 * 1024) {
+      alert("That picture is too big (25 MB max).");
+      return;
+    }
+    setCropFile(file);
   }
 
-  async function uploadAvatar(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Reset the input now rather than at the end: picking the same file twice
-    // in a row fires no change event otherwise, so a failed upload could not be
-    // retried with the same photo.
-    e.target.value = "";
+  async function saveAvatarBlob(blob) {
     setUploadingAvatar(true);
 
     // The upload and the refresh that follows it fail for different reasons and
@@ -1471,17 +1455,10 @@ export default function App() {
     // is already saved sends people back to do it again.
     let saved = false;
     try {
-      // 40 MB of camera roll never becomes a 96px circle worth waiting for, and
-      // decoding one on a phone is what actually falls over.
-      if (file.size > 25 * 1024 * 1024) {
-        throw new Error("that picture is too big (25 MB max)");
-      }
-      const blob = await toAvatarBlob(file);
-
-      // One key per person, always .jpg, because toAvatarBlob only ever
-      // produces JPEG. The old code keyed on the uploaded file's extension, so
-      // changing format left the previous avatar behind as an orphan — the
-      // bucket still holds three files for one user from exactly that.
+      // One key per person, always .jpg, because the cropper only ever produces
+      // JPEG. The old code keyed on the uploaded file's extension, so changing
+      // format left the previous avatar behind as an orphan — the bucket still
+      // holds three files for one user from exactly that.
       const path = `${currentUser.id}.jpg`;
       const { error: upErr } = await supabase.storage
         .from("avatars")
@@ -1512,9 +1489,12 @@ export default function App() {
     // Outside the try: a refresh that fails leaves the new picture saved and
     // showing on the next load, which is not worth an error box.
     if (saved) {
+      setCropFile(null);
       await loadProfile();
       await loadFriends();
     }
+    // On failure the cropper stays open with the crop intact, so a retry
+    // doesn't mean framing the photo again.
   }
 
   // --- SETTINGS ---
@@ -2711,7 +2691,7 @@ export default function App() {
           type="file"
           accept="image/*"
           hidden
-          onChange={uploadAvatar}
+          onChange={pickAvatar}
         />
 
         {/* Add-a-friend search */}
@@ -4491,6 +4471,16 @@ export default function App() {
             </button>
           )}
         </div>
+      )}
+
+      {/* Framing the avatar. Sits above Settings, which is where it's opened
+          from, and unmounts on cancel so the decoded bitmap is released. */}
+      {cropFile && (
+        <AvatarCropper
+          file={cropFile}
+          onCancel={() => setCropFile(null)}
+          onSave={saveAvatarBlob}
+        />
       )}
 
       {/* ---- social layers: profile card, media viewer, group management ---- */}
