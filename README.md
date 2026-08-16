@@ -1,16 +1,51 @@
-# React + Vite
+Wavo
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Wavo is a social messaging platform built around conversations, groups, profiles, media sharing and interactive features.
 
-Currently, two official plugins are available:
+ 🌊 What is Wavo?
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Wavo is designed to be more than a basic messenger. It combines messaging with social features, group experiences and tools for sharing and communicating across web and mobile.
 
-## React Compiler
+✨ Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+* Direct messaging
+* Group chats
+* User profiles
+* Media sharing
+* Voice features
+* Message links
+* Drafts
+* Pins
+* Support accounts
+* Light and dark themes
+* Avatar uploads and cropping
+* Web and iOS support
 
-## Expanding the ESLint configuration
+More features are actively being developed.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+🛠 Tech Stack
+
+* React
+* Vite
+* JavaScript
+* Supabase
+* Capacitor
+* Vercel
+* GitHub Actions
+
+📱 Platforms
+
+Wavo is being developed for:
+
+* Web
+* iOS
+
+🚀 Development
+
+This repository contains the current Wavo application.
+
+The project is actively maintained and updated with new features, improvements and fixes.
+
+🌐 Live App
+
+wavo.lol
