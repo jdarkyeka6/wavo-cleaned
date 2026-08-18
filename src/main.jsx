@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.jsx'
 import ConfigError from './ConfigError.jsx'
+import NotificationSetup from './NotificationSetup.jsx'
 import { isConfigured } from './lib/config'
 
 // A build with no Supabase config cannot work, and used to fail by throwing
@@ -14,6 +15,7 @@ createRoot(document.getElementById('root')).render(
     {isConfigured ? (
       <BrowserRouter>
         <App />
+        <NotificationSetup />
       </BrowserRouter>
     ) : (
       <ConfigError />
