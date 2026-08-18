@@ -1,16 +1,6 @@
-// send-push — turns one notification row into pushes on every device the user
-// has registered, web and iOS.
-//
-// Called by the on_notification_push trigger (see the push_notifications
-// migration) with nothing but an id. The row is read back here with the service
-// role, so the caller can't choose what gets sent to whom — the worst a leaked
-// secret buys is re-delivering a notification that already exists.
-
 import webpush from "npm:web-push@3.6.7";
 import { SignJWT, importPKCS8 } from "npm:jose@5.9.6";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-
-const HOOK_SECRET = Deno.env.get("PUSH_HOOK_SECRET") ?? "";
 
 const VAPID_PUBLIC = Deno.env.get("VAPID_PUBLIC_KEY") ?? "";
 const VAPID_PRIVATE = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
@@ -20,30 +10,34 @@ const APNS_KEY_P8 = Deno.env.get("APNS_KEY_P8") ?? "";
 const APNS_KEY_ID = Deno.env.get("APNS_KEY_ID") ?? "";
 const APNS_TEAM_ID = Deno.env.get("APNS_TEAM_ID") ?? "";
 const APNS_TOPIC = Deno.env.get("APNS_TOPIC") ?? "lol.wavo.app";
-// "production" once the app ships; TestFlight builds signed with a development
-// profile need the sandbox host, and a token from one is rejected by the other.
 const APNS_HOST = (Deno.env.get("APNS_ENV") ?? "sandbox") === "production"
   ? "https://api.push.apple.com"
   : "https://api.sandbox.push.apple.com";
 
+const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || (() => {
+  try {
+    const keys = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") || "{}");
+    return keys.default || Object.values(keys)[0] || "";
+  } catch {
+    return "";
+  }
+})();
+
 const admin = createClient(
   Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  serviceRole,
 );
 
 if (VAPID_PUBLIC && VAPID_PRIVATE) {
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
 }
 
-// APNs wants a JWT signed with the .p8, and explicitly does NOT want a fresh one
-// per push — Apple rates that as abuse. Good for an hour, refreshed at 50 min.
 let apnsToken: { jwt: string; madeAt: number } | null = null;
 async function apnsJwt(): Promise<string | null> {
   if (!APNS_KEY_P8 || !APNS_KEY_ID || !APNS_TEAM_ID) return null;
   if (apnsToken && Date.now() - apnsToken.madeAt < 50 * 60 * 1000) {
     return apnsToken.jwt;
   }
-  // Secrets can't hold real newlines comfortably, so \n is accepted escaped.
   const pem = APNS_KEY_P8.replace(/\\n/g, "\n");
   const key = await importPKCS8(pem, "ES256");
   const jwt = await new SignJWT({})
@@ -62,24 +56,38 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
   }
-  // Constant-time would be nicer, but this secret is not derived from anything
-  // guessable and the endpoint is not enumerable by content.
-  if (!HOOK_SECRET || req.headers.get("x-push-secret") !== HOOK_SECRET) {
-    return new Response("Forbidden", { status: 403 });
-  }
 
-  let notificationId: string | undefined;
+  let dispatchId: string | undefined;
   try {
-    ({ notification_id: notificationId } = await req.json());
+    ({ dispatch_id: dispatchId } = await req.json());
   } catch {
     return new Response("Bad JSON", { status: 400 });
   }
-  if (!notificationId) return new Response("Missing notification_id", { status: 400 });
+
+  if (!dispatchId || !isUuid(dispatchId)) {
+    return new Response("Missing dispatch_id", { status: 400 });
+  }
+
+  // The DB trigger creates a random one-use dispatch row. Consuming it here
+  // means callers cannot choose a recipient or replay a notification.
+  const { data: dispatch, error: dispatchError } = await admin
+    .from("push_dispatch_queue")
+    .delete()
+    .eq("id", dispatchId)
+    .select("notification_id")
+    .single();
+
+  if (dispatchError || !dispatch?.notification_id) {
+    return new Response(JSON.stringify({ error: "invalid or consumed dispatch" }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   const { data: notif, error } = await admin
     .from("notifications")
     .select("id, user_id, sender_id, title, body, chat_id")
-    .eq("id", notificationId)
+    .eq("id", dispatch.notification_id)
     .single();
 
   if (error || !notif) {
@@ -89,8 +97,6 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Where tapping it should land. Groups have no route of their own yet
-  // (useUrlSync only knows /chats/:username), so they go to the chat list.
   let url = "/chats";
   if (notif.chat_id && !isUuid(notif.chat_id) && notif.sender_id) {
     const { data: sender } = await admin
@@ -105,8 +111,6 @@ Deno.serve(async (req) => {
     title: notif.title || "Wavo",
     body: notif.body || "",
     url,
-    // One notification per conversation, newest replacing older, rather than a
-    // stack of twelve when a group gets going.
     tag: `wavo-${notif.chat_id ?? "general"}`,
     sender_id: notif.sender_id,
   };
@@ -164,8 +168,6 @@ Deno.serve(async (req) => {
           sent++;
         } else {
           const text = await res.text();
-          // Apple's way of saying this device is gone or the token belongs to
-          // the other environment. Either way it will never work again.
           if (res.status === 410 || /BadDeviceToken|Unregistered/.test(text)) {
             dead.push(sub.id);
           }
@@ -174,8 +176,6 @@ Deno.serve(async (req) => {
       }
     } catch (err) {
       const status = (err as { statusCode?: number })?.statusCode;
-      // 404/410 from a push service means the browser threw the subscription
-      // away — usually the user cleared site data or uninstalled the PWA.
       if (status === 404 || status === 410) {
         dead.push(sub.id);
       }
@@ -183,8 +183,6 @@ Deno.serve(async (req) => {
     }
   }));
 
-  // Prune here rather than in a cron: the moment a push service tells us an
-  // endpoint is gone is the only moment we know for certain.
   if (dead.length) {
     await admin.from("push_subscriptions").delete().in("id", dead);
   }
