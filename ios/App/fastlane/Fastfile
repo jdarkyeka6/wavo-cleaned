@@ -11,8 +11,7 @@ platform :ios do
     issuer_id = ENV["ASC_ISSUER_ID"].to_s.strip
     team_id   = ENV["APPLE_TEAM_ID"].to_s.strip
 
-    # Write the App Store Connect API key to disk. Accept either raw PEM text
-    # or base64, matching the repository setup instructions.
+    # App Store Connect API key, used for build-number lookup and upload.
     raw = ENV["ASC_KEY_CONTENT"].to_s.strip
     key_text =
       if raw.include?("BEGIN PRIVATE KEY")
@@ -27,10 +26,7 @@ platform :ios do
       end
 
     unless key_text.include?("BEGIN PRIVATE KEY")
-      UI.user_error!(
-        "ASC_KEY_CONTENT is neither a PEM .p8 key nor base64 of one. Paste " \
-        "either the .p8 file's text or its base64 encoding into the secret."
-      )
+      UI.user_error!("ASC_KEY_CONTENT is not a valid .p8 key or base64 of one.")
     end
 
     key_path = File.expand_path("~/asc_api_key.p8")
@@ -42,38 +38,70 @@ platform :ios do
       key_filepath: key_path
     )
 
-    # Keep Xcode on automatic signing, but make the Release archive explicitly
-    # a distribution archive. The project inherited an old iPhone Developer
-    # identity at project level, which made xcodebuild request a development
-    # profile even though this lane is shipping to the App Store.
+    # External CI must have a reusable signing identity (certificate + private
+    # key) and an App Store provisioning profile. Automatic signing on a clean
+    # GitHub runner otherwise tries to create development signing assets first,
+    # which needs a registered device. Keep these two binary assets in Actions
+    # secrets as base64 so every runner imports the same identity/profile.
+    p12_b64 = ENV["IOS_DIST_P12_BASE64"].to_s.strip
+    p12_pw  = ENV["IOS_DIST_P12_PASSWORD"].to_s
+    profile_b64 = ENV["IOS_APPSTORE_PROFILE_BASE64"].to_s.strip
+
+    if p12_b64.empty? || profile_b64.empty?
+      UI.user_error!(
+        "Missing reusable iOS signing assets. Add IOS_DIST_P12_BASE64, " \
+        "IOS_DIST_P12_PASSWORD, and IOS_APPSTORE_PROFILE_BASE64 to Actions secrets."
+      )
+    end
+
+    require "base64"
+    p12_path = File.expand_path("~/wavo-distribution.p12")
+    profile_path = File.expand_path("~/wavo-appstore.mobileprovision")
+    File.binwrite(p12_path, Base64.decode64(p12_b64))
+    File.binwrite(profile_path, Base64.decode64(profile_b64))
+
+    keychain_name = "wavo-ci.keychain"
+    keychain_pw = SecureRandom.hex(24)
+    create_keychain(
+      name: keychain_name,
+      password: keychain_pw,
+      default_keychain: true,
+      unlock: true,
+      timeout: 3600,
+      lock_when_sleeps: false
+    )
+
+    import_certificate(
+      certificate_path: p12_path,
+      certificate_password: p12_pw,
+      keychain_name: keychain_name,
+      keychain_password: keychain_pw
+    )
+
+    # Let codesign access the imported private key non-interactively.
+    sh(
+      "security set-key-partition-list -S apple-tool:,apple:,codesign: " \
+      "-s -k '#{keychain_pw}' '#{File.expand_path("~/Library/Keychains/#{keychain_name}-db")}'"
+    )
+
+    install_provisioning_profile(path: profile_path)
+    sh("security cms -D -i '#{profile_path}' > /tmp/wavo-profile.plist")
+    profile_uuid = sh("/usr/libexec/PlistBuddy -c 'Print :UUID' /tmp/wavo-profile.plist").strip
+    profile_name = sh("/usr/libexec/PlistBuddy -c 'Print :Name' /tmp/wavo-profile.plist").strip
+
+    UI.message("Using App Store profile #{profile_name} (#{profile_uuid})")
+
     update_code_signing_settings(
       path: "App.xcodeproj",
-      use_automatic_signing: true,
+      use_automatic_signing: false,
       team_id: team_id,
       code_sign_identity: "Apple Distribution",
+      profile_uuid: profile_uuid,
+      profile_name: profile_name,
       build_configurations: ["Release"],
       targets: ["App"]
     )
 
-    # Give xcodebuild permission to contact Apple's provisioning/signing service
-    # using the App Store Connect API key. Explicit Release signing values here
-    # also prevent a project-level iPhone Developer setting from winning during
-    # the archive command.
-    auth_args = [
-      "-allowProvisioningUpdates",
-      "-authenticationKeyPath #{key_path}",
-      "-authenticationKeyID #{key_id}",
-      "-authenticationKeyIssuerID #{issuer_id}"
-    ].join(" ")
-
-    archive_args = [
-      auth_args,
-      "CODE_SIGN_STYLE=Automatic",
-      "DEVELOPMENT_TEAM=#{team_id}",
-      "CODE_SIGN_IDENTITY='Apple Distribution'"
-    ].join(" ")
-
-    # Bump to the next unused TestFlight build number.
     latest = latest_testflight_build_number(
       api_key: api_key,
       app_identifier: APP_IDENTIFIER,
@@ -89,11 +117,12 @@ platform :ios do
       scheme: "App",
       configuration: "Release",
       export_method: "app-store",
-      xcargs: archive_args,
-      export_xcargs: auth_args,
       export_options: {
-        signingStyle: "automatic",
-        teamID: team_id
+        signingStyle: "manual",
+        teamID: team_id,
+        provisioningProfiles: {
+          APP_IDENTIFIER => profile_name
+        }
       }
     )
 
@@ -101,5 +130,8 @@ platform :ios do
       api_key: api_key,
       skip_waiting_for_build_processing: true
     )
+  ensure
+    File.delete(p12_path) if defined?(p12_path) && File.exist?(p12_path)
+    File.delete(profile_path) if defined?(profile_path) && File.exist?(profile_path)
   end
 end
