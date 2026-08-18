@@ -1,5 +1,7 @@
 # Fastlane: builds Wavo and ships it to TestFlight.
 
+require "securerandom"
+
 APP_IDENTIFIER = "lol.wavo.app"
 
 default_platform(:ios)
