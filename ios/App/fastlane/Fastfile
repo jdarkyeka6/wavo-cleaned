@@ -42,23 +42,35 @@ platform :ios do
       key_filepath: key_path
     )
 
-    # Keep the project on automatic signing. Xcode can use Apple's cloud-managed
-    # distribution certificate instead of generating a disposable local Apple
-    # Distribution certificate on every GitHub runner.
+    # Keep Xcode on automatic signing, but make the Release archive explicitly
+    # a distribution archive. The project inherited an old iPhone Developer
+    # identity at project level, which made xcodebuild request a development
+    # profile even though this lane is shipping to the App Store.
     update_code_signing_settings(
       path: "App.xcodeproj",
       use_automatic_signing: true,
       team_id: team_id,
+      code_sign_identity: "Apple Distribution",
+      build_configurations: ["Release"],
       targets: ["App"]
     )
 
-    # Give xcodebuild permission to contact Apple's signing/provisioning service
-    # using the same App Store Connect API key already configured for Fastlane.
+    # Give xcodebuild permission to contact Apple's provisioning/signing service
+    # using the App Store Connect API key. Explicit Release signing values here
+    # also prevent a project-level iPhone Developer setting from winning during
+    # the archive command.
     auth_args = [
       "-allowProvisioningUpdates",
       "-authenticationKeyPath #{key_path}",
       "-authenticationKeyID #{key_id}",
       "-authenticationKeyIssuerID #{issuer_id}"
+    ].join(" ")
+
+    archive_args = [
+      auth_args,
+      "CODE_SIGN_STYLE=Automatic",
+      "DEVELOPMENT_TEAM=#{team_id}",
+      "CODE_SIGN_IDENTITY='Apple Distribution'"
     ].join(" ")
 
     # Bump to the next unused TestFlight build number.
@@ -72,13 +84,12 @@ platform :ios do
       build_number: latest + 1
     )
 
-    # Build and export with automatic signing. No local distribution certificate
-    # is created by this lane, avoiding Apple's distribution-certificate limit.
     build_app(
       project: "App.xcodeproj",
       scheme: "App",
+      configuration: "Release",
       export_method: "app-store",
-      xcargs: auth_args,
+      xcargs: archive_args,
       export_xcargs: auth_args,
       export_options: {
         signingStyle: "automatic",
