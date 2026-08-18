@@ -11,13 +11,8 @@ platform :ios do
     issuer_id = ENV["ASC_ISSUER_ID"].to_s.strip
     team_id   = ENV["APPLE_TEAM_ID"].to_s.strip
 
-    # 1. Write the .p8 key to a file, then authenticate.
-    #
-    # PIPELINE-SETUP.md tells you to base64-encode the .p8 before pasting it
-    # into the secret, but this wrote whatever it was given straight to disk.
-    # Following the instructions therefore produced a file full of base64 text
-    # where a PEM key was expected, and the very first App Store Connect call
-    # failed. Accept either form: decode when it doesn't already look like PEM.
+    # Write the App Store Connect API key to disk. Accept either raw PEM text
+    # or base64, matching the repository setup instructions.
     raw = ENV["ASC_KEY_CONTENT"].to_s.strip
     key_text =
       if raw.include?("BEGIN PRIVATE KEY")
@@ -47,47 +42,26 @@ platform :ios do
       key_filepath: key_path
     )
 
-    # 2. Fresh temporary keychain for the signing certificate.
-    keychain_name = "wavo-ci.keychain"
-    keychain_pw = "ci-temp-pw"
-    create_keychain(
-      name: keychain_name,
-      password: keychain_pw,
-      default_keychain: true,
-      unlock: true,
-      timeout: 3600,
-      lock_when_sleeps: false
-    )
-
-    # 3. Distribution certificate.
-    cert(
-      api_key: api_key,
-      generate_apple_certs: true,
-      keychain_path: File.expand_path("~/Library/Keychains/#{keychain_name}-db"),
-      keychain_password: keychain_pw
-    )
-
-    # 4. Provisioning profile matching that certificate.
-    sigh(
-      api_key: api_key,
-      app_identifier: APP_IDENTIFIER,
-      force: true
-    )
-
-    profile_name = lane_context[SharedValues::SIGH_NAME]
-
-    # 5. Write signing settings straight into the project file.
+    # Keep the project on automatic signing. Xcode can use Apple's cloud-managed
+    # distribution certificate instead of generating a disposable local Apple
+    # Distribution certificate on every GitHub runner.
     update_code_signing_settings(
       path: "App.xcodeproj",
-      use_automatic_signing: false,
+      use_automatic_signing: true,
       team_id: team_id,
-      code_sign_identity: "Apple Distribution",
-      profile_name: profile_name,
       targets: ["App"]
     )
 
-    # 5b. Bump the build number to the next unused value on App Store Connect,
-    #     so each upload has a unique, higher number than the last.
+    # Give xcodebuild permission to contact Apple's signing/provisioning service
+    # using the same App Store Connect API key already configured for Fastlane.
+    auth_args = [
+      "-allowProvisioningUpdates",
+      "-authenticationKeyPath #{key_path}",
+      "-authenticationKeyID #{key_id}",
+      "-authenticationKeyIssuerID #{issuer_id}"
+    ].join(" ")
+
+    # Bump to the next unused TestFlight build number.
     latest = latest_testflight_build_number(
       api_key: api_key,
       app_identifier: APP_IDENTIFIER,
@@ -98,21 +72,20 @@ platform :ios do
       build_number: latest + 1
     )
 
-    # 6. Build & archive.
+    # Build and export with automatic signing. No local distribution certificate
+    # is created by this lane, avoiding Apple's distribution-certificate limit.
     build_app(
       project: "App.xcodeproj",
       scheme: "App",
       export_method: "app-store",
+      xcargs: auth_args,
+      export_xcargs: auth_args,
       export_options: {
-        signingStyle: "manual",
-        teamID: team_id,
-        provisioningProfiles: {
-          APP_IDENTIFIER => profile_name
-        }
+        signingStyle: "automatic",
+        teamID: team_id
       }
     )
 
-    # 7. Upload to TestFlight.
     upload_to_testflight(
       api_key: api_key,
       skip_waiting_for_build_processing: true
