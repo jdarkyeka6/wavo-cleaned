@@ -76,9 +76,9 @@ export async function ensureNotificationPermission() {
   return result === "granted";
 }
 
-// Save a device row. `last_seen_at` is what makes a returning device a bump
+// Save a web device row. `last_seen_at` is what makes a returning device a bump
 // rather than a duplicate, and it's how a stale device is recognisable later.
-async function saveSubscription(row, onConflict) {
+async function saveWebSubscription(row) {
   const { error } = await supabase
     .from("push_subscriptions")
     .upsert(
@@ -87,7 +87,7 @@ async function saveSubscription(row, onConflict) {
         user_agent: navigator.userAgent.slice(0, 200),
         last_seen_at: new Date().toISOString(),
       },
-      { onConflict },
+      { onConflict: "endpoint" },
     );
   if (error) console.warn("[wavo] Failed to save push subscription:", error);
   return !error;
@@ -118,15 +118,12 @@ async function subscribeWeb(userId) {
   // The whole PushSubscription goes in `subscription` because that is exactly
   // what web-push wants handed back to it — endpoint and keys as one object.
   // The endpoint is also stored flat, since it's the unique key.
-  await saveSubscription(
-    {
-      user_id: userId,
-      platform: "web",
-      endpoint: json.endpoint,
-      subscription: json,
-    },
-    "endpoint",
-  );
+  await saveWebSubscription({
+    user_id: userId,
+    platform: "web",
+    endpoint: json.endpoint,
+    subscription: json,
+  });
 
   return sub;
 }
@@ -161,18 +158,29 @@ async function subscribeNative(userId) {
 
   if (!token) return null;
 
-  await saveSubscription(
-    { user_id: userId, platform: "ios", device_token: token },
-    "device_token",
-  );
+  // Native devices use a narrow RPC rather than a direct table upsert. This
+  // avoids two production failures:
+  //  1. ON CONFLICT(device_token) could not use the old partial unique index.
+  //  2. A device previously used by another Wavo account could hit RLS because
+  //     the existing token row still belonged to that account.
+  // The RPC always assigns the token to the currently authenticated auth.uid().
+  const { error } = await supabase.rpc("claim_ios_push_subscription", {
+    p_device_token: token,
+    p_user_agent: navigator.userAgent.slice(0, 200),
+  });
+
+  if (error) {
+    console.warn("[wavo] Failed to save iOS push subscription:", error);
+    return null;
+  }
 
   return token;
 }
 
 /**
  * Register this device for push and record it against the user.
- * Safe to call on every login: it reuses an existing subscription and the
- * upsert just bumps last_seen_at.
+ * Safe to call on every login: it reuses an existing subscription and bumps
+ * last_seen_at.
  */
 export async function registerForPush(userId) {
   if (!userId) return null;
@@ -203,8 +211,8 @@ export async function unsubscribeFromPush() {
     } catch {
       // Plugin missing in a web build of the native bundle — nothing to undo.
     }
-    // The APNs token isn't revocable from here; drop the row so we stop
-    // addressing it. iOS stops delivering once the app is deleted anyway.
+    // The APNs token isn't revocable from here; the next signed-in account can
+    // safely claim the same token through claim_ios_push_subscription().
     return;
   }
 
