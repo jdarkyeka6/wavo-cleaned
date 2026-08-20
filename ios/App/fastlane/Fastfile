@@ -2,6 +2,50 @@
 
 APP_IDENTIFIER = "lol.wavo.app"
 
+# Give back one Apple Distribution slot by revoking the oldest certificate.
+# Returns true if one went.
+#
+# This is only safe because of how this lane works, so it is worth being exact
+# about why. `cert` below puts the new certificate's private key into the
+# temporary keychain the lane creates, and that keychain dies with the runner.
+# The certificate left registered at Apple therefore has no private key
+# anywhere in the world and can never sign anything again. Every certificate
+# this pipeline has ever produced is in that state — dead entries that do
+# nothing but fill a cap of two.
+#
+# Authentication is already done: app_store_connect_api_key sets
+# Spaceship::ConnectAPI.token by default, so this needs no separate login and,
+# in particular, no access to the developer portal.
+def reclaim_distribution_slot!
+  require "spaceship"
+
+  certs = Spaceship::ConnectAPI::Certificate.all.select do |c|
+    type = c.certificate_type.to_s
+    # DISTRIBUTION and IOS_DISTRIBUTION are what this lane issues. Developer ID
+    # and Mac certificates are deliberately excluded: they are not ours to
+    # spend, and they are painful to replace.
+    type.include?("DISTRIBUTION") && !type.start_with?("DEVELOPER_ID", "MAC_")
+  end
+
+  if certs.empty?
+    UI.error("Apple says the distribution limit is full, but returned no distribution certificate to revoke.")
+    return false
+  end
+
+  # Apple exposes no creation date here. These last a year, so whichever
+  # expires soonest was issued longest ago.
+  oldest = certs.min_by { |c| c.expiration_date.to_s }
+  UI.important(
+    "Certificate limit reached. Revoking the oldest distribution certificate: " \
+    "#{oldest.display_name.inspect} (#{oldest.certificate_type}, expires #{oldest.expiration_date})."
+  )
+  oldest.delete!
+  true
+rescue StandardError => e
+  UI.error("Couldn't reclaim a certificate slot automatically: #{e.message}")
+  false
+end
+
 default_platform(:ios)
 
 platform :ios do
@@ -60,12 +104,34 @@ platform :ios do
     )
 
     # 3. Distribution certificate.
-    cert(
-      api_key: api_key,
-      generate_apple_certs: true,
-      keychain_path: File.expand_path("~/Library/Keychains/#{keychain_name}-db"),
-      keychain_password: keychain_pw
-    )
+    #
+    # Apple caps distribution certificates at two, and this lane asks for a new
+    # one every run, so the cap fills and every later build fails with
+    # "reached the maximum number of available Distribution certificates".
+    # Clearing it by hand needs the developer portal, which is not always
+    # something the person running this can get into.
+    #
+    # So: ask, and if Apple says the cap is full, hand back the oldest slot and
+    # ask once more. Nothing is revoked unless a build is actually blocked, and
+    # the certificate being revoked is by construction one that can no longer
+    # sign anything (see reclaim_distribution_slot! above).
+    attempted_reclaim = false
+    begin
+      cert(
+        api_key: api_key,
+        generate_apple_certs: true,
+        keychain_path: File.expand_path("~/Library/Keychains/#{keychain_name}-db"),
+        keychain_password: keychain_pw
+      )
+    rescue StandardError => e
+      raise if attempted_reclaim
+      raise unless e.message.to_s =~ /maximum number of available|reached the maximum/i
+
+      attempted_reclaim = true
+      raise unless reclaim_distribution_slot!
+
+      retry
+    end
 
     # 4. Provisioning profile matching that certificate.
     sigh(

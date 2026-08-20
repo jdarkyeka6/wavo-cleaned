@@ -36,10 +36,13 @@ import {
   Pin,
   Settings as SettingsIcon,
   Clock,
+  CalendarDays,
   Mic,
   Square,
 } from "lucide-react";
 import VoiceNote from "./VoiceNote";
+import PlanCard from "./PlanCard";
+import NewPlanDialog from "./NewPlanDialog";
 import AvatarCropper from "./AvatarCropper";
 import {
   useVoiceRecorder,
@@ -354,6 +357,8 @@ export default function App() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   // The photo waiting to be framed. Non-null while the cropper is open.
   const [cropFile, setCropFile] = useState(null);
+  // Open while someone is making a plan for the conversation on screen.
+  const [planOpen, setPlanOpen] = useState(false);
 
   // theme
   const [theme, setTheme] = useState(
@@ -2024,6 +2029,62 @@ export default function App() {
     setReplyingTo(null);
   }
 
+  // Who a plan card can name when it lists who's going. Nicknames win, the
+  // same as everywhere else in the app, so a plan doesn't call someone by a
+  // name their friend never uses.
+  const dmNames = useMemo(() => {
+    const m = {};
+    if (currentUser?.id) m[currentUser.id] = "You";
+    if (selectedUser) m[selectedUser.id] = displayName(selectedUser);
+    return m;
+  }, [currentUser?.id, selectedUser, nicknames]);
+
+  const groupNames = useMemo(() => {
+    const m = {};
+    for (const [id, p] of Object.entries(groupMembers)) m[id] = displayName(p);
+    if (currentUser?.id) m[currentUser.id] = "You";
+    return m;
+  }, [groupMembers, currentUser?.id, nicknames]);
+
+  // --- PLANS ---
+  //
+  // A plan is two rows: the plan itself, and a message pointing at it. Doing it
+  // that way means the plan can change — the time moves, people answer — while
+  // the message keeps its place in the thread, and every bit of existing
+  // message plumbing (ordering, realtime, replies, notifications) applies to it
+  // without a special case.
+  async function createPlan(fields) {
+    const inGroup = !!selectedGroup;
+    if (!inGroup && (!chatId || !selectedUser)) return;
+
+    const { data: plan, error } = await supabase
+      .from("plans")
+      .insert({
+        ...fields,
+        created_by: currentUser.id,
+        group_id: inGroup ? selectedGroup.id : null,
+        chat_id: inGroup ? null : chatId,
+      })
+      .select()
+      .single();
+
+    // Thrown rather than alerted: the dialog stays open and shows it, so the
+    // details someone just typed aren't lost to a dismissed alert.
+    if (error) throw error;
+
+    if (inGroup) await insertGroupMessage(plan.id, "plan");
+    else await insertMessage(plan.id, "plan");
+
+    // Going is the answer the person making the plan almost always wants, and
+    // a plan whose own author hasn't answered reads as abandoned.
+    await supabase
+      .from("plan_rsvps")
+      .upsert(
+        { plan_id: plan.id, user_id: currentUser.id, response: "going" },
+        { onConflict: "plan_id,user_id" }
+      );
+  }
+
   // While recording (or holding a clip you haven't sent), the text field and
   // Send button are replaced rather than crowded — the composer only has room
   // for three icons on a phone, which a previous pass established the hard
@@ -3494,6 +3555,14 @@ export default function App() {
                           {social.messagePins.length > 0 && ` (${social.messagePins.length})`}
                         </button>
                         <button
+                          onClick={() => {
+                            setShowChatMenu(false);
+                            setPlanOpen(true);
+                          }}
+                        >
+                          <CalendarDays size={14} /> Make a plan
+                        </button>
+                        <button
                           className="chat-menu-phone"
                           onClick={() => {
                             setShowChatMenu(false);
@@ -3639,6 +3708,8 @@ export default function App() {
                     <div
                       className={`bubble ${
                         isImage && !deleted ? "bubble-image" : ""
+                      } ${
+                        msg.type === "plan" && !deleted ? "bubble-plan" : ""
                       } ${deleted ? "deleted" : ""}`}
                       onTouchStart={() => !deleted && startPress(msg)}
                       onTouchEnd={endPress}
@@ -3662,6 +3733,13 @@ export default function App() {
                           src={msg.content}
                           durationMs={msg.duration_ms}
                           messageId={msg.id}
+                          mine={mine}
+                        />
+                      ) : msg.type === "plan" ? (
+                        <PlanCard
+                          planId={msg.content}
+                          userId={currentUser.id}
+                          names={dmNames}
                           mine={mine}
                         />
                       ) : msg.type === "file" ? (
@@ -4036,6 +4114,14 @@ export default function App() {
                 </button>
                 <button
                   className="icon-btn"
+                  onClick={() => setPlanOpen(true)}
+                  aria-label="Make a plan"
+                  title="Make a plan"
+                >
+                  <CalendarDays size={16} />
+                </button>
+                <button
+                  className="icon-btn"
                   onClick={() => social.setGroupManageOpen(true)}
                   aria-label="Group settings"
                   title={
@@ -4057,6 +4143,7 @@ export default function App() {
             </header>
 
             <Plans
+              onPlanCreated={(id) => insertGroupMessage(id, "plan")}
               group={selectedGroup}
               userId={currentUser.id}
               isAdmin={!!profile?.is_admin}
@@ -4135,6 +4222,8 @@ export default function App() {
                     <div
                       className={`bubble ${
                         isImage && !deleted ? "bubble-image" : ""
+                      } ${
+                        msg.type === "plan" && !deleted ? "bubble-plan" : ""
                       } ${deleted ? "deleted" : ""}`}
                       onTouchStart={() => !deleted && startPress(msg)}
                       onTouchEnd={endPress}
@@ -4158,6 +4247,13 @@ export default function App() {
                           src={msg.content}
                           durationMs={msg.duration_ms}
                           messageId={msg.id}
+                          mine={mine}
+                        />
+                      ) : msg.type === "plan" ? (
+                        <PlanCard
+                          planId={msg.content}
+                          userId={currentUser.id}
+                          names={groupNames}
                           mine={mine}
                         />
                       ) : msg.type === "file" ? (
@@ -4475,6 +4571,16 @@ export default function App() {
 
       {/* Framing the avatar. Sits above Settings, which is where it's opened
           from, and unmounts on cancel so the decoded bitmap is released. */}
+      {/* Making a plan. Same dialog for a DM and a group; createPlan works out
+          which conversation it belongs to. */}
+      {planOpen && (
+      <NewPlanDialog
+        onClose={() => setPlanOpen(false)}
+        onCreate={createPlan}
+        where={selectedGroup ? selectedGroup.name : displayName(selectedUser)}
+      />
+      )}
+
       {cropFile && (
         <AvatarCropper
           file={cropFile}

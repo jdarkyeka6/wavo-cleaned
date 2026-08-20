@@ -5212,3 +5212,165 @@ button,
 @media (max-width: 420px) {
   .modal.crop-modal { padding: 18px 14px; }
 }
+
+/* ============================================================
+   PLANS IN THE CONVERSATION
+   A plan is a message, so it lands inside a bubble. The bubble gives it
+   nothing — the card is its own surface, the same way an image is.
+   ============================================================ */
+
+.bubble-plan {
+  padding: 0 !important;
+  background: none !important;
+  border: none !important;
+  box-shadow: none;
+  max-width: 300px;
+  width: 100%;
+}
+
+.plan-card {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--coral);
+  border-radius: 14px;
+  background: var(--card);
+  color: var(--text);
+  padding: 12px 14px;
+  text-align: left;
+}
+
+/* A plan you made is still yours, but the card keeps its own surface rather
+   than sitting on the coral gradient — white-on-coral would fight the RSVP
+   buttons, which need to read as controls. */
+.plan-card.mine { border-left-color: var(--amber); }
+
+.plan-card.cancelled { opacity: 0.6; }
+.plan-card.cancelled .plan-card-title { text-decoration: line-through; }
+
+.plan-card-loading,
+.plan-card-gone {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  border-left-color: var(--line);
+}
+
+.plan-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--coral);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.plan-card-off {
+  margin-left: auto;
+  color: var(--text-faint);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+
+.plan-card-title {
+  margin: 6px 0 0;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.plan-card-place {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  font-size: 0.84rem;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+.plan-card-place a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.plan-card-place a:hover { color: var(--coral); }
+
+.plan-card-notes {
+  margin: 6px 0 0;
+  font-size: 0.83rem;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+.plan-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 11px;
+}
+
+.plan-rsvp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 7px 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.plan-rsvp:hover:not(:disabled) { border-color: var(--coral); color: var(--text); }
+.plan-rsvp:disabled { opacity: 0.6; cursor: default; }
+
+/* The chosen answer has to be obvious at a glance in a busy thread. */
+.plan-rsvp.on {
+  background: var(--coral-soft);
+  border-color: var(--coral);
+  color: var(--coral);
+}
+
+.plan-rsvp-n {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.plan-card-going {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
+
+/* --- the make-a-plan dialog --- */
+
+.modal.plan-dialog { max-width: 380px; padding: 22px; }
+
+.plan-dialog-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.plan-dialog-where {
+  margin: 2px 0 14px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.plan-optional {
+  font-weight: 500;
+  color: var(--text-faint);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.plan-dialog .settings-input { margin-bottom: 8px; }
+
+@media (max-width: 420px) {
+  .modal.plan-dialog { padding: 18px 14px; }
+  .bubble-plan { max-width: 100%; }
+}

@@ -1,9 +1,14 @@
 name: iOS to TestFlight
+# Shipping a build is a thing you do to main, not to a proposal.
+#
+# This used to run on pull_request too, which meant every PR uploaded an
+# unmerged build to TestFlight — and, because the Fastfile calls
+# `cert(generate_apple_certs: true)`, minted a fresh Apple distribution
+# certificate to do it. Apple allows two. So the job failed on the certificate
+# cap on essentially every PR, and each attempt consumed the allowance that the
+# real release builds need.
 on:
   push:
-    branches:
-      - main
-  pull_request:
     branches:
       - main
   workflow_dispatch: {}

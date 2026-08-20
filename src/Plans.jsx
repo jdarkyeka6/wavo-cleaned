@@ -35,7 +35,7 @@ function toIso(local) {
   return local ? new Date(local).toISOString() : null;
 }
 
-export default function Plans({ group, userId, isAdmin }) {
+export default function Plans({ group, userId, isAdmin, onPlanCreated }) {
   const [plans, setPlans] = useState([]);
   const [rsvps, setRsvps] = useState([]);
   const [names, setNames] = useState({});
@@ -118,19 +118,27 @@ export default function Plans({ group, userId, isAdmin }) {
   async function createPlan() {
     if (!draft.title.trim() || !draft.starts_at) return;
     setSaving(true);
-    const { error } = await supabase.from("plans").insert({
-      group_id: groupId,
-      created_by: userId,
-      title: draft.title.trim(),
-      location: draft.location.trim() || null,
-      starts_at: toIso(draft.starts_at),
-      notes: draft.notes.trim() || null,
-    });
+    const { data: plan, error } = await supabase
+      .from("plans")
+      .insert({
+        group_id: groupId,
+        created_by: userId,
+        title: draft.title.trim(),
+        location: draft.location.trim() || null,
+        starts_at: toIso(draft.starts_at),
+        notes: draft.notes.trim() || null,
+      })
+      .select()
+      .single();
     setSaving(false);
     if (error) {
       alert("Couldn't create the plan: " + error.message);
       return;
     }
+    // Announce it in the thread too, so a plan made from this panel and one
+    // made from the chat menu end up in the same place. Without this the two
+    // routes would produce visibly different results.
+    if (plan) await onPlanCreated?.(plan.id);
     setDraft({ title: "", location: "", starts_at: "", notes: "" });
     setCreating(false);
     load();
