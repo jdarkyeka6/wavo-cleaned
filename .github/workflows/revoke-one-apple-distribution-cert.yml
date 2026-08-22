@@ -1,0 +1,66 @@
+name: Revoke one stale Apple distribution certificate
+
+on:
+  push:
+    branches:
+      - release/wavo-2-app-store
+
+jobs:
+  revoke-one:
+    if: contains(github.event.head_commit.message, 'Revoke one stale Apple distribution certificate')
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Ruby and Fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+          working-directory: ios/App
+      - name: Revoke oldest Apple Distribution certificate
+        working-directory: ios/App
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+        run: |
+          bundle exec ruby <<'RUBY'
+          require 'base64'
+          require 'time'
+          require 'spaceship'
+
+          raw = ENV.fetch('ASC_KEY_CONTENT').strip
+          key_text = raw.include?('BEGIN PRIVATE KEY') ? raw : Base64.decode64(raw)
+          abort 'ASC_KEY_CONTENT is not a valid App Store Connect private key' unless key_text.include?('BEGIN PRIVATE KEY')
+
+          client = Spaceship::ConnectAPI::Client.auth(
+            key_id: ENV.fetch('ASC_KEY_ID').strip,
+            issuer_id: ENV.fetch('ASC_ISSUER_ID').strip,
+            key: key_text
+          )
+
+          type = Spaceship::ConnectAPI::Certificate::CertificateType::DISTRIBUTION
+          certs = Spaceship::ConnectAPI::Certificate.all(
+            client: client,
+            filter: { certificateType: [type] }
+          ).select(&:valid?)
+
+          puts "Found #{certs.length} valid Apple Distribution certificate(s)."
+          certs.sort_by { |c| Time.parse(c.expiration_date) }.each do |c|
+            puts "  #{c.id} | #{c.display_name || c.name} | expires #{c.expiration_date}"
+          end
+
+          abort 'Safety stop: fewer than 3 valid Distribution certificates; refusing to revoke.' if certs.length < 3
+
+          target = certs.min_by { |c| Time.parse(c.expiration_date) }
+          puts "Revoking oldest Distribution certificate #{target.id}, expiring #{target.expiration_date}."
+          target.delete!(client: client)
+
+          remaining = Spaceship::ConnectAPI::Certificate.all(
+            client: client,
+            filter: { certificateType: [type] }
+          ).select(&:valid?)
+
+          abort "Verification failed: expected #{certs.length - 1} valid certificates, found #{remaining.length}." unless remaining.length == certs.length - 1
+          puts "Verified. #{remaining.length} valid Apple Distribution certificate(s) remain."
+          RUBY
