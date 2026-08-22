@@ -1,4552 +1,627 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { supabase } from "./supabaseClient";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bell,
-  Image as ImageIcon,
-  X,
-  Search,
-  UserPlus,
+  CalendarDays,
   Check,
-  Flag,
-  ShieldCheck,
-  Camera,
-  Settings,
-  Smile,
-  Pencil,
-  Megaphone,
-  Paperclip,
-  File as FileIcon,
-  Download,
-  Users,
+  ChevronLeft,
+  Clock3,
   Gamepad2,
-  Ban,
-  Trash2,
-  MoreVertical,
-  SmilePlus,
-  CornerUpLeft,
-  ArrowDown,
-  Star,
-  User,
-  Palette,
+  Home,
   LogOut,
-  Trophy,
-  ChevronRight,
-  SendHorizontal,
-  Pin,
-  Settings as SettingsIcon,
-  Clock,
-  Mic,
-  Square,
+  MapPin,
+  MessageCircle,
+  Plus,
+  Search,
+  Send,
+  Settings,
+  Shield,
+  Sparkles,
+  User,
+  UserPlus,
+  Users,
+  X,
 } from "lucide-react";
-import VoiceNote from "./VoiceNote";
-import AvatarCropper from "./AvatarCropper";
+import { supabase } from "./supabaseClient";
+import { registerServiceWorker, ensureNotificationPermission, subscribeToPush } from "./push";
 import {
-  useVoiceRecorder,
-  voiceSupported,
-  formatDuration,
-  MAX_MS,
-} from "./useVoiceRecorder";
-import {
-  registerServiceWorker,
-  ensureNotificationPermission,
-  subscribeToPush,
-} from "./push";
-import Admin from "./Admin";
-import Games from "./Games";
-import Plans from "./Plans";
-import Landing from "./Landing";
-import Premium from "./Premium";
-import { isNativeApp } from "./lib/platform";
-import { PLANS, DEFAULT_PLAN } from "./lib/pricing";
-import { UserLabel } from "./Cosmetic";
-import { UnlockGuide } from "./UnlockGuide";
-import { useIsPhone } from "./lib/useIsPhone";
-import { useAnchoredPanel } from "./lib/useAnchoredPanel";
-import { useSocialUpgrades } from "./useSocialUpgrades";
-import {
-  ProfileCardModal,
-  MediaViewer,
-  PinnedMessagesPanel,
-  GroupManageModal,
-} from "./SocialUpgrades";
-import "./social-upgrades.css";
-import { SendLaterDialog } from "./SendLater";
-import { useScheduled } from "./useScheduled";
-import { draftKeyFor, readDraft, writeDraft, clearDraft } from "./useDrafts";
-import { StreakPill } from "./StreakPill";
-import { swatchStyle } from "./lib/cosmeticStyles";
-import { useCosmetics } from "./useCosmetics";
-import { useUrlSync } from "./useUrlSync";
+  blockUser,
+  createActivity,
+  deleteMyAccount,
+  reportUser,
+  createPlan,
+  createPoll,
+  createSpace,
+  createWave,
+  getActiveLocationShares,
+  getActivities,
+  getDmMessages,
+  getFriends,
+  getIncomingFriendRequests,
+  getPlans,
+  getPolls,
+  getPrivacySettings,
+  getProfile,
+  getSpaceMessages,
+  getSpaces,
+  getWaves,
+  reactToWave,
+  respondFriendRequest,
+  searchProfiles,
+  sendDmMessage,
+  sendFriendRequest,
+  sendSpaceMessage,
+  setRsvp,
+  sharePlanLocation,
+  stopAllLocationSharing,
+  updatePrivacySettings,
+  votePoll,
+} from "./wavoData";
 import "./styles.css";
-// Premium billing switch / student toggle styles. This file existed but was
-// never imported, so the paywall rendered with unstyled controls.
-import "./styles-additions.css";
 
-const GIPHY_API_KEY = import.meta.env.VITE_GIPHY_API_KEY;
-
-// Stripe returns the buyer to /?premium=1 (or ?premium=0 if they backed out).
-// Read it at module load: useUrlSync rewrites the URL as soon as the app
-// mounts, so by the time an effect runs the flag is already gone.
-const CHECKOUT_RETURN =
-  typeof window === "undefined"
-    ? null
-    : new URLSearchParams(window.location.search).get("premium");
-
-// Usernames allowed to use fast account-switching. Only these accounts get
-// remembered on the device — everyone else's password is never stored.
-// Add your own usernames here (e.g. "admin", "jake").
-const SWITCHER_USERS = ["admin"];
-
-// Turn the URLs inside a message into links, leaving the rest as plain text.
-//
-// split() with a capturing group hands back [text, url, text, url, …], so the
-// odd indices are the matches — cheaper and more reliable than re-testing each
-// piece, since a /g regex carries lastIndex between calls and would answer
-// differently for the same string depending on what was asked before it.
-// The tail class keeps a trailing "." or ")" out of the href, so "see
-// https://wavo.app." links to the site rather than to a 404 with a full stop.
-const URL_RE = /(https?:\/\/[^\s<]*[^\s<.,:;"')\]}])/g;
-
-function renderTextWithLinks(text) {
-  if (!text) return text;
-  return text.split(URL_RE).map((part, i) =>
-    i % 2 === 1 ? (
-      <a key={i} href={part} target="_blank" rel="noreferrer">
-        {part}
-      </a>
-    ) : (
-      part
-    )
-  );
-}
-
-// Reject keyboard-mash / junk names while allowing real ones.
-const NAME_BLOCKLIST = [
-  "test", "testing", "asdf", "asdfgh", "qwer", "qwerty", "zxcv", "wasd",
-  "hjkl", "lkjh", "poiu", "mnbv", "abc", "abcd", "xyz", "blah", "name",
-  "firstname", "lastname", "user", "admin", "null", "undefined",
+const GENERIC_ERROR = "Sorry, something went wrong. Please try again.";
+const CREATE_TYPES = [
+  { id: "wave", label: "Wave", hint: "Share something quick", icon: Sparkles },
+  { id: "plan", label: "Plan", hint: "Get everyone organised", icon: CalendarDays },
+  { id: "poll", label: "Poll", hint: "Decide together", icon: Check },
+  { id: "activity", label: "Activity", hint: "Start something together", icon: Gamepad2 },
+  { id: "space", label: "Space", hint: "Create a home for your group", icon: Users },
 ];
 
-// A single word is acceptable unless it's obvious junk. We intentionally do
-// NOT judge "real-ness" by vowel ratios etc., because real names (Yeo, Smith,
-// Ng, Bo…) break those rules. We only block the blocklist and triple-letter
-// mash like "aaargh".
-function isPronounceablePart(w) {
-  if (w.length <= 1) return true; // initials like "J" are fine
-  if (NAME_BLOCKLIST.includes(w)) return false;
-  if (/(.)\1\1/.test(w)) return false; // no 3+ identical in a row (aaaa)
-  return true;
+function initials(name) {
+  return (name?.trim()?.[0] || "W").toUpperCase();
 }
 
-function looksLikeName(s) {
-  const v = (s || "").trim().toLowerCase();
-  if (v.length < 2 || v.length > 30) return false;
-  if (!/^[a-zà-ÿ' -]+$/i.test(v)) return false; // letters, spaces, ' and - only
-  // validate each word so "Anne-Marie" / "Mary Jane" / "de la Cruz" pass
-  const parts = v.split(/[ '-]+/).filter(Boolean);
-  if (parts.length === 0) return false;
-  return parts.every(isPronounceablePart);
-}
-
-// Whole years between a YYYY-MM-DD birthday and today.
-function ageFromBirthday(birthday) {
-  if (!birthday) return null;
-  const bd = new Date(birthday);
-  if (isNaN(bd.getTime())) return null;
-  const today = new Date();
-  let age = today.getFullYear() - bd.getFullYear();
-  const m = today.getMonth() - bd.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < bd.getDate())) age--;
-  return age;
-}
-
-// Themes now live in the `cosmetics` table (see useCosmetics.js).
-// The palettes themselves are still plain CSS — [data-theme="x"] in styles.css.
-// The database only tracks who has unlocked what.
-
-// --- MESSAGE LIST SHAPING ---------------------------------------------
-// A flat list of bubbles all stamped "01:15 AM" is unreadable — you can't
-// tell a message from ten minutes ago from one from last Tuesday. These
-// helpers add the two things that make a transcript scannable: a day
-// separator whenever the date changes, and grouping so a run of messages
-// from one person renders as a block with a single timestamp at the end.
-
-const GROUP_WINDOW_MS = 5 * 60 * 1000;
-
-function sameDay(a, b) {
-  const x = new Date(a);
-  const y = new Date(b);
+function Avatar({ profile, size = "md" }) {
   return (
-    x.getFullYear() === y.getFullYear() &&
-    x.getMonth() === y.getMonth() &&
-    x.getDate() === y.getDate()
+    <div className={`avatar avatar-${size}`}>
+      {profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : initials(profile?.username)}
+    </div>
   );
 }
 
-// "Today" / "Yesterday" / "Tuesday" / "12 Jul 2024"
-function dayLabel(ts) {
-  const d = new Date(ts);
-  const today = new Date();
-  if (sameDay(d, today)) return "Today";
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  if (sameDay(d, yesterday)) return "Yesterday";
-  const days = (today - d) / 86400000;
-  if (days < 7) return d.toLocaleDateString([], { weekday: "long" });
-  return d.toLocaleDateString([], {
-    day: "numeric",
+function formatRelative(ts) {
+  if (!ts) return "";
+  const diff = Date.now() - new Date(ts).getTime();
+  const mins = Math.max(0, Math.floor(diff / 60000));
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  return `${Math.floor(hrs / 24)}d`;
+}
+
+function formatPlanTime(ts) {
+  if (!ts) return "";
+  return new Date(ts).toLocaleString([], {
+    weekday: "short",
     month: "short",
-    ...(d.getFullYear() === today.getFullYear() ? {} : { year: "numeric" }),
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
 }
 
-/**
- * Annotate a chronological message list for rendering.
- * `flat` (used while searching) turns grouping off, because a filtered list
- * has gaps in it and pretending neighbours are consecutive would lie.
- */
-function decorateMessages(list, flat = false) {
-  return list.map((msg, i) => {
-    const prev = list[i - 1];
-    const next = list[i + 1];
-    const t = new Date(msg.created_at).getTime();
-    const newDay = !prev || !sameDay(prev.created_at, msg.created_at);
-    if (flat) return { msg, newDay, startsRun: true, endsRun: true };
-    const startsRun =
-      newDay ||
-      prev.sender_id !== msg.sender_id ||
-      t - new Date(prev.created_at).getTime() > GROUP_WINDOW_MS;
-    const endsRun =
-      !next ||
-      next.sender_id !== msg.sender_id ||
-      !sameDay(msg.created_at, next.created_at) ||
-      new Date(next.created_at).getTime() - t > GROUP_WINDOW_MS;
-    return { msg, newDay, startsRun, endsRun };
-  });
-}
-
-// The newest message you sent, so the read receipt appears once at the
-// bottom of the thread instead of on every single outgoing bubble.
-function lastOwnMessageId(list, myId) {
-  for (let i = list.length - 1; i >= 0; i--) {
-    if (list[i].sender_id === myId && !list[i].deleted_at) return list[i].id;
-  }
-  return null;
-}
-
-// Settings used to be one 1700px scroll through six unlabelled sections, so
-// finding anything meant hunting. Four tabs instead, ordered by how often
-// people actually need them.
-const SETTINGS_TABS = [
-  { id: "profile", label: "Profile", Icon: User },
-  { id: "appearance", label: "Appearance", Icon: Palette },
-  { id: "notifications", label: "Notifications", Icon: Bell },
-  { id: "account", label: "Account", Icon: ShieldCheck },
-];
-
-/**
- * Where the chat menu renders.
- *
- * On a desktop it's a dropdown, absolutely positioned against the button, so
- * it has to stay inside `.chat-menu-wrap`.
- *
- * On a phone it's a bottom sheet — and it cannot stay there. `.chat-header`
- * carries a `backdrop-filter`, which makes it a containing block for
- * `position: fixed` descendants, so a sheet asking for `bottom: 0` pinned
- * itself to the bottom of the 68px header instead of the screen. (Same trap
- * that clipped the settings panel inside the transformed sidebar.) A portal
- * to <body> puts it back on the viewport.
- */
-function ChatMenuLayer({ isPhone, onDismiss, children }) {
-  if (!isPhone) return children;
-  return createPortal(
-    <>
-      <div className="chat-menu-backdrop" onClick={onDismiss} />
-      {children}
-    </>,
-    document.body
-  );
-}
-
-// A DM's conversation id, matching the `chatId` memo below. Pinning needs it
-// for rows other than the open one, where that memo doesn't apply.
-const dmChatId = (a, b) => (a && b ? [a, b].sort().join("_") : null);
-
-/** The pin/unpin control on a sidebar row. */
-function PinToggle({ pinned, onClick, label }) {
+function Toast({ message, onClose }) {
+  if (!message) return null;
   return (
-    <button
-      className={`row-pin ${pinned ? "on" : ""}`}
-      onClick={onClick}
-      aria-pressed={pinned}
-      title={pinned ? `Unpin ${label}` : `Pin ${label} to the top`}
-      aria-label={pinned ? `Unpin ${label}` : `Pin ${label} to the top`}
-    >
-      <Pin size={14} />
+    <button className="toast" onClick={onClose}>
+      {message}
     </button>
   );
 }
 
-const initial = (name) => (name?.trim()?.[0] || "?").toUpperCase();
+function AuthScreen({ onReady }) {
+  const [mode, setMode] = useState("login");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
-// Avatar lives out here deliberately. Declared inside App() it was a brand
-// new component type on every render, so React tore down and rebuilt every
-// <img> on each keystroke — avatars visibly flickered and refetched.
-function Avatar({ url, name, size }) {
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    const email = `${username.trim().toLowerCase()}@wavo.app`;
+    try {
+      if (mode === "login") {
+        const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+        if (authError) throw authError;
+        onReady?.(data.session);
+      } else {
+        const { data, error: authError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { username: username.trim() } },
+        });
+        if (authError) throw authError;
+        if (!data.user) throw new Error("Signup failed");
+        setMode("login");
+        setPassword("");
+        setError("Account created. Log in to enter Wavo.");
+      }
+    } catch (err) {
+      const msg = String(err?.message || "").toLowerCase();
+      setError(msg.includes("invalid login") ? "Incorrect username or password." : GENERIC_ERROR);
+      console.error("[wavo] auth", err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className={`avatar ${size === "sm" ? "sm" : ""}`}>
-      {url ? <img className="avatar-img" src={url} alt="" /> : initial(name)}
+    <main className="auth-page">
+      <div className="auth-orbit auth-orbit-a" />
+      <div className="auth-orbit auth-orbit-b" />
+      <section className="auth-card">
+        <div className="wavo-mark">W</div>
+        <div>
+          <span className="eyebrow">YOUR PEOPLE, TOGETHER</span>
+          <h1>Welcome to Wavo.</h1>
+          <p className="muted">Talk, decide, plan and actually do things with the people you know.</p>
+        </div>
+        <form onSubmit={submit} className="stack-form">
+          <label>
+            Username
+            <input value={username} onChange={(e) => setUsername(e.target.value)} autoCapitalize="none" autoCorrect="off" required />
+          </label>
+          <label>
+            Password
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required />
+          </label>
+          {error && <div className="form-note">{error}</div>}
+          <button className="primary-btn" disabled={busy}>{busy ? "Working…" : mode === "login" ? "Enter Wavo" : "Create account"}</button>
+        </form>
+        <button className="text-btn" onClick={() => setMode(mode === "login" ? "signup" : "login")}>{mode === "login" ? "New here? Create an account" : "Already have an account? Log in"}</button>
+      </section>
+    </main>
+  );
+}
+
+function BottomNav({ tab, setTab, openCreate }) {
+  const items = [
+    ["home", "Home", Home],
+    ["spaces", "Spaces", Users],
+    ["create", "Create", Plus],
+    ["inbox", "Inbox", MessageCircle],
+    ["you", "You", User],
+  ];
+  return (
+    <nav className="bottom-nav">
+      {items.map(([id, label, Icon]) => id === "create" ? (
+        <button key={id} className="nav-create" onClick={openCreate} aria-label="Create"><Icon size={24} /></button>
+      ) : (
+        <button key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
+          <Icon size={20} />
+          <span>{label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function Header({ profile, pendingCount, onBell }) {
+  return (
+    <header className="app-header">
+      <div className="brand-lockup"><div className="mini-mark">W</div><strong>Wavo</strong></div>
+      <button className="icon-button" onClick={onBell} aria-label="Notifications">
+        <Bell size={20} />
+        {pendingCount > 0 && <span className="badge-dot">{pendingCount > 9 ? "9+" : pendingCount}</span>}
+      </button>
+      <Avatar profile={profile} size="sm" />
+    </header>
+  );
+}
+
+function PlanCard({ plan, userId, onRsvp, onShareLocation }) {
+  const mine = plan.rsvps?.find((r) => r.user_id === userId)?.response;
+  const going = plan.rsvps?.filter((r) => r.response === "going").length || 0;
+  return (
+    <article className="plan-card">
+      <div className="plan-icon"><CalendarDays size={20} /></div>
+      <div className="plan-main">
+        <div className="card-row"><strong>{plan.title}</strong><span className="tiny-pill">{going} going</span></div>
+        <span className="subline"><Clock3 size={14} /> {formatPlanTime(plan.starts_at)}</span>
+        {plan.location && <span className="subline"><MapPin size={14} /> {plan.location}</span>}
+        <div className="button-row compact">
+          {[
+            ["going", "Going"],
+            ["maybe", "Maybe"],
+            ["not_going", "Can't"],
+          ].map(([value, label]) => <button key={value} className={mine === value ? "chip active" : "chip"} onClick={() => onRsvp(plan.id, value)}>{label}</button>)}
+          <button className="chip location-chip" onClick={() => onShareLocation(plan)}><MapPin size={13} /> Share arrival</button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function PollCard({ poll, userId, onVote }) {
+  const total = poll.votes?.length || 0;
+  const myVotes = new Set((poll.votes || []).filter((v) => v.user_id === userId).map((v) => v.option_id));
+  return (
+    <article className="poll-card">
+      <span className="eyebrow">GROUP DECISION</span>
+      <h3>{poll.question}</h3>
+      <div className="poll-options">
+        {(poll.options || []).map((option) => {
+          const count = (poll.votes || []).filter((v) => v.option_id === option.id).length;
+          const pct = total ? Math.round((count / total) * 100) : 0;
+          return (
+            <button key={option.id} className={myVotes.has(option.id) ? "poll-option selected" : "poll-option"} onClick={() => onVote(poll, option.id)}>
+              <span>{option.label}</span><strong>{pct}%</strong><i style={{ width: `${pct}%` }} />
+            </button>
+          );
+        })}
+      </div>
+      <span className="muted small">{total} vote{total === 1 ? "" : "s"}</span>
+    </article>
+  );
+}
+
+function WaveCard({ wave, onReact }) {
+  const counts = (wave.reactions || []).reduce((acc, r) => ({ ...acc, [r.emoji]: (acc[r.emoji] || 0) + 1 }), {});
+  return (
+    <article className="wave-card">
+      <div className="wave-head">
+        <Avatar profile={wave.author} size="sm" />
+        <div><strong>{wave.author?.username || "Wavo user"}</strong><span>{formatRelative(wave.created_at)}</span></div>
+        <span className="wave-mark">〰</span>
+      </div>
+      <p>{wave.body}</p>
+      <div className="reaction-row">
+        {["❤️", "😂", "⚡", "👀"].map((emoji) => <button key={emoji} onClick={() => onReact(wave.id, emoji)}>{emoji}{counts[emoji] ? ` ${counts[emoji]}` : ""}</button>)}
+      </div>
+    </article>
+  );
+}
+
+function HomeScreen({ profile, spaces, waves, plans, polls, requests, activities, userId, actions }) {
+  const upcoming = plans.filter((p) => new Date(p.starts_at) >= new Date()).slice(0, 4);
+  const needsVote = polls.filter((p) => !(p.votes || []).some((v) => v.user_id === userId)).slice(0, 2);
+  return (
+    <div className="screen home-screen">
+      <section className="hero-card">
+        <span className="eyebrow">YOUR PEOPLE, RIGHT NOW</span>
+        <h1>Hey {profile?.username || "there"}.</h1>
+        <p>{spaces.length} Space{spaces.length === 1 ? "" : "s"} · {upcoming.length} upcoming plan{upcoming.length === 1 ? "" : "s"} · {waves.length} active Wave{waves.length === 1 ? "" : "s"}</p>
+      </section>
+
+      {(requests.length > 0 || needsVote.length > 0) && (
+        <section>
+          <div className="section-heading"><div><span className="eyebrow">NEEDS YOU</span><h2>Quick decisions</h2></div></div>
+          <div className="attention-grid">
+            {requests.slice(0, 2).map((r) => <div className="attention-card" key={r.id}><UserPlus size={20} /><div><strong>{r.sender?.username || "Someone"}</strong><span>wants to be friends</span></div><button onClick={() => actions.respondRequest(r.id, "accepted")}>Accept</button></div>)}
+            {needsVote.map((p) => <div className="attention-card" key={p.id}><Check size={20} /><div><strong>Vote needed</strong><span>{p.question}</span></div></div>)}
+          </div>
+        </section>
+      )}
+
+      <section>
+        <div className="section-heading"><div><span className="eyebrow">HAPPENING</span><h2>Plans</h2></div><button className="text-btn" onClick={() => actions.openCreate("plan")}>New plan</button></div>
+        {upcoming.length ? <div className="cards-stack">{upcoming.map((plan) => <PlanCard key={plan.id} plan={plan} userId={userId} onRsvp={actions.rsvp} onShareLocation={actions.shareLocation} />)}</div> : <div className="empty-card"><CalendarDays /><strong>Nothing planned yet</strong><span>Make a plan and stop losing decisions inside 150 messages.</span><button onClick={() => actions.openCreate("plan")}>Create a plan</button></div>}
+      </section>
+
+      {needsVote.map((poll) => <PollCard key={poll.id} poll={poll} userId={userId} onVote={actions.vote} />)}
+
+      <section>
+        <div className="section-heading"><div><span className="eyebrow">WAVES</span><h2>From your people</h2></div><button className="text-btn" onClick={() => actions.openCreate("wave")}>Send Wave</button></div>
+        {waves.length ? <div className="cards-stack">{waves.map((wave) => <WaveCard key={wave.id} wave={wave} onReact={actions.react} />)}</div> : <div className="empty-card"><Sparkles /><strong>No Waves yet</strong><span>A Wave is a quick update for friends or a Space, not a public performance.</span><button onClick={() => actions.openCreate("wave")}>Send the first one</button></div>}
+      </section>
+
+      {activities.length > 0 && <section><div className="section-heading"><div><span className="eyebrow">ACTIVE</span><h2>Things your Spaces started</h2></div></div><div className="mini-grid">{activities.slice(0, 4).map((a) => <div className="mini-card" key={a.id}><Gamepad2 /><strong>{a.title}</strong><span>{a.type.replaceAll("_", " ")}</span></div>)}</div></section>}
+    </div>
+  );
+}
+
+function SpacesScreen({ spaces, selectedSpace, setSelectedSpace, messages, messageText, setMessageText, sendMessage, plans, polls, activities, userId, actions }) {
+  if (selectedSpace) {
+    const spacePlans = plans.filter((p) => p.group_id === selectedSpace.id);
+    const spacePolls = polls.filter((p) => p.group_id === selectedSpace.id);
+    const spaceActivities = activities.filter((a) => a.group_id === selectedSpace.id);
+    return (
+      <div className="screen">
+        <button className="back-button" onClick={() => setSelectedSpace(null)}><ChevronLeft size={18} /> Spaces</button>
+        <section className="space-hero">
+          <div className="space-emoji large">{selectedSpace.emoji || "🌊"}</div>
+          <div><span className="eyebrow">SPACE</span><h1>{selectedSpace.name}</h1><p>{selectedSpace.description || "Your shared corner of Wavo."}</p></div>
+        </section>
+        <div className="quick-actions">
+          <button onClick={() => actions.openCreate("plan", selectedSpace.id)}><CalendarDays />Plan</button>
+          <button onClick={() => actions.openCreate("poll", selectedSpace.id)}><Check />Poll</button>
+          <button onClick={() => actions.openCreate("activity", selectedSpace.id)}><Gamepad2 />Activity</button>
+          <button onClick={() => actions.openCreate("wave", selectedSpace.id)}><Sparkles />Wave</button>
+        </div>
+        {spacePlans.length > 0 && <section><div className="section-heading"><h2>Plans</h2></div><div className="cards-stack">{spacePlans.slice(0, 3).map((p) => <PlanCard key={p.id} plan={p} userId={userId} onRsvp={actions.rsvp} onShareLocation={actions.shareLocation} />)}</div></section>}
+        {spacePolls.length > 0 && <section><div className="section-heading"><h2>Decisions</h2></div>{spacePolls.slice(0, 2).map((p) => <PollCard key={p.id} poll={p} userId={userId} onVote={actions.vote} />)}</section>}
+        {spaceActivities.length > 0 && <section><div className="section-heading"><h2>Activities</h2></div><div className="mini-grid">{spaceActivities.map((a) => <div key={a.id} className="mini-card"><Gamepad2 /><strong>{a.title}</strong><span>{a.type.replaceAll("_", " ")}</span></div>)}</div></section>}
+        <section className="space-chat-card">
+          <div className="section-heading"><div><span className="eyebrow">PERSISTENT CHAT</span><h2>Conversation</h2></div></div>
+          <div className="space-messages">
+            {messages.length === 0 && <div className="muted center">Start the conversation.</div>}
+            {messages.map((m) => <div key={m.id} className={m.sender_id === userId || m.user_id === userId ? "space-message mine" : "space-message"}><span>{m.sender?.username || (m.sender_id === userId || m.user_id === userId ? "You" : "Member")}</span><p>{m.deleted_at ? "Message deleted" : m.content}</p></div>)}
+          </div>
+          <form className="composer" onSubmit={sendMessage}><input value={messageText} onChange={(e) => setMessageText(e.target.value)} placeholder={`Message ${selectedSpace.name}`} /><button><Send size={18} /></button></form>
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="screen">
+      <div className="screen-title"><div><span className="eyebrow">YOUR GROUPS</span><h1>Spaces</h1><p>A shared home for plans, decisions, activities and chat.</p></div><button className="round-action" onClick={() => actions.openCreate("space")}><Plus /></button></div>
+      {spaces.length ? <div className="space-grid">{spaces.map((space) => <button className="space-card" key={space.id} onClick={() => setSelectedSpace(space)}><div className="space-emoji">{space.emoji || "🌊"}</div><div><strong>{space.name}</strong><span>{space.description || "Open your Space"}</span></div><span className="tiny-pill">{space.role}</span></button>)}</div> : <div className="empty-card big"><Users /><strong>Your first Space starts here</strong><span>Create one for your closest friends, gaming crew, team or whatever group actually matters.</span><button onClick={() => actions.openCreate("space")}>Create Space</button></div>}
+    </div>
+  );
+}
+
+function InboxScreen({ friends, requests, selectedFriend, setSelectedFriend, messages, messageText, setMessageText, sendMessage, userId, actions }) {
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+
+  async function runSearch(e) {
+    e.preventDefault();
+    setSearching(true);
+    try { setResults(await searchProfiles(search, userId)); } catch (err) { console.error(err); }
+    setSearching(false);
+  }
+
+  if (selectedFriend) {
+    return (
+      <div className="chat-screen">
+        <header className="chat-topbar"><button onClick={() => setSelectedFriend(null)}><ChevronLeft /></button><Avatar profile={selectedFriend} size="sm" /><div><strong>{selectedFriend.username}</strong><span>{selectedFriend.status || "Wavo friend"}</span></div></header>
+        <div className="chat-safety-strip"><button type="button" onClick={() => actions.report(selectedFriend.id)}>Report</button><button type="button" className="danger-soft" onClick={() => actions.block(selectedFriend.id)}>Block</button></div>
+        <div className="dm-messages">
+          {messages.map((m) => <div key={m.id} className={m.sender_id === userId ? "dm-row mine" : "dm-row"}><div className="dm-bubble">{m.type === "image" ? <img src={m.content} alt="Shared" /> : <p>{m.deleted_at ? "Message deleted" : m.content}</p>}<span>{formatRelative(m.created_at)}</span></div></div>)}
+        </div>
+        <form className="composer dm-composer" onSubmit={sendMessage}><input value={messageText} onChange={(e) => setMessageText(e.target.value)} placeholder={`Message ${selectedFriend.username}`} /><button><Send size={18} /></button></form>
+      </div>
+    );
+  }
+
+  return (
+    <div className="screen">
+      <div className="screen-title"><div><span className="eyebrow">MESSAGES</span><h1>Inbox</h1><p>Persistent conversations with people you actually added.</p></div></div>
+      {requests.length > 0 && <section><div className="section-heading"><h2>Friend requests</h2></div><div className="request-list">{requests.map((r) => <div className="friend-row" key={r.id}><Avatar profile={r.sender} size="sm" /><div><strong>{r.sender?.username}</strong><span>wants to connect</span></div><button className="chip active" onClick={() => actions.respondRequest(r.id, "accepted")}>Accept</button><button className="chip" onClick={() => actions.respondRequest(r.id, "declined")}>Decline</button></div>)}</div></section>}
+      <section className="add-friend-card"><div><UserPlus /><strong>Add someone</strong></div><form onSubmit={runSearch}><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search username" /><button>{searching ? "…" : "Search"}</button></form>{results.map((p) => <div className="friend-row search-result" key={p.id}><Avatar profile={p} size="sm" /><div><strong>{p.username}</strong><span>{p.status || "Wavo user"}</span></div><button onClick={() => actions.addFriend(p.id)}>Add</button></div>)}</section>
+      <section><div className="section-heading"><h2>Friends</h2><span className="tiny-pill">{friends.length}</span></div>{friends.length ? <div className="friend-list">{friends.map((friend) => <button className="friend-row friend-button" key={friend.id} onClick={() => setSelectedFriend(friend)}><Avatar profile={friend} size="md" /><div><strong>{friend.username}</strong><span>{friend.status || "Tap to message"}</span></div><MessageCircle size={18} /></button>)}</div> : <div className="empty-card"><MessageCircle /><strong>No conversations yet</strong><span>Add a friend above, then messages stay here instead of disappearing.</span></div>}</section>
+    </div>
+  );
+}
+
+function ProfileScreen({ profile, privacy, locations, onPrivacy, onProfileSaved, onEnableNotifications, onStopLocations, onDeleteAccount, onLogout }) {
+  const [bio, setBio] = useState(profile?.bio || "");
+  const [status, setStatus] = useState(profile?.status || "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { setBio(profile?.bio || ""); setStatus(profile?.status || ""); }, [profile]);
+
+  async function saveProfile(e) {
+    e.preventDefault();
+    setSaving(true);
+    const { error } = await supabase.from("profiles").update({ bio: bio.trim() || null, status: status.trim() || null, last_active: new Date().toISOString() }).eq("id", profile.id);
+    setSaving(false);
+    if (!error) onProfileSaved();
+  }
+
+  return (
+    <div className="screen">
+      <div className="profile-hero"><Avatar profile={profile} size="xl" /><div><span className="eyebrow">YOUR WAVO</span><h1>{profile?.username}</h1><p>@{profile?.username}</p></div></div>
+      <form className="settings-card" onSubmit={saveProfile}><div className="settings-head"><Sparkles /><div><strong>Identity</strong><span>Keep it lightweight. You're here for people, not follower counts.</span></div></div><label>Status<input value={status} onChange={(e) => setStatus(e.target.value)} placeholder="Gaming, studying, out…" /></label><label>Bio<textarea value={bio} onChange={(e) => setBio(e.target.value)} maxLength={180} placeholder="A sentence about you" /></label><button className="secondary-btn">{saving ? "Saving…" : "Save profile"}</button></form>
+
+      <section className="settings-card"><div className="settings-head"><Shield /><div><strong>Privacy Centre</strong><span>You decide what Wavo exposes.</span></div></div>
+        {privacy && <>
+          <ToggleRow label="Show online status" value={privacy.show_online} onChange={(value) => onPrivacy({ show_online: value })} />
+          <ToggleRow label="Read receipts" value={privacy.read_receipts} onChange={(value) => onPrivacy({ read_receipts: value })} />
+          <ToggleRow label="Allow friend requests" value={privacy.allow_friend_requests} onChange={(value) => onPrivacy({ allow_friend_requests: value })} />
+          <label>Default location sharing<select value={privacy.location_default} onChange={(e) => onPrivacy({ location_default: e.target.value })}><option value="off">Off</option><option value="approximate">Approximate</option><option value="precise">Precise</option></select></label>
+        </>}
+      </section>
+
+      <section className="settings-card"><div className="settings-head"><MapPin /><div><strong>Location sharing</strong><span>{locations.length ? `${locations.length} active share${locations.length === 1 ? "" : "s"}` : "Nothing is being shared"}</span></div></div>{locations.length > 0 && <button className="danger-soft" onClick={onStopLocations}>Stop all location sharing</button>}</section>
+      <section className="settings-card"><div className="settings-head"><Bell /><div><strong>Notifications</strong><span>Enable message and plan alerts when you want them.</span></div></div><button className="secondary-btn" onClick={onEnableNotifications}>Enable notifications</button></section>
+      <section className="settings-card danger-zone"><div className="settings-head"><Shield /><div><strong>Account safety</strong><span>Blocking and reporting are available from a friend chat. Account deletion is permanent.</span></div></div><button type="button" className="danger-soft" onClick={() => { if (window.confirm("Permanently delete your Wavo account and its account data? This cannot be undone.")) onDeleteAccount(); }}>Delete account</button></section>
+      <button className="logout-button" onClick={onLogout}><LogOut size={18} /> Log out</button>
+    </div>
+  );
+}
+
+function ToggleRow({ label, value, onChange }) {
+  return <button type="button" className="toggle-row" onClick={() => onChange(!value)}><span>{label}</span><i className={value ? "toggle on" : "toggle"}><b /></i></button>;
+}
+
+function CreateModal({ mode, setMode, spaces, presetSpace, onClose, onCreated, userId }) {
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({
+    body: "", audience: presetSpace ? "space" : "friends", groupId: presetSpace || spaces[0]?.id || "", title: "", location: "", startsAt: "", notes: "", question: "", option1: "", option2: "", option3: "", activityType: "would_you_rather", items: "", name: "", description: "", emoji: "🌊",
+  });
+
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      if (mode === "wave") await createWave(userId, { body: form.body, audience: form.audience, groupId: form.audience === "space" ? form.groupId : null });
+      if (mode === "plan") await createPlan(userId, { groupId: form.groupId, title: form.title, location: form.location, startsAt: new Date(form.startsAt).toISOString(), notes: form.notes });
+      if (mode === "poll") await createPoll(userId, { groupId: form.groupId, question: form.question, options: [form.option1, form.option2, form.option3] });
+      if (mode === "activity") await createActivity(userId, { groupId: form.groupId, type: form.activityType, title: form.title, items: form.items.split("\n").map((x) => x.trim()).filter(Boolean) });
+      if (mode === "space") await createSpace(userId, { name: form.name, description: form.description, emoji: form.emoji });
+      await onCreated();
+      onClose();
+    } catch (err) {
+      console.error("[wavo] create", err);
+      alert(GENERIC_ERROR);
+    } finally { setBusy(false); }
+  }
+
+  const needSpace = ["plan", "poll", "activity"].includes(mode) || (mode === "wave" && form.audience === "space");
+
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="create-modal">
+        <div className="modal-grabber" />
+        <div className="modal-head"><div><span className="eyebrow">START SOMETHING</span><h2>{mode ? CREATE_TYPES.find((t) => t.id === mode)?.label : "Create"}</h2></div><button className="icon-button" onClick={onClose}><X /></button></div>
+        {!mode ? <div className="create-grid">{CREATE_TYPES.map(({ id, label, hint, icon: Icon }) => <button key={id} onClick={() => setMode(id)}><Icon /><div><strong>{label}</strong><span>{hint}</span></div></button>)}</div> : (
+          <form className="stack-form create-form" onSubmit={submit}>
+            {mode === "wave" && <><label>Wave<textarea required value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} placeholder="What's happening?" maxLength={500} /></label><label>Send to<select value={form.audience} onChange={(e) => setForm({ ...form, audience: e.target.value })}><option value="friends">Friends</option><option value="space">A Space</option></select></label></>}
+            {mode === "plan" && <><label>Plan name<input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Beach, dinner, gaming…" /></label><label>When<input required type="datetime-local" value={form.startsAt} onChange={(e) => setForm({ ...form, startsAt: e.target.value })} /></label><label>Where<input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Optional place" /></label><label>Notes<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label></>}
+            {mode === "poll" && <><label>Question<input required value={form.question} onChange={(e) => setForm({ ...form, question: e.target.value })} placeholder="Where are we eating?" /></label>{[1, 2, 3].map((n) => <label key={n}>Option {n}<input required={n < 3} value={form[`option${n}`]} onChange={(e) => setForm({ ...form, [`option${n}`]: e.target.value })} /></label>)}</>}
+            {mode === "activity" && <><label>Activity<select value={form.activityType} onChange={(e) => setForm({ ...form, activityType: e.target.value })}><option value="would_you_rather">Would You Rather</option><option value="most_likely">Who's Most Likely</option><option value="this_or_that">This or That</option><option value="random_picker">Random Picker</option><option value="bracket">Bracket</option></select></label><label>Title<input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Tonight's chaos" /></label><label>Items<textarea value={form.items} onChange={(e) => setForm({ ...form, items: e.target.value })} placeholder={'One item per line\nPizza\nBurgers\nTacos'} /></label></>}
+            {mode === "space" && <><label>Emoji<input className="emoji-input" value={form.emoji} onChange={(e) => setForm({ ...form, emoji: e.target.value })} maxLength={4} /></label><label>Name<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Summer Crew" /></label><label>Description<textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What this Space is for" /></label></>}
+            {needSpace && <label>Space<select required value={form.groupId} onChange={(e) => setForm({ ...form, groupId: e.target.value })}><option value="" disabled>Choose a Space</option>{spaces.map((s) => <option key={s.id} value={s.id}>{s.emoji || "🌊"} {s.name}</option>)}</select></label>}
+            {needSpace && spaces.length === 0 && <div className="form-note">Create a Space first. Plans, polls and activities belong somewhere instead of floating around loose.</div>}
+            <div className="modal-actions"><button type="button" className="text-btn" onClick={() => setMode(null)}>Back</button><button className="primary-btn" disabled={busy || (needSpace && !form.groupId)}>{busy ? "Creating…" : `Create ${CREATE_TYPES.find((t) => t.id === mode)?.label}`}</button></div>
+          </form>
+        )}
+      </div>
     </div>
   );
 }
 
 export default function App() {
   const [session, setSession] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [mode, setMode] = useState("login");
-  const [showAuth, setShowAuth] = useState(false);
-  const [showPremium, setShowPremium] = useState(false);
-  const [checkoutBusy, setCheckoutBusy] = useState(false);
-  const [checkoutError, setCheckoutError] = useState("");
-  // Result of coming back from Stripe: null | "pending" | "ok" | "cancelled"
-  const [premiumReturn, setPremiumReturn] = useState(null);
-  const [auth, setAuth] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    birthday: "",
-    username: "",
-    password: "",
-  });
-  const [authLoading, setAuthLoading] = useState(false);
-  const [view, setView] = useState("chat"); // chat | admin
-
-  // friends + requests
-  const [friends, setFriends] = useState([]);
-  const [incomingRequests, setIncomingRequests] = useState([]);
-  const [outgoingIds, setOutgoingIds] = useState(new Set());
-
-  // my own strikes (each user sees only their own)
-  const [myStrikes, setMyStrikes] = useState([]);
-
-  // people I've blocked
-  const [blockedIds, setBlockedIds] = useState(new Set());
-  const [blockedProfiles, setBlockedProfiles] = useState([]);
-  const [deletingAccount, setDeletingAccount] = useState(false);
-
-  // mobile: is the friends/groups sidebar showing? (desktop ignores this)
-  const [showSidebar, setShowSidebar] = useState(true);
-
-  // message reactions
-  const [reactions, setReactions] = useState([]);
-  const [reactPickerMsg, setReactPickerMsg] = useState(null);
-
-  // batch 1: typing, edit, reply, emoji, search
-  const [theirTyping, setTheirTyping] = useState(false);
-  const [editingMsg, setEditingMsg] = useState(null);
-  const [replyingTo, setReplyingTo] = useState(null);
-  const [showEmoji, setShowEmoji] = useState(false);
-  const [showSearch, setShowSearch] = useState(false);
-  const [msgSearch, setMsgSearch] = useState("");
-
-  // avatar upload
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  // The photo waiting to be framed. Non-null while the cropper is open.
-  const [cropFile, setCropFile] = useState(null);
-
-  // theme
-  const [theme, setTheme] = useState(
-    () => localStorage.getItem("wavo-theme") || "dusk"
-  );
-
-  // cosmetics / stats / streaks — server decides what's unlocked
-  const premiumActive =
-    !!profile?.is_premium &&
-    (!profile?.premium_until || new Date(profile.premium_until) > new Date());
-  // Tier drives cosmetics access. If a paid tier has lapsed, fall back to free.
-  const tier = premiumActive ? profile?.tier || "premium" : "free";
-  const isPremium = premiumActive;
-
-  const {
-    catalogue,
-    stats,
-    claim,
-    requirement,
-    isUsable,
-  } = useCosmetics(session?.user?.id, tier);
-
-  const themeItems = useMemo(
-    () => catalogue.filter((c) => c.kind === "theme"),
-    [catalogue]
-  );
-
-  // Equip a badge or name colour. The server re-checks ownership; the client
-  // asking nicely is not a security model.
-  async function equip(item, slot) {
-    const usable = isUsable(item);
-    if (!usable) {
-      const req = requirement(item);
-      if (req?.kind === "premium") {
-        setShowPremium(true);
-        return;
-      }
-      if (req?.met) {
-        const got = await claim(item.id);
-        if (!got) return;
-      } else {
-        return;
-      }
-    }
-    const equipped =
-      slot === "badge" ? profile?.equipped_badge : profile?.equipped_name_style;
-    const next = equipped === item.id ? null : item.id;
-    const { data } = await supabase.rpc("equip_cosmetic", {
-      p_cosmetic_id: next,
-      p_slot: slot,
-    });
-    if (data !== false) await loadProfile();
-  }
-
-  // `plan` used to arrive as a React click event, because the CTA was wired
-  // up as onClick={onSubscribe}. Guard the value so a stray caller can't put
-  // an object into the request body.
-  async function startCheckout(plan) {
-    const planId = typeof plan === "string" && PLANS[plan] ? plan : DEFAULT_PLAN;
-    setCheckoutBusy(true);
-    setCheckoutError("");
-    try {
-      const { data: sess } = await supabase.auth.getSession();
-      const token = sess?.session?.access_token;
-      if (!token) {
-        setCheckoutError("You're signed out. Sign in again and retry.");
-        return;
-      }
-      const res = await fetch("/api/checkout", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ plan: planId }),
-      });
-      // A platform-level failure (a Vercel 500, a cold-start timeout) returns
-      // HTML, not JSON. res.json() then throws a parse error that reads like
-      // a bug in Wavo, so read text and decode it ourselves.
-      const raw = await res.text();
-      let json = null;
-      try {
-        json = JSON.parse(raw);
-      } catch {
-        /* not JSON — handled below */
-      }
-      if (json?.url) {
-        window.location.href = json.url;
-        return;
-      }
-      setCheckoutError(
-        json?.error ||
-          (res.ok
-            ? "Checkout didn't return a payment link. Try again."
-            : `Checkout failed (${res.status}). Try again in a minute.`)
-      );
-    } catch (err) {
-      setCheckoutError(
-        err?.message ? `Couldn't reach checkout: ${err.message}` : "Couldn't reach checkout."
-      );
-    } finally {
-      setCheckoutBusy(false);
-    }
-  }
-
-  // Tap a theme: use it if it's yours, otherwise try to claim it first.
-  async function pickTheme(item) {
-    if (isUsable(item)) {
-      setTheme(item.id);
-      return;
-    }
-    const req = requirement(item);
-    if (req?.kind === "earned" && req.met) {
-      const ok = await claim(item.id);
-      if (ok) setTheme(item.id);
-      return;
-    }
-    // Premium-locked themes (Aurora, Sunset) used to fall off the end of this
-    // function, so tapping one did nothing at all — no theme, no paywall, no
-    // feedback. Badges and name colours already open the paywall via equip().
-    if (req?.kind === "premium" && !req.met) {
-      setShowPremium(true);
-    }
-  }
-
-  // Closing Settings drops you out of the unlock list too, so reopening lands
-  // on Appearance itself rather than on whatever screen you left behind it.
-  function closeSettings() {
-    setShowSettings(false);
-    setShowUnlocks(false);
-  }
-
-  // Claiming from the unlock list only takes ownership — it doesn't apply the
-  // theme or equip the badge. You're reading a list here, not dressing up, and
-  // having the whole app change colour under you would be a surprise.
-  async function claimFromGuide(item) {
-    await claim(item.id);
-  }
-
-  // saved accounts for quick switching (stored on this device only)
-  const [accounts, setAccounts] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("wavo-accounts") || "[]");
-    } catch {
-      return [];
-    }
-  });
-
-  useEffect(() => {
-    const root = document.documentElement;
-    if (theme === "dusk") root.removeAttribute("data-theme");
-    else root.setAttribute("data-theme", theme);
-    localStorage.setItem("wavo-theme", theme);
-  }, [theme]);
-
-  // settings panel
-  const [showSettings, setShowSettings] = useState(false);
-  const [usernameDraft, setUsernameDraft] = useState("");
-  const [savingName, setSavingName] = useState(false);
-  const [nameMsg, setNameMsg] = useState("");
-  // batch 2: status + nicknames
-  const [statusDraft, setStatusDraft] = useState("");
-  const [savingStatus, setSavingStatus] = useState(false);
-  const [statusMsg, setStatusMsg] = useState("");
-  const [settingsTab, setSettingsTab] = useState("profile");
-  // Appearance has a second screen behind it: the full unlock ladder.
-  const [showUnlocks, setShowUnlocks] = useState(false);
-  const [nicknames, setNicknames] = useState({});
-  // batch 3: latest announcement banner
-  const [announcement, setAnnouncement] = useState(null);
-  // batch 4: file upload
-  const [uploadingFile, setUploadingFile] = useState(false);
-  const voice = useVoiceRecorder();
-  const canRecord = voiceSupported();
-  const [desktopNotifs, setDesktopNotifs] = useState(
-    () => localStorage.getItem("wavo-desktop-notifs") === "on"
-  );
-
-  // add-friend search
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState([]);
-  const [searching, setSearching] = useState(false);
-
-  const [selectedUser, setSelectedUser] = useState(null);
-  // Ticks every 30s so presence labels stay honest and re-fetches friends'
-  // last_active so their dots don't go stale while you sit on the screen.
-  const [now, setNow] = useState(Date.now());
-
-  // Look up a friend by username — used when the URL is /chats/someusername
-  // (e.g. someone bookmarked or was sent a direct link to a specific chat).
-  function setSelectedUserByUsername(username) {
-    const match = friends.find(
-      (f) => f.username?.toLowerCase() === username.toLowerCase()
-    );
-    if (match) setSelectedUser(match);
-    // If friends haven't loaded yet, or the username isn't a friend, this
-    // silently does nothing — the chat list still shows, just nothing
-    // pre-selected. No error, no crash.
-  }
-
-  useUrlSync({
-    session,
-    profile,
-    showAuth,
-    setShowAuth,
-    mode,
-    setMode,
-    view,
-    setView,
-    selectedUser,
-    setSelectedUserByUsername,
-  });
-
+  const [booting, setBooting] = useState(true);
+  const [tab, setTab] = useState("home");
+  const [data, setData] = useState({ profile: null, friends: [], requests: [], spaces: [], waves: [], plans: [], polls: [], activities: [], privacy: null, locations: [] });
+  const [createMode, setCreateMode] = useState(false);
+  const [presetSpace, setPresetSpace] = useState(null);
+  const [selectedFriend, setSelectedFriend] = useState(null);
+  const [selectedSpace, setSelectedSpace] = useState(null);
   const [messages, setMessages] = useState([]);
   const [messageText, setMessageText] = useState("");
-  const [loadingChat, setLoadingChat] = useState(false);
-  const [isFocused, setIsFocused] = useState(true);
-  // Overflow menu for the rarely-used, destructive chat actions (report/block)
-  const [showChatMenu, setShowChatMenu] = useState(false);
-  // Some things need to *behave* differently on a phone, not just look
-  // different — the chat menu is a dropdown or a sheet, not one styled twice.
-  const isPhone = useIsPhone();
-  // True while you're scrolled up reading history — suppresses auto-scroll
-  // and shows a "jump to latest" button instead of yanking you down.
-  const [stuckToBottom, setStuckToBottom] = useState(true);
+  const [toast, setToast] = useState("");
 
-  // batch 5: group chats
-  const [groups, setGroups] = useState([]);
-  const [selectedGroup, setSelectedGroup] = useState(null);
-  const [groupMessages, setGroupMessages] = useState([]);
-  const [groupMembers, setGroupMembers] = useState({}); // userId -> profile
-  const [showNewGroup, setShowNewGroup] = useState(false);
-  const [newGroupName, setNewGroupName] = useState("");
-  const [newGroupMembers, setNewGroupMembers] = useState([]); // friend ids
-  const [creatingGroup, setCreatingGroup] = useState(false);
-  const [groupTyping, setGroupTyping] = useState(null); // name of who's typing
+  const userId = session?.user?.id;
 
-  // notifications dropdown
-  const [notifications, setNotifications] = useState([]);
-  const [showNotifs, setShowNotifs] = useState(false);
-  const [notifTab, setNotifTab] = useState("notifs"); // notifs | requests
-  // The panel is measured against the bell and portalled to <body>; see
-  // useAnchoredPanel for why it can't simply be absolutely positioned here.
-  const notifBtnRef = useRef(null);
-  const notifStyle = useAnchoredPanel(notifBtnRef, showNotifs);
+  useEffect(() => {
+    registerServiceWorker().catch(() => {});
+    supabase.auth.getSession().then(({ data: authData }) => { setSession(authData.session || null); setBooting(false); });
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, next) => { setSession(next); setBooting(false); });
+    return () => authListener.subscription.unsubscribe();
+  }, []);
 
-  // games
-  const [showGames, setShowGames] = useState(false);
+  async function refresh() {
+    if (!userId) return;
+    try {
+      const [profile, friends, requests, spaces, privacy] = await Promise.all([
+        getProfile(userId), getFriends(userId), getIncomingFriendRequests(userId), getSpaces(userId), getPrivacySettings(userId),
+      ]);
+      const [waves, plans, polls, activities, locations] = await Promise.all([
+        getWaves(), getPlans(userId, spaces), getPolls(), getActivities(), getActiveLocationShares(),
+      ]);
+      setData({ profile, friends, requests, spaces, waves, plans, polls, activities, privacy, locations });
+    } catch (err) {
+      console.error("[wavo] refresh", err);
+      setToast(GENERIC_ERROR);
+    }
+  }
 
-  // giphy
-  const [showGiphy, setShowGiphy] = useState(false);
-  const [giphySearch, setGiphySearch] = useState("");
-  const [giphyResults, setGiphyResults] = useState([]);
-  const [giphyLoading, setGiphyLoading] = useState(false);
+  useEffect(() => { if (userId) refresh(); }, [userId]);
 
-  const bottomRef = useRef(null);
-  const messagesRef = useRef(null);
-  const selectedUserRef = useRef(null);
-  const isFocusedRef = useRef(true);
-  const stuckToBottomRef = useRef(true);
-  const avatarInputRef = useRef(null);
-  const longPressRef = useRef(null);
-  const chatChannelRef = useRef(null);
-  // DM and group typing indicators need their own timers — sharing one meant
-  // a group message could cancel the DM indicator and vice versa.
-  const typingTimerRef = useRef(null);
-  const groupTypingTimerRef = useRef(null);
-  const lastTypingSentRef = useRef(0);
-  const chatFileInputRef = useRef(null);
-  const groupChannelRef = useRef(null);
+  useEffect(() => {
+    if (!userId || !selectedFriend) { setMessages([]); return; }
+    const chatId = [userId, selectedFriend.id].sort().join("_");
+    getDmMessages(userId, selectedFriend.id).then((r) => setMessages(r.messages)).catch(console.error);
+    const channel = supabase.channel(`wavo-dm:${chatId}`).on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` }, () => getDmMessages(userId, selectedFriend.id).then((r) => setMessages(r.messages))).subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [userId, selectedFriend]);
 
-  const currentUser = session?.user;
+  useEffect(() => {
+    if (!selectedSpace) { if (!selectedFriend) setMessages([]); return; }
+    getSpaceMessages(selectedSpace.id).then(setMessages).catch(console.error);
+    const channel = supabase.channel(`wavo-space:${selectedSpace.id}`).on("postgres_changes", { event: "*", schema: "public", table: "group_messages", filter: `group_id=eq.${selectedSpace.id}` }, () => getSpaceMessages(selectedSpace.id).then(setMessages)).subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [selectedSpace]);
 
-  const chatId = useMemo(() => {
-    if (!currentUser || !selectedUser) return null;
-    return [currentUser.id, selectedUser.id].sort().join("_");
-  }, [currentUser, selectedUser]);
-
-  // Group roles, pinned chats, pinned messages. The destructive parts are
-  // enforced by security-definer RPCs; what this returns only decides what to
-  // draw, never what's allowed.
-  const social = useSocialUpgrades({
-    userId: currentUser?.id,
-    chatId,
-    selectedUser,
-    selectedGroup,
-    messages,
-    groupMessages,
-    groupMembers,
-    loadGroups,
-    loadGroupMembers,
-    setSelectedGroup,
-  });
-
-  // Pinned conversations float to the top of their list, keeping their
-  // existing order within each half so nothing else jumps around.
-  const sortPinned = useCallback(
-    (list, kind, idOf) => {
-      const score = (x) => (social.isChatPinned(kind, idOf(x)) ? 0 : 1);
-      return [...list].sort((a, b) => score(a) - score(b));
+  const actions = useMemo(() => ({
+    openCreate: (mode = null, spaceId = null) => { setPresetSpace(spaceId); setCreateMode(mode || true); },
+    respondRequest: async (id, status) => { await respondFriendRequest(id, status); await refresh(); setToast(status === "accepted" ? "Friend added" : "Request updated"); },
+    addFriend: async (receiverId) => { await sendFriendRequest(userId, receiverId); setToast("Friend request sent"); },
+    rsvp: async (planId, response) => { await setRsvp(userId, planId, response); await refresh(); },
+    vote: async (poll, optionId) => { await votePoll(userId, poll, optionId); await refresh(); },
+    react: async (waveId, emoji) => { await reactToWave(userId, waveId, emoji); await refresh(); },
+    report: async (targetId) => {
+      const reason = window.prompt("What should Wavo review about this account?", "Inappropriate behaviour");
+      if (!reason?.trim()) return;
+      await reportUser(userId, targetId, reason.trim());
+      setToast("Report submitted");
     },
-    [social]
-  );
-
-  // Whose profile card is open, and which image the viewer is showing.
-  const [profileCardUser, setProfileCardUser] = useState(null);
-  const [viewerImageId, setViewerImageId] = useState(null);
-  const [sendLaterOpen, setSendLaterOpen] = useState(false);
-
-  const scheduled = useScheduled({
-    userId: currentUser?.id,
-    kind: selectedGroup ? "group" : "dm",
-    conversationId: selectedGroup ? selectedGroup.id : chatId,
-  });
-
-  // Which conversation any half-typed message belongs to.
-  const draftKey = draftKeyFor(selectedGroup, selectedUser);
-
-  // Persist the draft as you type, so closing the tab mid-sentence doesn't
-  // lose it. Writing to localStorage isn't React state, so no cascade here.
-  useEffect(() => {
-    if (!draftKey || editingMsg) return undefined;
-    const t = window.setTimeout(() => writeDraft(draftKey, messageText), 250);
-    return () => window.clearTimeout(t);
-  }, [draftKey, messageText, editingMsg]);
-
-  useEffect(() => {
-    selectedUserRef.current = selectedUser;
-  }, [selectedUser]);
-  useEffect(() => {
-    isFocusedRef.current = isFocused;
-  }, [isFocused]);
-  useEffect(() => {
-    stuckToBottomRef.current = stuckToBottom;
-  }, [stuckToBottom]);
-
-  // Track whether the transcript is parked at the bottom. Everything else
-  // about auto-scrolling keys off this: if you've scrolled up to read, a new
-  // message must not drag you back down.
-  function onMessagesScroll(e) {
-    const el = e.currentTarget;
-    const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
-    setStuckToBottom(gap < 120);
-  }
-
-  function scrollToBottom(behavior = "smooth") {
-    bottomRef.current?.scrollIntoView({ behavior, block: "end" });
-  }
-
-  // Scroll a pinned message into view and flash it, so it's obvious which one
-  // you landed on when the surrounding text looks the same.
-  function jumpToMessage(id) {
-    const el = messagesRef.current?.querySelector(
-      `[data-msg-id="${CSS.escape(String(id))}"]`
-    );
-    if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
-    el.classList.remove("flash");
-    // reading offsetWidth restarts the animation if it's already running
-    void el.offsetWidth;
-    el.classList.add("flash");
-    window.setTimeout(() => el.classList.remove("flash"), 1600);
-  }
-
-  function jumpToLatest() {
-    setStuckToBottom(true);
-    scrollToBottom();
-  }
-
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
-  const bellCount = unreadCount + incomingRequests.length;
-
-  const unreadByUser = useMemo(() => {
-    const map = {};
-    notifications.forEach((n) => {
-      if (!n.is_read && n.sender_id) {
-        map[n.sender_id] = (map[n.sender_id] || 0) + 1;
-      }
-    });
-    return map;
-  }, [notifications]);
-
-  const searchActive = !!msgSearch.trim();
-
-  const visibleMessages = useMemo(() => {
-    const q = msgSearch.trim().toLowerCase();
-    if (!q) return messages;
-    return messages.filter(
-      (m) => !m.deleted_at && (m.content || "").toLowerCase().includes(q)
-    );
-  }, [messages, msgSearch]);
-
-  const lastMineId = useMemo(
-    () => lastOwnMessageId(messages, currentUser?.id),
-    [messages, currentUser?.id]
-  );
-
-  // --- UTILITIES ---
-  const markAsRead = async (msgId) => {
-    await supabase
-      .from("messages")
-      .update({ is_read: true, read_at: new Date().toISOString() })
-      .eq("id", msgId);
-  };
-
-  const triggerNotification = (msg, fromName) => {
-    if (localStorage.getItem("wavo-desktop-notifs") === "off") return;
-    if (Notification.permission === "granted") {
-      new Notification(`Wavo: ${fromName || "New Message"}`, {
-        body: msg.content,
-        icon: "/favicon.svg",
-      });
-    }
-  };
-
-  const clearNotifsFromSender = async (senderId) => {
-    const toClear = notifications.filter(
-      (n) => n.sender_id === senderId && !n.is_read
-    );
-    if (toClear.length === 0) return;
-    setNotifications((prev) =>
-      prev.map((n) => (n.sender_id === senderId ? { ...n, is_read: true } : n))
-    );
-    await supabase
-      .from("notifications")
-      .update({ is_read: true })
-      .eq("sender_id", senderId)
-      .eq("user_id", currentUser.id)
-      .eq("is_read", false);
-  };
-
-  const markAllNotifsRead = async () => {
-    if (unreadCount === 0) return;
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-    await supabase
-      .from("notifications")
-      .update({ is_read: true })
-      .eq("user_id", currentUser.id)
-      .eq("is_read", false);
-  };
-
-  // --- LIFECYCLE & FOCUS ---
-  useEffect(() => {
-    async function init() {
-      const { data } = await supabase.auth.getSession();
-      setSession(data.session ?? null);
-      registerServiceWorker();
-    }
-    init();
-
-    const onFocus = () => setIsFocused(true);
-    const onBlur = () => setIsFocused(false);
-    window.addEventListener("focus", onFocus);
-    window.addEventListener("blur", onBlur);
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-    });
-
-    return () => {
-      listener.subscription.unsubscribe();
-      window.removeEventListener("focus", onFocus);
-      window.removeEventListener("blur", onBlur);
-    };
-  }, []);
-
-  // Escape closes whatever is on top, innermost first. Every panel in here
-  // used to be dismissable only by finding and hitting its own little X.
-  useEffect(() => {
-    function onKey(e) {
-      if (e.key !== "Escape") return;
-      // Order must match what's painted on top, or Escape dismisses the
-      // wrong layer: the paywall opens from inside Settings and sits above
-      // it, so it has to be checked first.
-      if (reactPickerMsg) return setReactPickerMsg(null);
-      if (showPremium) return setShowPremium(false);
-      if (showNewGroup) return setShowNewGroup(false);
-      // The unlock list is a screen *inside* Settings, so Escape steps back to
-      // Appearance before it closes the dialog.
-      if (showSettings && showUnlocks) return setShowUnlocks(false);
-      if (showSettings) return closeSettings();
-      if (showGiphy) return setShowGiphy(false);
-      if (showEmoji) return setShowEmoji(false);
-      if (showGames) return setShowGames(false);
-      if (showChatMenu) return setShowChatMenu(false);
-      if (showNotifs) return setShowNotifs(false);
-      if (editingMsg) return cancelEdit();
-      if (replyingTo) return setReplyingTo(null);
-      if (showSearch) {
-        setShowSearch(false);
-        setMsgSearch("");
-        return;
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
-
-  // Click anywhere outside an open dropdown to dismiss it.
-  useEffect(() => {
-    if (!showNotifs && !showChatMenu) return;
-    function onDown(e) {
-      // `.notif-panel` is checked separately from its wrapper for the same
-      // reason as the chat menu below: it is portalled to <body>, so it is no
-      // longer a descendant of `.notif-wrap` and a tap on one of its own
-      // buttons would otherwise dismiss it before the click landed.
-      if (
-        showNotifs &&
-        !e.target.closest?.(".notif-wrap") &&
-        !e.target.closest?.(".notif-panel")
-      )
-        setShowNotifs(false);
-      // `.chat-menu` is checked separately from its wrapper: on a phone the
-      // sheet is portaled to <body>, so it is no longer a descendant of
-      // `.chat-menu-wrap` and this would close it before a tap on one of its
-      // own buttons ever landed.
-      if (
-        showChatMenu &&
-        !e.target.closest?.(".chat-menu-wrap") &&
-        !e.target.closest?.(".chat-menu")
-      )
-        setShowChatMenu(false);
-    }
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [showNotifs, showChatMenu]);
-
-  useEffect(() => {
-    if (!currentUser) return;
-    loadProfile();
-    loadFriends();
-    loadRequests();
-    loadNotifications();
-    loadMyStrikes();
-    loadNicknames();
-    loadAnnouncement();
-    loadGroups();
-    loadBlocks();
-  }, [currentUser]);
-
-  // --- ANNOUNCEMENTS banner ---
-  async function loadAnnouncement() {
-    const { data } = await supabase
-      .from("announcements")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(1);
-    const latest = data?.[0];
-    if (latest && localStorage.getItem("wavo-seen-announce") !== latest.id) {
-      setAnnouncement(latest);
-    } else {
-      setAnnouncement(null);
-    }
-  }
-
-  useEffect(() => {
-    if (!currentUser) return;
-    const channel = supabase
-      .channel("announce")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "announcements" },
-        (payload) => setAnnouncement(payload.new)
-      )
-      .subscribe();
-    return () => supabase.removeChannel(channel);
-  }, [currentUser]);
-
-  function dismissAnnouncement() {
-    if (announcement) localStorage.setItem("wavo-seen-announce", announcement.id);
-    setAnnouncement(null);
-  }
-
-  // --- RETURN FROM STRIPE CHECKOUT ---
-  // Paying used to look like it had failed: Stripe sends you back to
-  // /?premium=1, nothing read that, and is_premium only flips when the
-  // webhook lands — which the already-loaded tab never noticed. So you paid,
-  // came back, and still saw "Get Premium".
-  useEffect(() => {
-    if (!currentUser || !CHECKOUT_RETURN) return;
-
-    if (CHECKOUT_RETURN === "0") {
-      setPremiumReturn("cancelled");
-      return;
-    }
-    if (CHECKOUT_RETURN !== "1") return;
-
-    setShowPremium(false);
-    setPremiumReturn("pending");
-
-    let stopped = false;
-    (async () => {
-      // The webhook is out of band, so poll instead of trusting the
-      // redirect. ~30s, then say so rather than spinning forever.
-      for (let i = 0; i < 15 && !stopped; i++) {
-        const fresh = await loadProfile();
-        if (fresh?.is_premium) {
-          if (!stopped) setPremiumReturn("ok");
-          return;
-        }
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-      if (!stopped) setPremiumReturn("slow");
-    })();
-
-    return () => {
-      stopped = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser]);
-
-  // --- LAST ONLINE heartbeat ---
-  useEffect(() => {
-    if (!currentUser) return;
-    const ping = () => supabase.rpc("touch_last_active");
-    ping();
-    const interval = setInterval(ping, 60000);
-    window.addEventListener("focus", ping);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("focus", ping);
-    };
-  }, [currentUser]);
-
-  // --- PRESENCE TICKER ---
-  // Advances `now` and refetches friends' last_active every 30s, so other
-  // people's online dots and "last seen" labels update without a refresh.
-  useEffect(() => {
-    if (!currentUser) return;
-    const tick = () => {
-      setNow(Date.now());
-      loadFriends();
-    };
-    const interval = setInterval(tick, 30000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser]);
-
-  // --- PUSH SUBSCRIPTION (post-login) ---
-  useEffect(() => {
-    if (!currentUser) return;
-    let cancelled = false;
-    (async () => {
-      const granted = await ensureNotificationPermission();
-      if (cancelled || !granted) return;
-      await subscribeToPush(currentUser.id);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [currentUser]);
-
-  // --- NOTIFICATION TAP ---
-  // sw.js has always posted this message on notificationclick and nothing has
-  // ever listened, so tapping a notification focused the tab and left you
-  // wherever you were. A full navigation rather than setState: the URL is the
-  // thing that opens a specific DM (useUrlSync reads it on load), and this
-  // path runs when the tab may have been backgrounded for hours.
-  useEffect(() => {
-    const go = (url) => {
-      if (!url) return;
-      if (window.location.pathname === url) return;
-      window.location.assign(url);
-    };
-
-    const onSwMessage = (event) => {
-      if (event.data?.type === "notification-click") go(event.data.url);
-    };
-    navigator.serviceWorker?.addEventListener("message", onSwMessage);
-
-    // The native shell gets the equivalent event from the plugin instead.
-    let removeNative;
-    if (isNativeApp) {
-      import("@capacitor/push-notifications")
-        .then(({ PushNotifications }) =>
-          PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
-            go(action.notification?.data?.url);
-          })
-        )
-        .then((handle) => {
-          removeNative = () => handle.remove();
-        })
-        .catch(() => {});
-    }
-
-    return () => {
-      navigator.serviceWorker?.removeEventListener("message", onSwMessage);
-      removeNative?.();
-    };
-  }, []);
-
-  // --- NOTIFICATIONS REALTIME ---
-  useEffect(() => {
-    if (!currentUser) return;
-
-    const channel = supabase
-      .channel(`notifications:${currentUser.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${currentUser.id}`,
-        },
-        (payload) => {
-          const notif = payload.new;
-          setNotifications((prev) => [notif, ...prev]);
-
-          const openChatId = selectedUserRef.current
-            ? [currentUser.id, selectedUserRef.current.id].sort().join("_")
-            : null;
-          const chatIsActive =
-            isFocusedRef.current && openChatId === notif.chat_id;
-
-          if (!chatIsActive) {
-            triggerNotification({ content: notif.body }, notif.title);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [currentUser]);
-
-  // --- FRIEND REQUESTS REALTIME ---
-  useEffect(() => {
-    if (!currentUser) return;
-
-    const channel = supabase
-      .channel(`friends:${currentUser.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "friend_requests",
-          filter: `receiver_id=eq.${currentUser.id}`,
-        },
-        () => {
-          loadRequests();
-          loadFriends();
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "friend_requests",
-          filter: `sender_id=eq.${currentUser.id}`,
-        },
-        () => {
-          loadRequests();
-          loadFriends();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [currentUser]);
-
-  // --- CHAT MESSAGES REALTIME ---
-  useEffect(() => {
-    if (!chatId) return;
-    loadMessages();
-    loadReactions();
-
-    const channel = supabase
-      .channel(`chat:${chatId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `chat_id=eq.${chatId}`,
-        },
-        (payload) => {
-          const newMsg = payload.new;
-          setMessages((prev) => [...prev.filter((m) => m.id !== newMsg.id), newMsg]);
-
-          // Read the focus flag from a ref, not from state: putting
-          // `isFocused` in this effect's deps tore the channel down and
-          // refetched the whole thread every time you tabbed away and back.
-          if (newMsg.receiver_id === currentUser.id && isFocusedRef.current) {
-            markAsRead(newMsg.id);
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "messages",
-          filter: `chat_id=eq.${chatId}`,
-        },
-        (payload) => {
-          setMessages((prev) =>
-            prev.map((m) => (m.id === payload.new.id ? payload.new : m))
-          );
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "reactions",
-          filter: `chat_id=eq.${chatId}`,
-        },
-        () => loadReactions()
-      )
-      .on("broadcast", { event: "typing" }, ({ payload }) => {
-        if (payload?.userId && payload.userId !== currentUser.id) {
-          setTheirTyping(true);
-          clearTimeout(typingTimerRef.current);
-          typingTimerRef.current = setTimeout(() => setTheirTyping(false), 2500);
-        }
-      })
-      .subscribe();
-
-    chatChannelRef.current = channel;
-    setTheirTyping(false);
-
-    return () => {
-      chatChannelRef.current = null;
-      clearTimeout(typingTimerRef.current);
-      supabase.removeChannel(channel);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatId]);
-
-  // Follow new messages only when you're already at the bottom, and never
-  // while a search filter is narrowing the list (jumping to the end of a
-  // filtered view is disorienting).
-  useEffect(() => {
-    if (msgSearch.trim()) return;
-    if (!stuckToBottomRef.current) return;
-    scrollToBottom();
-  }, [messages, theirTyping, msgSearch]);
-
-  // Opening a chat should land at the newest message immediately — no
-  // smooth-scrolling through the whole history first.
-  useEffect(() => {
-    if (!chatId) return;
-    setStuckToBottom(true);
-    stuckToBottomRef.current = true;
-    requestAnimationFrame(() => scrollToBottom("auto"));
-  }, [chatId]);
-
-  // --- GROUP CHAT REALTIME ---
-  useEffect(() => {
-    if (!selectedGroup) return;
-    const gid = selectedGroup.id;
-    loadGroupMessages(gid);
-    loadGroupMembers(gid);
-    setGroupTyping(null);
-
-    const channel = supabase
-      .channel(`group:${gid}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "group_messages",
-          filter: `group_id=eq.${gid}`,
-        },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            setGroupMessages((prev) => [
-              ...prev.filter((m) => m.id !== payload.new.id),
-              payload.new,
-            ]);
-          } else if (payload.eventType === "UPDATE") {
-            setGroupMessages((prev) =>
-              prev.map((m) => (m.id === payload.new.id ? payload.new : m))
-            );
-          }
-        }
-      )
-      .on("broadcast", { event: "typing" }, ({ payload }) => {
-        if (payload?.userId && payload.userId !== currentUser.id) {
-          setGroupTyping(payload.name || "Someone");
-          clearTimeout(groupTypingTimerRef.current);
-          groupTypingTimerRef.current = setTimeout(
-            () => setGroupTyping(null),
-            2500
-          );
-        }
-      })
-      .subscribe();
-
-    groupChannelRef.current = channel;
-
-    return () => {
-      groupChannelRef.current = null;
-      clearTimeout(groupTypingTimerRef.current);
-      supabase.removeChannel(channel);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedGroup]);
-
-  useEffect(() => {
-    if (!stuckToBottomRef.current) return;
-    scrollToBottom();
-  }, [groupMessages, groupTyping]);
-
-  useEffect(() => {
-    if (!selectedGroup) return;
-    setStuckToBottom(true);
-    stuckToBottomRef.current = true;
-    requestAnimationFrame(() => scrollToBottom("auto"));
-  }, [selectedGroup]);
-
-  // --- DATA FETCHING ---
-  async function loadProfile() {
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", currentUser.id)
-      .single();
-    if (data) setProfile(data);
-    return data;
-  }
-
-  async function loadMyStrikes() {
-    const { data } = await supabase
-      .from("strikes")
-      .select("*")
-      .eq("user_id", currentUser.id)
-      .order("created_at", { ascending: false });
-    if (data) setMyStrikes(data);
-  }
-
-  async function loadFriends() {
-    const { data: rows } = await supabase
-      .from("friend_requests")
-      .select("sender_id, receiver_id")
-      .eq("status", "accepted")
-      .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`);
-    if (!rows || rows.length === 0) {
-      setFriends([]);
-      return;
-    }
-    const otherIds = rows.map((r) =>
-      r.sender_id === currentUser.id ? r.receiver_id : r.sender_id
-    );
-    const { data: profs } = await supabase
-      .from("profiles")
-      .select("*")
-      .in("id", otherIds);
-    setFriends(profs || []);
-    // Keep the open chat's presence fresh too — but only hand back a new
-    // object when something actually changed. This runs every 30s, and
-    // returning a fresh object each time re-rendered the whole chat pane.
-    setSelectedUser((cur) => {
-      if (!cur) return cur;
-      const updated = (profs || []).find((p) => p.id === cur.id);
-      if (!updated || updated.last_active === cur.last_active) return cur;
-      return { ...cur, last_active: updated.last_active };
-    });
-  }
-
-  async function loadRequests() {
-    const { data: incoming } = await supabase
-      .from("friend_requests")
-      .select("id, sender_id, created_at")
-      .eq("receiver_id", currentUser.id)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false });
-
-    const { data: outgoing } = await supabase
-      .from("friend_requests")
-      .select("receiver_id")
-      .eq("sender_id", currentUser.id)
-      .eq("status", "pending");
-
-    let withNames = [];
-    if (incoming && incoming.length) {
-      const ids = incoming.map((r) => r.sender_id);
-      const { data: profs } = await supabase
-        .from("profiles")
-        .select("id, username")
-        .in("id", ids);
-      const byId = Object.fromEntries((profs || []).map((p) => [p.id, p]));
-      withNames = incoming.map((r) => ({
-        ...r,
-        username: byId[r.sender_id]?.username || "Unknown",
-      }));
-    }
-    setIncomingRequests(withNames);
-    setOutgoingIds(new Set((outgoing || []).map((r) => r.receiver_id)));
-  }
-
-  async function loadNotifications() {
-    const { data } = await supabase
-      .from("notifications")
-      .select("*")
-      .eq("user_id", currentUser.id)
-      .order("created_at", { ascending: false })
-      .limit(30);
-    if (data) setNotifications(data);
-  }
-
-  async function loadMessages() {
-    setLoadingChat(true);
-    const { data } = await supabase
-      .from("messages")
-      .select("*")
-      .eq("chat_id", chatId)
-      .order("created_at", { ascending: true });
-    if (data) {
-      setMessages(data);
-      data.forEach((m) => {
-        if (m.receiver_id === currentUser.id && !m.is_read) markAsRead(m.id);
-      });
-    }
-    setLoadingChat(false);
-  }
-
-  // --- REACTIONS ---
-  async function loadReactions() {
-    if (!chatId) return;
-    const { data } = await supabase.from("reactions").select("*").eq("chat_id", chatId);
-    if (data) setReactions(data);
-  }
-
-  function reactionsFor(msgId) {
-    const grouped = {};
-    reactions
-      .filter((r) => r.message_id === msgId)
-      .forEach((r) => {
-        if (!grouped[r.emoji]) grouped[r.emoji] = { count: 0, mine: false };
-        grouped[r.emoji].count += 1;
-        if (r.user_id === currentUser.id) grouped[r.emoji].mine = true;
-      });
-    return grouped;
-  }
-
-  async function addReaction(msg, emoji) {
-    setReactPickerMsg(null);
-    const existing = reactions.find(
-      (r) => r.message_id === msg.id && r.user_id === currentUser.id && r.emoji === emoji
-    );
-    if (existing) {
-      await supabase.from("reactions").delete().eq("id", existing.id);
-    } else {
-      await supabase.from("reactions").insert({
-        message_id: msg.id,
-        chat_id: chatId,
-        user_id: currentUser.id,
-        emoji,
-      });
-    }
-    loadReactions();
-  }
-
-  function startPress(msg) {
-    clearTimeout(longPressRef.current);
-    longPressRef.current = setTimeout(() => setReactPickerMsg(msg.id), 450);
-  }
-  function endPress() {
-    clearTimeout(longPressRef.current);
-  }
-
-  // --- AVATAR UPLOAD ---
-
-  // Picking a file no longer uploads it. It opens the cropper, which hands back
-  // a finished 512px JPEG — so the framing is the user's choice rather than
-  // whatever the middle of their photo happened to be.
-  function pickAvatar(e) {
-    const file = e.target.files?.[0];
-    // Reset the input now rather than later: picking the same file twice in a
-    // row fires no change event otherwise, so cancelling a crop would make that
-    // photo unpickable until you chose a different one.
-    e.target.value = "";
-    if (!file) return;
-    // 25 MB of camera roll never becomes a 96px circle worth waiting for, and
-    // decoding one on a phone is the part that actually falls over.
-    if (file.size > 25 * 1024 * 1024) {
-      alert("That picture is too big (25 MB max).");
-      return;
-    }
-    setCropFile(file);
-  }
-
-  async function saveAvatarBlob(blob) {
-    setUploadingAvatar(true);
-
-    // The upload and the refresh that follows it fail for different reasons and
-    // must not share a message — reporting "couldn't upload" after the picture
-    // is already saved sends people back to do it again.
-    let saved = false;
+    block: async (targetId) => {
+      if (!window.confirm("Block this person? They will no longer be able to message or add you.")) return;
+      await blockUser(targetId);
+      setSelectedFriend(null);
+      await refresh();
+      setToast("User blocked");
+    },
+    shareLocation: async (plan) => {
+      if (!navigator.geolocation) return setToast("Location isn't available on this device.");
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        try {
+          const approximate = data.privacy?.location_default !== "precise";
+          await sharePlanLocation(userId, plan.id, { latitude: pos.coords.latitude, longitude: pos.coords.longitude, precisionM: approximate ? Math.max(250, Math.round(pos.coords.accuracy || 250)) : Math.max(10, Math.round(pos.coords.accuracy || 20)), minutes: 60 });
+          await refresh();
+          setToast("Arrival sharing is on for 1 hour");
+        } catch (err) { console.error(err); setToast(GENERIC_ERROR); }
+      }, () => setToast("Location permission wasn't granted."), { enableHighAccuracy: data.privacy?.location_default === "precise", timeout: 10000 });
+    },
+  }), [userId, data.privacy]);
+
+  async function sendCurrentMessage(e) {
+    e.preventDefault();
+    const content = messageText.trim();
+    if (!content) return;
+    setMessageText("");
     try {
-      // One key per person, always .jpg, because the cropper only ever produces
-      // JPEG. The old code keyed on the uploaded file's extension, so changing
-      // format left the previous avatar behind as an orphan — the bucket still
-      // holds three files for one user from exactly that.
-      const path = `${currentUser.id}.jpg`;
-      const { error: upErr } = await supabase.storage
-        .from("avatars")
-        .upload(path, blob, {
-          upsert: true,
-          contentType: "image/jpeg",
-          cacheControl: "3600",
-        });
-      if (upErr) throw upErr;
-
-      const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
-      // Now that the path is stable the cache-buster is load-bearing: same URL,
-      // new bytes. It is stored on the profile, so everyone else's next read
-      // gets a URL the CDN treats as new.
-      const url = `${pub.publicUrl}?t=${Date.now()}`;
-      const { error: rpcErr } = await supabase.rpc("set_avatar", { url });
-      if (rpcErr) throw rpcErr;
-      saved = true;
-    } catch (err) {
-      // Storage errors carry the useful part in statusCode/error rather than
-      // message, and "Couldn't upload picture: undefined" told nobody anything.
-      const detail =
-        err?.message || err?.error || err?.statusCode || "unknown error";
-      alert(`Couldn't upload picture: ${detail}`);
-    }
-    setUploadingAvatar(false);
-
-    // Outside the try: a refresh that fails leaves the new picture saved and
-    // showing on the next load, which is not worth an error box.
-    if (saved) {
-      setCropFile(null);
-      await loadProfile();
-      await loadFriends();
-    }
-    // On failure the cropper stays open with the crop intact, so a retry
-    // doesn't mean framing the photo again.
+      if (selectedFriend) await sendDmMessage(userId, selectedFriend.id, content);
+      else if (selectedSpace) await sendSpaceMessage(selectedSpace.id, userId, content);
+    } catch (err) { console.error(err); setMessageText(content); setToast(GENERIC_ERROR); }
   }
 
-  // --- SETTINGS ---
-  // --- ACCOUNT SWITCHER ---
-  function rememberAccount(username, password) {
-    // Only store credentials for accounts you've explicitly allowed.
-    if (!SWITCHER_USERS.includes(username)) return;
+  async function updatePrivacy(patch) {
+    try { const privacy = await updatePrivacySettings(userId, patch); setData((prev) => ({ ...prev, privacy })); } catch (err) { console.error(err); setToast(GENERIC_ERROR); }
+  }
+
+  async function enableNotifications() {
     try {
-      const list = JSON.parse(localStorage.getItem("wavo-accounts") || "[]");
-      const next = list.filter((a) => a.username !== username);
-      next.push({ username, password });
-      localStorage.setItem("wavo-accounts", JSON.stringify(next));
-      setAccounts(next);
-    } catch {
-      /* ignore */
-    }
+      const allowed = await ensureNotificationPermission();
+      if (!allowed) return setToast("Notifications are still off.");
+      await subscribeToPush(userId);
+      setToast("Notifications enabled");
+    } catch (err) { console.error(err); setToast(GENERIC_ERROR); }
   }
 
-  function removeAccount(username) {
-    const next = accounts.filter((a) => a.username !== username);
-    localStorage.setItem("wavo-accounts", JSON.stringify(next));
-    setAccounts(next);
+  async function stopLocations() {
+    await stopAllLocationSharing(userId);
+    await refresh();
+    setToast("Location sharing stopped");
   }
 
-  async function switchTo(account) {
-    if (account.username === profile?.username) return;
-    try {
-      await supabase.auth.signOut();
-      const { error } = await supabase.auth.signInWithPassword({
-        email: `${account.username}@wavo.app`,
-        password: account.password,
-      });
-      if (error) throw error;
-      window.location.reload();
-    } catch (err) {
-      alert(`Couldn't switch to ${account.username}: ${err.message}`);
-    }
-  }
-
-  async function addAccount() {
-    closeSettings();
-    await supabase.auth.signOut();
-  }
-
-  function openSettings() {
-    setUsernameDraft(profile?.username || "");
-    setStatusDraft(profile?.status || "");
-    setNameMsg("");
-    setStatusMsg("");
-    setSettingsTab("profile");
-    setShowSettings(true);
-  }
-
-  async function saveUsername() {
-    const clean = usernameDraft.trim();
-    if (!clean || clean === profile?.username) return;
-    setSavingName(true);
-    setNameMsg("");
-    const { error } = await supabase.rpc("set_username", { new_name: clean });
-    if (error) {
-      setNameMsg(error.message);
-    } else {
-      setNameMsg("Saved!");
-      await loadProfile();
-      await loadFriends();
-    }
-    setSavingName(false);
-  }
-
-  async function saveStatus() {
-    setSavingStatus(true);
-    setStatusMsg("");
-    const { error } = await supabase.rpc("set_status", {
-      new_status: statusDraft.trim(),
-    });
-    if (!error) {
-      // Saving your status gave no feedback at all — the button just
-      // un-disabled itself and you were left guessing.
-      setStatusMsg("Saved!");
-      await loadProfile();
-      await loadFriends();
-    } else {
-      setStatusMsg(error.message);
-    }
-    setSavingStatus(false);
-  }
-
-  // --- NICKNAMES (private, only you see them) ---
-  async function loadNicknames() {
-    const { data } = await supabase
-      .from("nicknames")
-      .select("target_id, nickname")
-      .eq("owner_id", currentUser.id);
-    if (data) {
-      const map = {};
-      data.forEach((n) => (map[n.target_id] = n.nickname));
-      setNicknames(map);
-    }
-  }
-
-  async function setNickname(targetUser) {
-    const current = nicknames[targetUser.id] || "";
-    const input = window.prompt(
-      `Nickname for ${targetUser.username} (only you see this). Leave blank to clear:`,
-      current
-    );
-    if (input === null) return; // cancelled
-    const clean = input.trim();
-    if (clean) {
-      await supabase.from("nicknames").upsert(
-        {
-          owner_id: currentUser.id,
-          target_id: targetUser.id,
-          nickname: clean,
-        },
-        { onConflict: "owner_id,target_id" }
-      );
-    } else {
-      await supabase
-        .from("nicknames")
-        .delete()
-        .eq("owner_id", currentUser.id)
-        .eq("target_id", targetUser.id);
-    }
-    loadNicknames();
-  }
-
-  // nickname if you set one, otherwise their real username
-  function displayName(user) {
-    if (!user) return "";
-    return nicknames[user.id] || user.username;
-  }
-
-  async function removeAvatar() {
-    const { error } = await supabase.rpc("set_avatar", { url: null });
-    if (!error) {
-      await loadProfile();
-      await loadFriends();
-    }
-  }
-
-  function toggleDesktopNotifs() {
-    if (!desktopNotifs) {
-      if ("Notification" in window && Notification.permission !== "granted") {
-        Notification.requestPermission().then((perm) => {
-          const on = perm === "granted";
-          setDesktopNotifs(on);
-          localStorage.setItem("wavo-desktop-notifs", on ? "on" : "off");
-        });
-        return;
-      }
-      setDesktopNotifs(true);
-      localStorage.setItem("wavo-desktop-notifs", "on");
-    } else {
-      setDesktopNotifs(false);
-      localStorage.setItem("wavo-desktop-notifs", "off");
-    }
-  }
-
-  // --- FRIEND ACTIONS ---
-  // search live as you type (debounced) — no need to press Enter
-  useEffect(() => {
-    const q = searchQuery.trim();
-    if (!q) {
-      setSearchResults([]);
-      return;
-    }
-    const t = setTimeout(() => runSearch(), 300);
-    return () => clearTimeout(t);
-  }, [searchQuery]);
-
-  async function runSearch(e) {
-    e?.preventDefault();
-    const q = searchQuery.trim();
-    if (!q) {
-      setSearchResults([]);
-      return;
-    }
-    setSearching(true);
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, username, avatar_url, equipped_badge, equipped_name_style")
-      .ilike("username", `%${q}%`)
-      .neq("id", currentUser.id)
-      .limit(10);
-    const friendIds = new Set(friends.map((f) => f.id));
-    setSearchResults(
-      (data || []).map((u) => ({ ...u, isFriend: friendIds.has(u.id) }))
-    );
-    setSearching(false);
-  }
-
-  async function sendRequest(userId) {
-    const existingIncoming = incomingRequests.find((r) => r.sender_id === userId);
-    if (existingIncoming) {
-      acceptRequest(existingIncoming.id);
-      return;
-    }
-    const { error } = await supabase.from("friend_requests").insert({
-      sender_id: currentUser.id,
-      receiver_id: userId,
-      status: "pending",
-    });
-    if (error) {
-      alert(error.message);
-      return;
-    }
-    setOutgoingIds((prev) => new Set(prev).add(userId));
-  }
-
-  async function acceptRequest(reqId) {
-    await supabase
-      .from("friend_requests")
-      .update({ status: "accepted" })
-      .eq("id", reqId);
-    await loadRequests();
-    await loadFriends();
-  }
-
-  async function declineRequest(reqId) {
-    await supabase.from("friend_requests").delete().eq("id", reqId);
-    await loadRequests();
-  }
-
-  // --- REPORTING ---
-  async function reportMessage(msg) {
-    const reason = window.prompt("Why are you reporting this message? (optional)");
-    if (reason === null) return; // cancelled
-    const { error } = await supabase.from("flags").insert({
-      message_id: msg.id,
-      reporter_id: currentUser.id,
-      reason: reason.trim() || null,
-    });
-    if (error) alert(error.message);
-    else alert("Reported — an admin will review it.");
-  }
-
-  async function reportUser(user) {
-    const reason = window.prompt(`Report ${user.username}? Add a reason (optional):`);
-    if (reason === null) return; // cancelled
-    const { error } = await supabase.from("flags").insert({
-      reported_user_id: user.id,
-      reporter_id: currentUser.id,
-      reason: reason.trim() || null,
-    });
-    if (error) alert(error.message);
-    else alert(`Reported ${user.username} — an admin will review it.`);
-  }
-
-  // --- BLOCKING ---
-  async function loadBlocks() {
-    const { data } = await supabase
-      .from("blocks")
-      .select("blocked_id")
-      .eq("blocker_id", currentUser.id);
-    const ids = (data || []).map((b) => b.blocked_id);
-    setBlockedIds(new Set(ids));
-    if (ids.length) {
-      const { data: profs } = await supabase
-        .from("profiles")
-        .select("id, username, avatar_url")
-        .in("id", ids);
-      setBlockedProfiles(profs || []);
-    } else {
-      setBlockedProfiles([]);
-    }
-  }
-
-  async function blockUser(user) {
-    const ok = window.confirm(
-      `Block ${user.username}? They'll be removed from your friends and won't be able to message you or add you again.`
-    );
-    if (!ok) return;
-    const { error } = await supabase.rpc("block_user", { target: user.id });
-    if (error) {
-      alert("Couldn't block: " + error.message);
-      return;
-    }
-    // If we're in their chat, back out of it.
-    if (selectedUser?.id === user.id) setSelectedUser(null);
-    await loadBlocks();
-    await loadFriends();
-    await loadRequests();
-    alert(`${user.username} has been blocked.`);
-  }
-
-  async function unblockUser(userId) {
-    const { error } = await supabase.rpc("unblock_user", { target: userId });
-    if (error) {
-      alert("Couldn't unblock: " + error.message);
-      return;
-    }
-    await loadBlocks();
-  }
-
-  // --- DELETE ACCOUNT (Apple requires in-app deletion) ---
   async function deleteAccount() {
-    const sure = window.confirm(
-      "Delete your account? This permanently erases your profile, messages, friends, groups and everything else on Wavo. This cannot be undone."
-    );
-    if (!sure) return;
-    const typed = window.prompt('This is permanent. Type DELETE to confirm.');
-    if (typed !== "DELETE") {
-      alert("Account deletion cancelled.");
-      return;
-    }
-    setDeletingAccount(true);
-    const { error } = await supabase.rpc("delete_my_account");
-    if (error) {
-      alert("Couldn't delete account: " + error.message);
-      setDeletingAccount(false);
-      return;
-    }
-    await supabase.auth.signOut();
-    window.location.href = "/";
-  }
-
-  // --- ACTIONS ---
-  // Everything that belongs to "the conversation you were just in" has to be
-  // cleared here. Leaving the message-search filter behind was the worst of
-  // these: you'd open a new chat and see an all-but-empty thread.
-  function resetConversationState() {
-    setEditingMsg(null);
-    setReplyingTo(null);
-    setMessageText("");
-    setShowGiphy(false);
-    setShowGames(false);
-    setShowEmoji(false);
-    setShowSearch(false);
-    setMsgSearch("");
-    setReactPickerMsg(null);
-    setShowChatMenu(false);
-  }
-
-  // Both openers stash whatever is in the box under the conversation you're
-  // leaving and restore the one you're arriving at. Doing it here rather than
-  // in an effect keeps it tied to the actual navigation, and avoids a
-  // setState-in-effect cascade on every conversation change.
-  function swapDraft(nextKey) {
-    writeDraft(draftKey, messageText);
-    setMessageText(readDraft(nextKey));
-  }
-
-  function openChat(user) {
-    setSelectedGroup(null);
-    // resetConversationState clears the composer, so the draft has to be
-    // restored after it or the restore is immediately overwritten.
-    resetConversationState();
-    swapDraft(draftKeyFor(null, user));
-    setSelectedUser(user);
-    setShowSidebar(false); // mobile: reveal the chat
-    clearNotifsFromSender(user.id);
-  }
-
-  // --- GROUPS ---
-  async function loadGroups() {
-    // groups I'm a member of
-    const { data: mem } = await supabase
-      .from("group_members")
-      .select("group_id")
-      .eq("user_id", currentUser.id);
-    const ids = (mem || []).map((m) => m.group_id);
-    if (ids.length === 0) {
-      setGroups([]);
-      return;
-    }
-    const { data } = await supabase
-      .from("groups")
-      .select("*")
-      .in("id", ids)
-      .order("created_at", { ascending: true });
-    if (data) setGroups(data);
-  }
-
-  async function loadGroupMessages(gid) {
-    setLoadingChat(true);
-    const { data } = await supabase
-      .from("group_messages")
-      .select("*")
-      .eq("group_id", gid)
-      .order("created_at", { ascending: true });
-    if (data) setGroupMessages(data);
-    setLoadingChat(false);
-  }
-
-  async function loadGroupMembers(gid) {
-    const { data } = await supabase
-      .from("group_members")
-      .select("user_id, role, profiles(id, username, avatar_url, equipped_badge, equipped_name_style)")
-      .eq("group_id", gid);
-    if (data) {
-      const map = {};
-      data.forEach((row) => {
-        // role lives on group_members, not on the joined profile — without
-        // folding it in here every member reads as "member" and the whole
-        // permission UI silently disappears.
-        if (row.profiles) map[row.profiles.id] = { ...row.profiles, role: row.role };
-      });
-      setGroupMembers(map);
-    }
-  }
-
-  function openGroup(group) {
-    setSelectedUser(null);
-    resetConversationState();
-    swapDraft(draftKeyFor(group, null));
-    setGroupMessages([]);
-    setSelectedGroup(group);
-    setShowSidebar(false); // mobile: reveal the chat
-  }
-
-  async function createGroup() {
-    const name = newGroupName.trim();
-    if (!name || newGroupMembers.length === 0) {
-      alert("Give your group a name and pick at least one friend.");
-      return;
-    }
-    setCreatingGroup(true);
     try {
-      const { data: group, error } = await supabase
-        .from("groups")
-        .insert({ name, created_by: currentUser.id })
-        .select()
-        .single();
-      if (error) throw error;
-      const rows = [currentUser.id, ...newGroupMembers].map((uid) => ({
-        group_id: group.id,
-        user_id: uid,
-      }));
-      const { error: memErr } = await supabase
-        .from("group_members")
-        .insert(rows);
-      if (memErr) throw memErr;
-      setShowNewGroup(false);
-      setNewGroupName("");
-      setNewGroupMembers([]);
-      await loadGroups();
-      openGroup(group);
+      await deleteMyAccount();
+      await supabase.auth.signOut();
     } catch (err) {
-      alert("Couldn't create group: " + err.message);
-    }
-    setCreatingGroup(false);
-  }
-
-  async function insertGroupMessage(content, type, fileName = null, durationMs = null) {
-    if (!selectedGroup) return;
-    const { error } = await supabase.from("group_messages").insert({
-      group_id: selectedGroup.id,
-      sender_id: currentUser.id,
-      content,
-      type,
-      file_name: fileName,
-      duration_ms: durationMs,
-      reply_to: replyingTo?.id || null,
-    });
-    if (error) alert(error.message);
-    setReplyingTo(null);
-  }
-
-  async function sendGroupMessage(e) {
-    e.preventDefault();
-    const text = messageText.trim();
-    if (!text) return;
-
-    if (editingMsg) {
-      const target = editingMsg;
-      setMessageText("");
-      setEditingMsg(null);
-      setGroupMessages((prev) =>
-        prev.map((m) =>
-          m.id === target.id
-            ? { ...m, content: text, edited_at: new Date().toISOString() }
-            : m
-        )
-      );
-      const { error } = await supabase
-        .from("group_messages")
-        .update({ content: text, edited_at: new Date().toISOString() })
-        .eq("id", target.id);
-      if (error) alert(error.message);
-      return;
-    }
-
-    setMessageText("");
-    setShowEmoji(false);
-    clearDraft(draftKey);
-    await insertGroupMessage(text, "text");
-  }
-
-  function notifyGroupTyping() {
-    const now = Date.now();
-    if (now - lastTypingSentRef.current < 1400) return;
-    lastTypingSentRef.current = now;
-    groupChannelRef.current?.send({
-      type: "broadcast",
-      event: "typing",
-      payload: { userId: currentUser.id, name: profile?.username },
-    });
-  }
-
-  async function leaveGroup() {
-    if (!selectedGroup) return;
-    if (!window.confirm(`Leave "${selectedGroup.name}"?`)) return;
-    await supabase
-      .from("group_members")
-      .delete()
-      .eq("group_id", selectedGroup.id)
-      .eq("user_id", currentUser.id);
-    setSelectedGroup(null);
-    loadGroups();
-  }
-
-  async function insertMessage(content, type, fileName = null, durationMs = null) {
-    if (!chatId || !selectedUser) return;
-    const { error } = await supabase.from("messages").insert({
-      chat_id: chatId,
-      sender_id: currentUser.id,
-      receiver_id: selectedUser.id,
-      content,
-      type,
-      is_read: false,
-      reply_to: replyingTo?.id || null,
-      file_name: fileName,
-      duration_ms: durationMs,
-    });
-    if (error) alert(error.message);
-    setReplyingTo(null);
-  }
-
-  // While recording (or holding a clip you haven't sent), the text field and
-  // Send button are replaced rather than crowded — the composer only has room
-  // for three icons on a phone, which a previous pass established the hard
-  // way, and a recorder needs cancel, a timer and a send of its own.
-  function voiceBar() {
-    const held = !!voice.clip;
-    return (
-      <div className="voice-bar">
-        <button
-          type="button"
-          className="voice-bar-icon danger"
-          onClick={voice.cancel}
-          aria-label="Discard voice note"
-          title="Discard"
-        >
-          <Trash2 size={17} />
-        </button>
-
-        {held ? (
-          // Hear it back before it goes. A voice note you can't review is a
-          // voice note you record twice.
-          <VoiceNote
-            src={voice.clip.url}
-            durationMs={voice.clip.ms}
-            messageId="draft"
-            mine
-          />
-        ) : (
-          <div className="voice-bar-live">
-            <span className="voice-bar-dot" aria-hidden="true" />
-            <span className="voice-bar-time">{formatDuration(voice.elapsed)}</span>
-            <span className="voice-bar-track" aria-hidden="true">
-              <span
-                className="voice-bar-fill"
-                style={{ width: `${Math.min(100, (voice.elapsed / MAX_MS) * 100)}%` }}
-              />
-            </span>
-          </div>
-        )}
-
-        <button
-          type="button"
-          className="voice-bar-send"
-          onClick={held ? sendVoiceNote : voice.stop}
-          disabled={uploadingFile}
-          aria-label={held ? "Send voice note" : "Stop recording"}
-          title={held ? "Send" : "Stop"}
-        >
-          {held ? <SendHorizontal size={18} /> : <Square size={16} />}
-        </button>
-      </div>
-    );
-  }
-
-  // Send when there's something to send, mic when there isn't. Costs the
-  // composer no width, and it's the gesture people already know.
-  function composerTail() {
-    const hasText = !!messageText.trim();
-    if (!hasText && !editingMsg && canRecord) {
-      return (
-        <button
-          type="button"
-          className="composer-mic"
-          onClick={voice.start}
-          aria-label="Record a voice note"
-          title="Record a voice note"
-        >
-          <Mic size={18} />
-        </button>
-      );
-    }
-    return (
-      <button aria-label={editingMsg ? "Save edit" : "Send message"}>
-        <span className="composer-send-text">{editingMsg ? "Save" : "Send"}</span>
-        <SendHorizontal className="composer-send-icon" size={18} />
-      </button>
-    );
-  }
-
-  // Voice notes ride the same storage bucket and the same insert helpers as
-  // any other attachment — the only thing that makes them special is the
-  // duration, which the browser can't recover from the file afterwards.
-  async function sendVoiceNote() {
-    const clip = voice.clip;
-    if (!clip) return;
-    setUploadingFile(true);
-    try {
-      const folder = selectedGroup ? `group_${selectedGroup.id}` : chatId;
-      const path = `${folder}/${Date.now()}-voice.${clip.ext}`;
-      const { error: upErr } = await supabase.storage
-        .from("chat-files")
-        .upload(path, clip.blob, { contentType: clip.blob.type });
-      if (upErr) throw upErr;
-      const { data: pub } = supabase.storage
-        .from("chat-files")
-        .getPublicUrl(path);
-
-      if (selectedGroup) {
-        await insertGroupMessage(pub.publicUrl, "audio", null, clip.ms);
-      } else {
-        await insertMessage(pub.publicUrl, "audio", null, clip.ms);
-      }
-      voice.reset();
-    } catch (err) {
-      alert("Couldn't send voice note: " + err.message);
-    }
-    setUploadingFile(false);
-  }
-
-  async function uploadChatFile(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const maxSize = isPremium ? 100 : 10;
-    if (file.size > maxSize * 1024 * 1024) {
-      alert(`That file is too big (max ${maxSize} MB).`);
-      e.target.value = "";
-      return;
-    }
-    setUploadingFile(true);
-    try {
-      const safeName = file.name.replace(/[^\w.-]/g, "_");
-      const folder = selectedGroup ? `group_${selectedGroup.id}` : chatId;
-      const path = `${folder}/${Date.now()}-${safeName}`;
-      const { error: upErr } = await supabase.storage
-        .from("chat-files")
-        .upload(path, file);
-      if (upErr) throw upErr;
-      const { data: pub } = supabase.storage
-        .from("chat-files")
-        .getPublicUrl(path);
-      const isImg = file.type.startsWith("image/");
-      if (selectedGroup) {
-        await insertGroupMessage(
-          pub.publicUrl,
-          isImg ? "image" : "file",
-          isImg ? null : file.name
-        );
-      } else {
-        await insertMessage(
-          pub.publicUrl,
-          isImg ? "image" : "file",
-          isImg ? null : file.name
-        );
-      }
-    } catch (err) {
-      alert("Couldn't send file: " + err.message);
-    }
-    setUploadingFile(false);
-    e.target.value = "";
-  }
-
-  async function sendMessage(e) {
-    e.preventDefault();
-    const text = messageText.trim();
-    if (!text) return;
-
-    // editing an existing message?
-    if (editingMsg) {
-      setMessageText("");
-      const target = editingMsg;
-      setEditingMsg(null);
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === target.id
-            ? { ...m, content: text, edited_at: new Date().toISOString() }
-            : m
-        )
-      );
-      const { error } = await supabase
-        .from("messages")
-        .update({ content: text, edited_at: new Date().toISOString() })
-        .eq("id", target.id);
-      if (error) alert(error.message);
-      return;
-    }
-
-    setMessageText("");
-    setShowEmoji(false);
-    clearDraft(draftKey);
-    await insertMessage(text, "text");
-  }
-
-  function startEdit(msg) {
-    setReactPickerMsg(null);
-    setReplyingTo(null);
-    setEditingMsg(msg);
-    setMessageText(msg.content);
-  }
-  function cancelEdit() {
-    setEditingMsg(null);
-    setMessageText("");
-  }
-  function startReply(msg) {
-    setReactPickerMsg(null);
-    setEditingMsg(null);
-    setReplyingTo(msg);
-  }
-  async function deleteMessage(msg) {
-    setReactPickerMsg(null);
-    if (!window.confirm("Unsend this message?")) return;
-    const stamp = new Date().toISOString();
-    if (selectedGroup) {
-      setGroupMessages((prev) =>
-        prev.map((m) => (m.id === msg.id ? { ...m, deleted_at: stamp } : m))
-      );
-      const { error } = await supabase
-        .from("group_messages")
-        .update({ deleted_at: stamp })
-        .eq("id", msg.id);
-      if (error) alert(error.message);
-      return;
-    }
-    setMessages((prev) =>
-      prev.map((m) => (m.id === msg.id ? { ...m, deleted_at: stamp } : m))
-    );
-    const { error } = await supabase
-      .from("messages")
-      .update({ deleted_at: stamp })
-      .eq("id", msg.id);
-    if (error) alert(error.message);
-  }
-
-  // typing broadcast (throttled to once per ~1.4s)
-  function notifyTyping() {
-    const now = Date.now();
-    if (now - lastTypingSentRef.current < 1400) return;
-    lastTypingSentRef.current = now;
-    chatChannelRef.current?.send({
-      type: "broadcast",
-      event: "typing",
-      payload: { userId: currentUser.id },
-    });
-  }
-
-  function insertEmoji(em) {
-    setMessageText((t) => t + em);
-  }
-
-  // presence from a last_active timestamp.
-  // `now` (a state ticker updated every 30s below) is read here so the
-  // labels re-render as time passes instead of freezing at page-load.
-  function presence(ts) {
-    if (!ts) return null;
-    const diff = now - new Date(ts).getTime();
-    if (diff < 70000) return "online";
-    return `last seen ${fmtRelative(ts)}`;
-  }
-  const isOnline = (ts) => presence(ts) === "online";
-
-  async function sendGif(gifUrl) {
-    setShowGiphy(false);
-    setGiphySearch("");
-    setGiphyResults([]);
-    await insertMessage(gifUrl, "image");
-  }
-
-  // --- GIPHY ---
-  async function searchGiphy(e) {
-    e?.preventDefault();
-    const q = giphySearch.trim();
-    if (!GIPHY_API_KEY) {
-      alert("GIPHY API key is missing. Add VITE_GIPHY_API_KEY in Vercel.");
-      return;
-    }
-    setGiphyLoading(true);
-    try {
-      const endpoint = q
-        ? `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(
-            q
-          )}&limit=18&rating=pg`
-        : `https://api.giphy.com/v1/gifs/trending?api_key=${GIPHY_API_KEY}&limit=18&rating=pg`;
-      const res = await fetch(endpoint);
-      const json = await res.json();
-      setGiphyResults(json.data || []);
-    } catch (err) {
-      alert("Couldn't load GIFs: " + err.message);
-    }
-    setGiphyLoading(false);
-  }
-
-  function toggleGiphy() {
-    const next = !showGiphy;
-    setShowGiphy(next);
-    if (next && giphyResults.length === 0) {
-      searchGiphy();
+      console.error("[wavo] delete account", err);
+      setToast(GENERIC_ERROR);
     }
   }
 
-  async function handleAuth(e) {
-    e.preventDefault();
-    const email = `${auth.username.trim()}@wavo.app`;
+  if (booting) return <main className="splash"><div className="wavo-mark">W</div><span>Loading Wavo</span></main>;
+  if (!session) return <AuthScreen onReady={setSession} />;
 
-    // extra validation for sign-up
-    if (mode === "signup") {
-      if (
-        !auth.firstName.trim() ||
-        !auth.lastName.trim() ||
-        !auth.email.trim() ||
-        !auth.birthday ||
-        !auth.username.trim() ||
-        !auth.password
-      ) {
-        alert("Please fill in every field.");
-        return;
-      }
-      if (!looksLikeName(auth.firstName)) {
-        alert("Please enter a real first name.");
-        return;
-      }
-      // Last name accepts anything (real surnames are too varied to validate).
-      if (!/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(auth.email.trim())) {
-        alert("Please enter a valid email address (like name@example.com).");
-        return;
-      }
-      const bd = new Date(auth.birthday);
-      const age = ageFromBirthday(auth.birthday);
-      if (isNaN(bd.getTime()) || bd > new Date()) {
-        alert("Please enter a valid birthday.");
-        return;
-      }
-      if (age === null || age < 1 || age > 120) {
-        alert("Please enter a valid birthday.");
-        return;
-      }
-    }
+  const isDeepView = (tab === "inbox" && selectedFriend) || (tab === "spaces" && selectedSpace);
 
-    setAuthLoading(true);
-    try {
-      if (mode === "login") {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password: auth.password,
-        });
-        if (error) throw error;
-        rememberAccount(auth.username.trim(), auth.password);
-      } else {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password: auth.password,
-        });
-        if (error) throw error;
-        const { error: profileErr } = await supabase.from("profiles").insert({
-          id: data.user.id,
-          username: auth.username.trim(),
-          first_name: auth.firstName.trim(),
-          last_name: auth.lastName.trim(),
-          email: auth.email.trim(),
-          birthday: auth.birthday,
-          age: ageFromBirthday(auth.birthday),
-        });
-        if (profileErr) throw profileErr;
-        rememberAccount(auth.username.trim(), auth.password);
-        setMode("login");
-      }
-    } catch (err) {
-      alert(err.message);
-    }
-    setAuthLoading(false);
-  }
-
-  // --- TIME FORMATTING ---
-  const fmtTime = (ts) =>
-    new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-  const fmtRelative = (ts) => {
-    const diff = Date.now() - new Date(ts).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    return `${Math.floor(hrs / 24)}d ago`;
-  };
-
-  // --- LANDING ---
-  // A stranger arriving at wavo.lol used to get a login box and the word
-  // "Wavo". Now they get told what it is first.
-  if (!session && !showAuth) {
-    return (
-      <Landing
-        onGetStarted={() => {
-          setMode("signup");
-          setShowAuth(true);
-        }}
-        onLogin={() => {
-          setMode("login");
-          setShowAuth(true);
-        }}
-      />
-    );
-  }
-
-  // --- AUTH SCREEN ---
-  if (!session) {
-    return (
-      <main className="auth-page">
-        <div className="auth-card">
-          <button className="auth-back" onClick={() => setShowAuth(false)}>
-            ← Back
-          </button>
-          <div className="logo-mark">W</div>
-          <h1>Wavo</h1>
-          <p className="auth-tagline">
-            {mode === "login" ? "Welcome back" : "Create your account"}
-          </p>
-          <form onSubmit={handleAuth} className="auth-form">
-            {mode === "signup" && (
-              <>
-                <div className="auth-row">
-                  <input
-                    type="text"
-                    placeholder="First name"
-                    value={auth.firstName}
-                    onChange={(e) =>
-                      setAuth({ ...auth, firstName: e.target.value })
-                    }
-                  />
-                  <input
-                    type="text"
-                    placeholder="Last name"
-                    value={auth.lastName}
-                    onChange={(e) =>
-                      setAuth({ ...auth, lastName: e.target.value })
-                    }
-                  />
-                </div>
-                <input
-                  type="email"
-                  placeholder="Email"
-                  value={auth.email}
-                  onChange={(e) => setAuth({ ...auth, email: e.target.value })}
-                />
-                <label className="auth-field-label">Birthday</label>
-                <input
-                  type="date"
-                  className="auth-date"
-                  value={auth.birthday}
-                  max={new Date().toISOString().split("T")[0]}
-                  onChange={(e) => setAuth({ ...auth, birthday: e.target.value })}
-                />
-                <div className="auth-divider">
-                  <span>Choose your login</span>
-                </div>
-              </>
-            )}
-            <input
-              type="text"
-              placeholder="Username"
-              value={auth.username}
-              onChange={(e) => setAuth({ ...auth, username: e.target.value })}
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={auth.password}
-              onChange={(e) => setAuth({ ...auth, password: e.target.value })}
-            />
-            <button disabled={authLoading}>
-              {authLoading
-                ? "Please wait…"
-                : mode === "login"
-                ? "Login"
-                : "Create account"}
-            </button>
-          </form>
-          <button
-            className="link-btn"
-            onClick={() => setMode(mode === "login" ? "signup" : "login")}
-          >
-            {mode === "login" ? "New here? Create an account" : "Already have an account? Login"}
-          </button>
-        </div>
-      </main>
-    );
-  }
-
-  // --- BANNED SCREEN ---
-  const bannedUntil = profile?.banned_until ? new Date(profile.banned_until) : null;
-  const isBanned = bannedUntil && bannedUntil > new Date();
-  if (isBanned) {
-    const permanent = bannedUntil.getFullYear() > 2900;
-    return (
-      <main className="auth-page">
-        <div className="auth-card">
-          <div className="logo-mark" style={{ background: "var(--line)" }}>!</div>
-          <h1>Account suspended</h1>
-          <p style={{ color: "var(--text-dim)", textAlign: "center", margin: "8px 0 20px" }}>
-            {permanent
-              ? "Your account has been permanently banned from Wavo."
-              : `Your account is banned until ${bannedUntil.toLocaleString()}.`}
-          </p>
-          <button className="link-btn" onClick={() => supabase.auth.signOut()}>
-            Log out
-          </button>
-        </div>
-      </main>
-    );
-  }
-
-  // --- ADMIN VIEW ---
-  if (view === "admin" && profile?.is_admin) {
-    return <Admin me={profile} onBack={() => setView("chat")} />;
-  }
-
-  // --- MAIN APP ---
   return (
     <main className="app-shell">
-      {announcement && (
-        <div className="announce-banner">
-          <Megaphone size={16} />
-          <span className="announce-banner-text">{announcement.body}</span>
-          <button onClick={dismissAnnouncement} aria-label="Dismiss">
-            <X size={16} />
-          </button>
-        </div>
-      )}
-      <aside className={`sidebar ${showSidebar ? "open" : "closed"}`}>
-        <div className="brand-row">
-          <h2>Wavo</h2>
-          <div className="brand-actions">
-            <div className="notif-wrap">
-              <button
-                ref={notifBtnRef}
-                className="icon-btn"
-                onClick={() => setShowNotifs((s) => !s)}
-                aria-label="Notifications"
-                title="Notifications & friend requests"
-                aria-expanded={showNotifs}
-              >
-                <Bell size={18} />
-                {bellCount > 0 && (
-                  <span className="notif-dot">{bellCount > 9 ? "9+" : bellCount}</span>
-                )}
-              </button>
-
-              {showNotifs &&
-                createPortal(
-                  <div
-                    className="notif-panel"
-                    // Hidden for the one render before useLayoutEffect has
-                    // measured, so it can never flash at the wrong place.
-                    style={notifStyle || { position: "fixed", visibility: "hidden" }}
-                  >
-                  <div className="notif-tabs">
-                    <button
-                      className={notifTab === "notifs" ? "active" : ""}
-                      onClick={() => setNotifTab("notifs")}
-                    >
-                      Notifications
-                      {unreadCount > 0 && <span className="tab-count">{unreadCount}</span>}
-                    </button>
-                    <button
-                      className={notifTab === "requests" ? "active" : ""}
-                      onClick={() => setNotifTab("requests")}
-                    >
-                      Requests
-                      {incomingRequests.length > 0 && (
-                        <span className="tab-count">{incomingRequests.length}</span>
-                      )}
-                    </button>
-                  </div>
-
-                  {notifTab === "notifs" ? (
-                    <>
-                      {unreadCount > 0 && (
-                        <div className="notif-panel-head">
-                          <button className="link-btn-sm" onClick={markAllNotifsRead}>
-                            Mark all read
-                          </button>
-                        </div>
-                      )}
-                      <div className="notif-list">
-                        {notifications.length === 0 && (
-                          <div className="notif-empty">Nothing yet</div>
-                        )}
-                        {notifications.map((n) => (
-                          <div
-                            key={n.id}
-                            className={`notif-item ${n.is_read ? "" : "unread"}`}
-                          >
-                            <div className="notif-item-top">
-                              <strong>{n.title}</strong>
-                              <span>{fmtRelative(n.created_at)}</span>
-                            </div>
-                            {n.body && <p>{n.body}</p>}
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="notif-list">
-                      {incomingRequests.length === 0 && (
-                        <div className="notif-empty">No friend requests</div>
-                      )}
-                      {incomingRequests.map((r) => (
-                        <div key={r.id} className="req-item">
-                          <div className="avatar sm">{initial(r.username)}</div>
-                          <div className="req-name">
-                            <strong>{r.username}</strong>
-                            <span>{fmtRelative(r.created_at)}</span>
-                          </div>
-                          <div className="req-actions">
-                            <button
-                              className="req-accept"
-                              onClick={() => acceptRequest(r.id)}
-                              aria-label="Accept"
-                              title="Accept friend request"
-                            >
-                              <Check size={15} />
-                            </button>
-                            <button
-                              className="req-decline"
-                              onClick={() => declineRequest(r.id)}
-                              aria-label="Decline"
-                              title="Decline friend request"
-                            >
-                              <X size={15} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  </div>,
-                  document.body
-                )}
-            </div>
-
-            {profile?.is_admin && (
-              <button
-                className="icon-btn"
-                onClick={() => setView("admin")}
-                aria-label="Admin dashboard"
-                title="Admin dashboard"
-              >
-                <ShieldCheck size={18} />
-              </button>
-            )}
-            <button
-              className="ghost-btn"
-              onClick={() => supabase.auth.signOut()}
-              title="Sign out of Wavo"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-
-        {/* Your own profile → opens settings */}
-        <button className="me-strip" onClick={openSettings} title="Profile & settings">
-          <Avatar url={profile?.avatar_url} name={profile?.username} />
-          <div className="me-name">
-            <strong>{profile?.username}</strong>
-            <span>Profile &amp; settings</span>
-          </div>
-          <Settings size={17} className="me-gear" />
-        </button>
-
-        {/* The streak, visible without opening Settings. refreshKey nudges it
-            when a message goes out, since sending counts as activity. */}
-        <StreakPill userId={currentUser?.id} refreshKey={messages.length} />
-
-        <input
-          ref={avatarInputRef}
-          type="file"
-          accept="image/*"
-          hidden
-          onChange={pickAvatar}
-        />
-
-        {/* Add-a-friend search */}
-        <form className="add-search" onSubmit={runSearch}>
-          <Search size={15} />
-          <input
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              if (!e.target.value.trim()) setSearchResults([]);
-            }}
-            placeholder="Find people by username…"
-          />
-        </form>
-
-        {searchQuery.trim() && (
-          <div className="search-results">
-            {searching && <div className="search-status">Searching…</div>}
-            {!searching && searchResults.length === 0 && (
-              <div className="search-status">No users found</div>
-            )}
-            {searchResults.filter((u) => !blockedIds.has(u.id)).map((u) => {
-              const pending = outgoingIds.has(u.id);
-              const incoming = incomingRequests.some((r) => r.sender_id === u.id);
-              return (
-                <div key={u.id} className="search-row">
-                  <Avatar url={u.avatar_url} name={u.username} size="sm" />
-                  <strong>{u.username}</strong>
-                  {u.isFriend ? (
-                    <span className="tag-friend">Friends</span>
-                  ) : pending ? (
-                    <span className="tag-pending">Requested</span>
-                  ) : (
-                    <button
-                      className="add-btn"
-                      onClick={() => sendRequest(u.id)}
-                      title={incoming ? "Accept their friend request" : "Send a friend request"}
-                    >
-                      <UserPlus size={14} />
-                      {incoming ? "Accept" : "Add"}
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {myStrikes.length > 0 && (
-          <div className="strike-warning">
-            ⚠️ You have {myStrikes.length} strike{myStrikes.length > 1 ? "s" : ""} (of 3).
-            {myStrikes.length % 3 === 0
-              ? " You've been temporarily banned."
-              : " Reach 3 and you'll be banned for 3 days."}
-            {myStrikes[0]?.reason && (
-              <span className="strike-reason">Most recent: “{myStrikes[0].reason}”</span>
-            )}
-          </div>
-        )}
-
-        <div className="groups-head">
-          <h4>Groups</h4>
-          <button
-            className="new-group-btn"
-            onClick={() => setShowNewGroup(true)}
-            title="New group"
-          >
-            <Users size={14} /> New
-          </button>
-        </div>
-        {groups.length > 0 && (
-          <div className="group-list">
-            {sortPinned(groups, "group", (g) => g.id).map((g) => (
-              <div className="row-wrap" key={g.id}>
-                <button
-                  className={`user-row ${
-                    selectedGroup?.id === g.id ? "active" : ""
-                  }`}
-                  onClick={() => openGroup(g)}
-                  title={`Open ${g.name}`}
-                >
-                  <div className="group-avatar">
-                    <Users size={16} />
-                  </div>
-                  <div className="user-row-text">
-                    <strong>{g.name}</strong>
-                    <span className="user-status">
-                      {social.isChatPinned("group", g.id) ? "Pinned · Group" : "Group"}
-                    </span>
-                  </div>
-                </button>
-                <PinToggle
-                  pinned={social.isChatPinned("group", g.id)}
-                  onClick={() => social.toggleChatPin("group", g.id)}
-                  label={g.name}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="friends-head">
-          <h4>Friends</h4>
-        </div>
-        <div className="user-list">
-          {friends.length === 0 && !searchQuery.trim() && (
-            <div className="friends-empty">
-              No friends yet — search a username above to send a request.
-            </div>
-          )}
-          {sortPinned(
-            friends.filter((u) => !blockedIds.has(u.id)),
-            "dm",
-            (u) => dmChatId(currentUser?.id, u.id)
-          ).map((u) => (
-            <div className="row-wrap" key={u.id}>
-              <button
-                className={`user-row ${selectedUser?.id === u.id ? "active" : ""}`}
-                onClick={() => openChat(u)}
-                title={`Open chat with ${u.username}`}
-              >
-                <div
-                  className={`avatar-presence ${
-                    presence(u.last_active) === "online" ? "online" : ""
-                  }`}
-                >
-                  <Avatar url={u.avatar_url} name={u.username} />
-                </div>
-                <div className="user-row-text">
-                  <strong>{displayName(u)}</strong>
-                  <span
-                    className={`user-status ${isOnline(u.last_active) ? "is-online" : ""}`}
-                  >
-                    {isOnline(u.last_active)
-                      ? "online"
-                      : presence(u.last_active) || u.status || ""}
-                  </span>
-                </div>
-                {unreadByUser[u.id] > 0 && (
-                  <span className="user-badge">{unreadByUser[u.id]}</span>
-                )}
-              </button>
-              <PinToggle
-                pinned={social.isChatPinned("dm", dmChatId(currentUser?.id, u.id))}
-                onClick={() =>
-                  social.toggleChatPin("dm", dmChatId(currentUser?.id, u.id))
-                }
-                label={displayName(u)}
-              />
-            </div>
-          ))}
-        </div>
-      </aside>
-
-      {/* Settings lives here, as a sibling of the sidebar rather than inside
-          it. On mobile .sidebar carries a transform, and a transformed
-          ancestor makes position:fixed resolve against that ancestor instead
-          of the viewport — so this panel was being squeezed into the
-          sidebar's 330px and its content clipped off the right edge. */}
-      {showSettings && (
-        <div className="settings-overlay" onClick={closeSettings}>
-          <div
-            className="settings-card"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Settings"
-          >
-            <header className="settings-head">
-              <h3>Settings</h3>
-              <button
-                className="icon-btn"
-                onClick={closeSettings}
-                aria-label="Close settings"
-              >
-                <X size={18} />
-              </button>
-            </header>
-
-            <div className="settings-layout">
-              <nav
-                className="settings-nav"
-                role="tablist"
-                aria-label="Settings sections"
-              >
-                {SETTINGS_TABS.map(({ id, label, Icon }) => (
-                  <button
-                    key={id}
-                    role="tab"
-                    id={`settings-tab-${id}`}
-                    aria-selected={settingsTab === id}
-                    aria-controls="settings-panel"
-                    className={`settings-nav-item ${
-                      settingsTab === id ? "on" : ""
-                    }`}
-                    onClick={() => {
-                      setSettingsTab(id);
-                      setShowUnlocks(false);
-                    }}
-                  >
-                    <Icon size={15} />
-                    <span>{label}</span>
-                  </button>
-                ))}
-              </nav>
-
-              <div
-                className="settings-body"
-                id="settings-panel"
-                role="tabpanel"
-                aria-labelledby={`settings-tab-${settingsTab}`}
-              >
-                {/* ---------------- PROFILE ---------------- */}
-                {settingsTab === "profile" && (
-                  <section className="settings-section">
-                    <div className="settings-pfp-row">
-                      <Avatar url={profile?.avatar_url} name={profile?.username} />
-                      <div className="settings-pfp-actions">
-                        <button
-                          className="mini-btn"
-                          onClick={() => avatarInputRef.current?.click()}
-                          disabled={uploadingAvatar}
-                        >
-                          <Camera size={14} />
-                          {uploadingAvatar ? "Uploading…" : "Change photo"}
-                        </button>
-                        {profile?.avatar_url && (
-                          <button className="mini-btn ghost" onClick={removeAvatar}>
-                            Remove
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    <label className="settings-label" htmlFor="set-username">
-                      Username
-                    </label>
-                    <div className="settings-name-row">
-                      <input
-                        id="set-username"
-                        className="settings-input"
-                        value={usernameDraft}
-                        onChange={(e) => setUsernameDraft(e.target.value)}
-                        maxLength={20}
-                      />
-                      <button
-                        className="mini-btn"
-                        onClick={saveUsername}
-                        disabled={
-                          savingName || usernameDraft.trim() === profile?.username
-                        }
-                      >
-                        {savingName ? "Saving…" : "Save"}
-                      </button>
-                    </div>
-                    <p className="settings-hint">
-                      This is how people find and add you.
-                    </p>
-                    {nameMsg && (
-                      <p
-                        className={`settings-msg ${
-                          nameMsg === "Saved!" ? "ok" : "err"
-                        }`}
-                      >
-                        {nameMsg}
-                      </p>
-                    )}
-
-                    <label className="settings-label" htmlFor="set-status">
-                      Status
-                    </label>
-                    <div className="settings-name-row">
-                      <input
-                        id="set-status"
-                        className="settings-input"
-                        value={statusDraft}
-                        onChange={(e) => setStatusDraft(e.target.value)}
-                        placeholder="e.g. 📚 studying"
-                        maxLength={40}
-                      />
-                      <button
-                        className="mini-btn"
-                        onClick={saveStatus}
-                        disabled={
-                          savingStatus ||
-                          statusDraft.trim() === (profile?.status || "")
-                        }
-                      >
-                        {savingStatus ? "Saving…" : "Save"}
-                      </button>
-                    </div>
-                    <p className="settings-hint">
-                      Shows under your name in your friends' chat list.
-                    </p>
-                    {statusMsg && (
-                      <p
-                        className={`settings-msg ${
-                          statusMsg === "Saved!" ? "ok" : "err"
-                        }`}
-                      >
-                        {statusMsg}
-                      </p>
-                    )}
-                  </section>
-                )}
-
-                {/* ---------------- APPEARANCE ---------------- */}
-                {settingsTab === "appearance" && showUnlocks && (
-                  <UnlockGuide
-                    catalogue={catalogue}
-                    requirement={requirement}
-                    isUsable={isUsable}
-                    stats={stats}
-                    isPremium={isPremium}
-                    onClaim={claimFromGuide}
-                    onBack={() => setShowUnlocks(false)}
-                    onGetPremium={() => setShowPremium(true)}
-                  />
-                )}
-
-                {settingsTab === "appearance" && !showUnlocks && (
-                  <>
-                    <section className="settings-section">
-                      {stats && (
-                        <div className="streak-line">
-                          <span className="streak-flame">🔥</span>
-                          {stats.current_streak > 0
-                            ? `${stats.current_streak} day streak`
-                            : "Open Wavo tomorrow to start a streak"}
-                          <span style={{ marginLeft: "auto", fontWeight: 500 }}>
-                            {stats.messages_sent} sent
-                          </span>
-                        </div>
-                      )}
-
-                      <h4>Theme</h4>
-                      <div className="theme-grid">
-                        {themeItems.map((t) => {
-                          const req = requirement(t);
-                          const usable = isUsable(t);
-                          const claimable = req?.kind === "earned" && req.met;
-
-                          let cls = "theme-option";
-                          if (theme === t.id && usable) cls += " active";
-                          if (!usable && !claimable) cls += " locked";
-                          if (claimable) cls += " claimable";
-
-                          return (
-                            <button
-                              key={t.id}
-                              className={cls}
-                              onClick={() => pickTheme(t)}
-                              title={
-                                usable
-                                  ? t.name
-                                  : claimable
-                                  ? `${t.name} — earned, tap to claim`
-                                  : req?.detail || t.name
-                              }
-                            >
-                              <span
-                                className="theme-swatch"
-                                style={swatchStyle(t)}
-                              />
-                              <span className="theme-name">{t.name}</span>
-                              {!usable && (
-                                <span className="theme-lock">
-                                  {claimable ? "Claim" : req?.short}
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <button
-                        className="unlock-open"
-                        onClick={() => setShowUnlocks(true)}
-                      >
-                        <Trophy size={15} />
-                        <span>
-                          How to unlock
-                          <em>every theme and badge, and what each one takes</em>
-                        </span>
-                        <ChevronRight size={16} />
-                      </button>
-                    </section>
-
-                    {/* The bits other people actually see */}
-                    <section className="settings-section">
-                      <h4>Your name in chat</h4>
-
-                      <div className="cos-preview">
-                        <UserLabel user={profile} />
-                        <span className="cos-preview-hint">what everyone sees</span>
-                      </div>
-
-                      <h5 className="cos-sub">Badge</h5>
-                      <div className="cos-grid">
-                        {catalogue
-                          .filter((c) => c.kind === "badge")
-                          .map((b) => {
-                            const req = requirement(b);
-                            const usable = isUsable(b);
-                            const on = profile?.equipped_badge === b.id;
-                            return (
-                              <button
-                                key={b.id}
-                                className={`cos-chip ${on ? "on" : ""} ${
-                                  usable ? "" : "locked"
-                                }`}
-                                onClick={() => equip(b, "badge")}
-                                title={
-                                  usable
-                                    ? b.name
-                                    : req?.kind === "earned" && req.met
-                                    ? `${b.name} — earned, tap to claim`
-                                    : req?.detail || b.description
-                                }
-                              >
-                                <span style={{ color: b.payload?.color }}>
-                                  {b.payload?.emoji}
-                                </span>
-                                {b.name}
-                                {!usable && (
-                                  <span className="cos-lock">
-                                    {req?.kind === "earned" && req.met
-                                      ? "Claim"
-                                      : req?.short}
-                                  </span>
-                                )}
-                              </button>
-                            );
-                          })}
-                      </div>
-
-                      <h5 className="cos-sub">Name colour</h5>
-                      <div className="cos-grid">
-                        {catalogue
-                          .filter((c) => c.kind === "name_style")
-                          .map((n) => {
-                            const req = requirement(n);
-                            const usable = isUsable(n);
-                            const on = profile?.equipped_name_style === n.id;
-                            const label = n.name.replace(" name", "");
-                            return (
-                              <button
-                                key={n.id}
-                                className={`cos-chip ${on ? "on" : ""} ${
-                                  usable ? "" : "locked"
-                                }`}
-                                onClick={() => equip(n, "name_style")}
-                                title={
-                                  usable
-                                    ? label
-                                    : req?.kind === "earned" && req.met
-                                    ? `${label} — earned, tap to claim`
-                                    : req?.detail || label
-                                }
-                              >
-                                <span
-                                  className={`cos-dot ${
-                                    n.payload?.gradient ? "is-gradient" : ""
-                                  }`}
-                                  style={swatchStyle(n)}
-                                />
-                                {label}
-                                {/* This said "Premium" for everything, which
-                                    mislabelled the earned Everglow name as a
-                                    paid item. */}
-                                {!usable && (
-                                  <span className="cos-lock">
-                                    {req?.kind === "earned" && req.met
-                                      ? "Claim"
-                                      : req?.short}
-                                  </span>
-                                )}
-                              </button>
-                            );
-                          })}
-                      </div>
-
-                      {!isPremium && !isNativeApp && (
-                        <button
-                          className="cos-upsell"
-                          onClick={() => setShowPremium(true)}
-                        >
-                          ⭐ Get Premium
-                        </button>
-                      )}
-                    </section>
-                  </>
-                )}
-
-                {/* ---------------- NOTIFICATIONS ---------------- */}
-                {settingsTab === "notifications" && (
-                  <section className="settings-section">
-                    <button className="settings-toggle" onClick={toggleDesktopNotifs}>
-                      <span>Desktop notifications</span>
-                      <span className={`switch ${desktopNotifs ? "on" : ""}`}>
-                        <span className="knob" />
-                      </span>
-                    </button>
-                    <p className="settings-hint">
-                      Popup alerts when a message arrives and Wavo isn't focused.
-                    </p>
-                  </section>
-                )}
-
-                {/* ---------------- ACCOUNT ---------------- */}
-                {settingsTab === "account" && (
-                  <>
-                    <section className="settings-section">
-                      <div className="settings-info">
-                        <span>Username</span>
-                        <strong>{profile?.username}</strong>
-                      </div>
-                      {profile?.created_at && (
-                        <div className="settings-info">
-                          <span>Member since</span>
-                          <strong>
-                            {new Date(profile.created_at).toLocaleDateString()}
-                          </strong>
-                        </div>
-                      )}
-                      <div className="settings-info">
-                        <span>Role</span>
-                        <strong>{profile?.is_admin ? "Admin" : "Member"}</strong>
-                      </div>
-                      <div className="settings-info">
-                        <span>Plan</span>
-                        <strong>{isPremium ? "Premium" : "Free"}</strong>
-                      </div>
-                    </section>
-
-                    {/* SWITCH ACCOUNTS */}
-                    {SWITCHER_USERS.includes(profile?.username) && (
-                      <section className="settings-section">
-                        <h4>Saved accounts</h4>
-                        <div className="acct-list">
-                          {accounts.map((a) => {
-                            const active = a.username === profile?.username;
-                            return (
-                              <div
-                                key={a.username}
-                                className={`acct-row ${active ? "active" : ""}`}
-                              >
-                                <Avatar
-                                  url={active ? profile?.avatar_url : undefined}
-                                  name={a.username}
-                                  size="sm"
-                                />
-                                <div className="acct-info">
-                                  <strong>{a.username}</strong>
-                                  <span>
-                                    {active ? "Active now" : "Saved account"}
-                                  </span>
-                                </div>
-                                {active ? (
-                                  <span
-                                    className="acct-active-dot"
-                                    title="Current account"
-                                  />
-                                ) : (
-                                  <>
-                                    <button
-                                      className="mini-btn"
-                                      onClick={() => switchTo(a)}
-                                    >
-                                      Switch
-                                    </button>
-                                    <button
-                                      className="acct-remove"
-                                      onClick={() => removeAccount(a.username)}
-                                      title="Forget this account"
-                                    >
-                                      <X size={14} />
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <button className="mini-btn ghost" onClick={addAccount}>
-                          + Add another account
-                        </button>
-                        <p className="settings-hint">
-                          Switching signs you straight into the saved account.
-                          Accounts are stored on this device only.
-                        </p>
-                      </section>
-                    )}
-
-                    {/* BLOCKED */}
-                    <section className="settings-section">
-                      <h4>Blocked</h4>
-                      {blockedProfiles.length === 0 ? (
-                        <p className="settings-hint">You haven't blocked anyone.</p>
-                      ) : (
-                        <div className="acct-list">
-                          {blockedProfiles.map((b) => (
-                            <div key={b.id} className="acct-row">
-                              <Avatar url={b.avatar_url} name={b.username} size="sm" />
-                              <div className="acct-info">
-                                <strong>{b.username}</strong>
-                                <span>Blocked</span>
-                              </div>
-                              <button
-                                className="mini-btn"
-                                onClick={() => unblockUser(b.id)}
-                              >
-                                Unblock
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </section>
-
-                    <section className="settings-section">
-                      <button
-                        className="settings-signout"
-                        onClick={() => supabase.auth.signOut()}
-                      >
-                        <LogOut size={14} /> Sign out
-                      </button>
-                      <div className="settings-legal">
-                        <a href="/support.html" target="_blank" rel="noreferrer">
-                          Support
-                        </a>
-                        <span aria-hidden="true">·</span>
-                        <a href="/privacy.html" target="_blank" rel="noreferrer">
-                          Privacy Policy
-                        </a>
-                        <span aria-hidden="true">·</span>
-                        <a href="/terms.html" target="_blank" rel="noreferrer">
-                          Terms of Service
-                        </a>
-                      </div>
-                    </section>
-
-                    {/* Apple requires in-app deletion */}
-                    <section className="settings-section danger">
-                      <h4>Danger zone</h4>
-                      <p className="settings-hint">
-                        Deleting erases your profile, messages, friends and groups.
-                        This cannot be undone.
-                      </p>
-                      <button
-                        className="settings-danger"
-                        onClick={deleteAccount}
-                        disabled={deletingAccount}
-                      >
-                        <Trash2 size={14} />
-                        {deletingAccount ? "Deleting…" : "Delete my account"}
-                      </button>
-                    </section>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showSidebar && (selectedUser || selectedGroup) && (
-        <div
-          className="sidebar-backdrop"
-          onClick={() => setShowSidebar(false)}
-          aria-hidden="true"
-        />
-      )}
-
-      <section className="chat">
-        {selectedUser ? (
-          <>
-            <header className="chat-header">
-              <div className="chat-header-left">
-                <button
-                  className="mobile-back"
-                  onClick={() => setShowSidebar(true)}
-                  aria-label="Back to chats"
-                >
-                  ‹
-                </button>
-                <button
-                  className={`avatar-presence as-button ${
-                    presence(selectedUser.last_active) === "online" ? "online" : ""
-                  }`}
-                  onClick={() => setProfileCardUser(selectedUser)}
-                  title={`View ${displayName(selectedUser)}'s profile`}
-                  aria-label={`View ${displayName(selectedUser)}'s profile`}
-                >
-                  <Avatar
-                    url={selectedUser.avatar_url}
-                    name={selectedUser.username}
-                    size="sm"
-                  />
-                </button>
-                <div className="chat-header-name">
-                  <h3>
-                    {displayName(selectedUser)}
-                    <button
-                      className="nickname-btn"
-                      onClick={() => setNickname(selectedUser)}
-                      title="Set a private nickname"
-                    >
-                      <Pencil size={12} />
-                    </button>
-                  </h3>
-                  <span
-                    className={`presence-line ${
-                      isOnline(selectedUser.last_active) ? "is-online" : ""
-                    }`}
-                  >
-                    {presence(selectedUser.last_active) ||
-                      selectedUser.status ||
-                      ""}
-                  </span>
-                </div>
-              </div>
-              <div className="chat-header-right">
-                <button
-                  className={`icon-btn header-optional ${showSearch ? "active" : ""}`}
-                  onClick={() => {
-                    setShowSearch((s) => !s);
-                    setMsgSearch("");
-                  }}
-                  aria-label="Search this chat"
-                  title="Search this chat"
-                >
-                  <Search size={16} />
-                </button>
-                <button
-                  className={`icon-btn header-optional ${social.pinsOpen ? "active" : ""}`}
-                  onClick={() => social.setPinsOpen((v) => !v)}
-                  aria-label="Pinned messages"
-                  title={
-                    social.messagePins.length
-                      ? `${social.messagePins.length} pinned message${social.messagePins.length === 1 ? "" : "s"}`
-                      : "Pinned messages"
-                  }
-                >
-                  <Pin size={16} />
-                  {social.messagePins.length > 0 && (
-                    <span className="icon-btn-count">{social.messagePins.length}</span>
-                  )}
-                </button>
-                <button
-                  className={`icon-btn header-optional ${showGames ? "active" : ""}`}
-                  onClick={() => setShowGames((s) => !s)}
-                  aria-label="Play a game"
-                  title="Play a game"
-                >
-                  <Gamepad2 size={16} />
-                </button>
-                {/* Report and Block are rare and destructive — they sit in an
-                    overflow menu rather than competing with Search and Games
-                    for the same visual weight (and crowding out the name on
-                    a phone). */}
-                <div className="chat-menu-wrap">
-                  <button
-                    className={`icon-btn ${showChatMenu ? "active" : ""}`}
-                    onClick={() => setShowChatMenu((s) => !s)}
-                    aria-label="More options"
-                    aria-expanded={showChatMenu}
-                    title="More"
-                  >
-                    <MoreVertical size={16} />
-                  </button>
-                  {showChatMenu && (
-                    <ChatMenuLayer
-                      isPhone={isPhone}
-                      onDismiss={() => setShowChatMenu(false)}
-                    >
-                      <div className="chat-menu">
-                        <span className="chat-menu-title">
-                          {displayName(selectedUser)}
-                        </span>
-                        {/* Phone only: the composer can hold three icons and
-                            a readable message field, not four. Send later is
-                            the least frequent of them, so it lives here. */}
-                        <button
-                          className="chat-menu-phone"
-                          onClick={() => {
-                            setShowChatMenu(false);
-                            setShowSearch(true);
-                          }}
-                        >
-                          <Search size={14} /> Search this chat
-                        </button>
-                        <button
-                          className="chat-menu-phone"
-                          onClick={() => {
-                            setShowChatMenu(false);
-                            social.setPinsOpen(true);
-                          }}
-                        >
-                          <Pin size={14} /> Pinned messages
-                          {social.messagePins.length > 0 && ` (${social.messagePins.length})`}
-                        </button>
-                        <button
-                          className="chat-menu-phone"
-                          onClick={() => {
-                            setShowChatMenu(false);
-                            setShowGames(true);
-                          }}
-                        >
-                          <Gamepad2 size={14} /> Play a game
-                        </button>
-                        <button
-                          className="chat-menu-later"
-                          onClick={() => {
-                            setShowChatMenu(false);
-                            setSendLaterOpen(true);
-                          }}
-                        >
-                          <Clock size={14} /> Send later
-                          {scheduled.pending.length > 0 &&
-                            ` (${scheduled.pending.length} waiting)`}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setShowChatMenu(false);
-                            setNickname(selectedUser);
-                          }}
-                        >
-                          <Pencil size={14} /> Set nickname
-                        </button>
-                        <button
-                          onClick={() => {
-                            setShowChatMenu(false);
-                            reportUser(selectedUser);
-                          }}
-                        >
-                          <Flag size={14} /> Report {selectedUser.username}
-                        </button>
-                        <button
-                          className="danger"
-                          onClick={() => {
-                            setShowChatMenu(false);
-                            blockUser(selectedUser);
-                          }}
-                        >
-                          <Ban size={14} /> Block {selectedUser.username}
-                        </button>
-                        <button
-                          className="chat-menu-cancel"
-                          onClick={() => setShowChatMenu(false)}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </ChatMenuLayer>
-                  )}
-                </div>
-              </div>
-            </header>
-            {showSearch && (
-              <div className="chat-search">
-                <Search size={14} />
-                <input
-                  value={msgSearch}
-                  onChange={(e) => setMsgSearch(e.target.value)}
-                  placeholder="Search messages…"
-                  autoFocus
-                />
-                {msgSearch && (
-                  <button onClick={() => setMsgSearch("")} title="Clear">
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-            )}
-            {social.pinsOpen && (
-              <PinnedMessagesPanel
-                pins={social.resolvedPins}
-                onClose={() => social.setPinsOpen(false)}
-                onJump={(m) => {
-                  social.setPinsOpen(false);
-                  jumpToMessage(m.id);
-                }}
-                onTogglePin={social.toggleMessagePin}
-              />
-            )}
-            <div className="messages" ref={messagesRef} onScroll={onMessagesScroll}>
-              {loadingChat && messages.length === 0 && (
-                <div className="messages-status">Loading messages…</div>
-              )}
-              {!loadingChat && messages.length === 0 && (
-                <div className="messages-status">
-                  No messages yet — say hi to {displayName(selectedUser)}.
-                </div>
-              )}
-              {searchActive && visibleMessages.length === 0 && (
-                <div className="messages-status">
-                  No messages match “{msgSearch.trim()}”.
-                </div>
-              )}
-              {decorateMessages(visibleMessages, searchActive).map(
-                ({ msg, newDay, startsRun, endsRun }) => {
-                const mine = msg.sender_id === currentUser.id;
-                const isImage = msg.type === "image";
-                const chips = reactionsFor(msg.id);
-                const deleted = !!msg.deleted_at;
-                const repliedTo = msg.reply_to
-                  ? messages.find((m) => m.id === msg.reply_to)
-                  : null;
-                // The receipt belongs on the newest thing you sent, not on
-                // every outgoing bubble in the thread.
-                const showReceipt = mine && msg.id === lastMineId;
-                return (
-                  <Fragment key={msg.id}>
-                  {newDay && (
-                    <div className="day-divider">
-                      <span>{dayLabel(msg.created_at)}</span>
-                    </div>
-                  )}
-                  <div
-                    data-msg-id={msg.id}
-                    className={`bubble-wrap ${mine ? "mine" : "theirs"} ${
-                      startsRun ? "run-start" : ""
-                    } ${endsRun ? "run-end" : ""}`}
-                  >
-                    {repliedTo && (
-                      <div className="reply-quote">
-                        <span className="reply-quote-name">
-                          {repliedTo.sender_id === currentUser.id
-                            ? "You"
-                            : displayName(selectedUser)}
-                        </span>
-                        <span className="reply-quote-text">
-                          {repliedTo.deleted_at
-                            ? "message removed"
-                            : repliedTo.type === "image"
-                            ? "📷 photo"
-                            : repliedTo.type === "audio"
-                            ? "🎤 voice note"
-                            : repliedTo.type === "file"
-                            ? `📄 ${repliedTo.file_name || "file"}`
-                            : repliedTo.content}
-                        </span>
-                      </div>
-                    )}
-                    <div
-                      className={`bubble ${
-                        isImage && !deleted ? "bubble-image" : ""
-                      } ${deleted ? "deleted" : ""}`}
-                      onTouchStart={() => !deleted && startPress(msg)}
-                      onTouchEnd={endPress}
-                      onTouchMove={endPress}
-                      onMouseDown={() => !deleted && startPress(msg)}
-                      onMouseUp={endPress}
-                      onMouseLeave={endPress}
-                    >
-                      {deleted ? (
-                        <p className="msg-deleted">🚫 message removed</p>
-                      ) : isImage ? (
-                        <img
-                          className="msg-image"
-                          src={msg.content}
-                          alt="Shared image — open viewer"
-                          loading="lazy"
-                          onClick={() => setViewerImageId(msg.id)}
-                        />
-                      ) : msg.type === "audio" ? (
-                        <VoiceNote
-                          src={msg.content}
-                          durationMs={msg.duration_ms}
-                          messageId={msg.id}
-                          mine={mine}
-                        />
-                      ) : msg.type === "file" ? (
-                        <a
-                          className="file-chip"
-                          href={msg.content}
-                          target="_blank"
-                          rel="noreferrer"
-                          download={msg.file_name || true}
-                        >
-                          <FileIcon size={20} />
-                          <span className="file-chip-name">
-                            {msg.file_name || "file"}
-                          </span>
-                          <Download size={15} />
-                        </a>
-                      ) : (
-                        <p>{renderTextWithLinks(msg.content)}</p>
-                      )}
-                      {!deleted && (endsRun || showReceipt) && (
-                        <div className="msg-footer">
-                          <span>
-                            {fmtTime(msg.created_at)}
-                            {msg.edited_at ? " · edited" : ""}
-                          </span>
-                          {showReceipt && (
-                            <span
-                              className={`receipt ${msg.is_read ? "read" : ""}`}
-                              title={
-                                msg.is_read
-                                  ? msg.read_at
-                                    ? `Read ${fmtTime(msg.read_at)}`
-                                    : "Read"
-                                  : "Sent"
-                              }
-                            >
-                              {msg.is_read ? "Read" : "Sent"}
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Hover affordance: holding a bubble to get this menu
-                          is invisible on a desktop, so show a handle. */}
-                      {!deleted && (
-                        <div className="bubble-actions">
-                          <button
-                            aria-label="React"
-                            title="React"
-                            onClick={() => setReactPickerMsg(msg.id)}
-                          >
-                            <SmilePlus size={14} />
-                          </button>
-                          <button
-                            aria-label="Reply"
-                            title="Reply"
-                            onClick={() => startReply(msg)}
-                          >
-                            <CornerUpLeft size={14} />
-                          </button>
-                        </div>
-                      )}
-
-                      {reactPickerMsg === msg.id && !deleted && (
-                        <div className="msg-menu">
-                          <div className="msg-menu-emojis">
-                            {["👍", "❤️", "😂", "😮", "😢", "🔥"].map((em) => (
-                              <button key={em} onClick={() => addReaction(msg, em)}>
-                                {em}
-                              </button>
-                            ))}
-                          </div>
-                          <div className="msg-menu-actions">
-                            <button onClick={() => startReply(msg)}>↩ Reply</button>
-                            <button
-                              onClick={() => {
-                                setReactPickerMsg(null);
-                                social.toggleMessagePin(msg);
-                              }}
-                            >
-                              📌 {social.isMessagePinned(msg.id) ? "Unpin" : "Pin"}
-                            </button>
-                            {mine && msg.type === "text" && (
-                              <button onClick={() => startEdit(msg)}>✏️ Edit</button>
-                            )}
-                            {mine && (
-                              <button
-                                className="danger"
-                                onClick={() => deleteMessage(msg)}
-                              >
-                                🗑️ Unsend
-                              </button>
-                            )}
-                            {!mine && (
-                              <button
-                                className="danger"
-                                onClick={() => {
-                                  setReactPickerMsg(null);
-                                  reportMessage(msg);
-                                }}
-                              >
-                                🚩 Report
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {!deleted && Object.keys(chips).length > 0 && (
-                      <div className="react-chips">
-                        {Object.entries(chips).map(([em, info]) => (
-                          <button
-                            key={em}
-                            className={`react-chip ${info.mine ? "mine" : ""}`}
-                            onClick={() => addReaction(msg, em)}
-                          >
-                            {em} {info.count}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  </Fragment>
-                );
-              })}
-              {theirTyping && !searchActive && (
-                <div className="bubble-wrap theirs run-start run-end">
-                  <div className="bubble typing-bubble">
-                    <span className="typing-dot" />
-                    <span className="typing-dot" />
-                    <span className="typing-dot" />
-                  </div>
-                </div>
-              )}
-              <div ref={bottomRef} />
-              {reactPickerMsg && (
-                <div
-                  className="react-overlay"
-                  onClick={() => setReactPickerMsg(null)}
-                />
-              )}
-            </div>
-
-            {!stuckToBottom && !searchActive && (
-              <button className="jump-latest" onClick={jumpToLatest}>
-                <ArrowDown size={14} /> Jump to latest
-              </button>
-            )}
-
-            {showGames && (
-              <Games
-                chatId={chatId}
-                currentUser={currentUser}
-                opponent={selectedUser}
-                onClose={() => setShowGames(false)}
-              />
-            )}
-
-            {showGiphy && (
-              <div className="giphy-panel">
-                <form className="giphy-search" onSubmit={searchGiphy}>
-                  <Search size={15} />
-                  <input
-                    value={giphySearch}
-                    onChange={(e) => setGiphySearch(e.target.value)}
-                    placeholder="Search GIFs…"
-                    autoFocus
-                  />
-                  <button type="submit">Search</button>
-                </form>
-                <div className="giphy-grid">
-                  {giphyLoading && <div className="giphy-status">Loading…</div>}
-                  {!giphyLoading && giphyResults.length === 0 && (
-                    <div className="giphy-status">No GIFs found</div>
-                  )}
-                  {!giphyLoading &&
-                    giphyResults.map((g) => (
-                      <button
-                        key={g.id}
-                        className="giphy-thumb"
-                        onClick={() => sendGif(g.images.fixed_height.url)}
-                      >
-                        <img
-                          src={g.images.fixed_width_small.url}
-                          alt={g.title || "GIF"}
-                          loading="lazy"
-                          width={g.images.fixed_width_small.width}
-                          height={g.images.fixed_width_small.height}
-                        />
-                      </button>
-                    ))}
-                </div>
-              </div>
-            )}
-
-            {showEmoji && (
-              <div className="emoji-panel">
-                {[
-                  "😀","😂","😍","🥰","😎","😅","🤔","😴",
-                  "😭","😡","😱","🥳","🙏","🔥","🎉","✨",
-                  "❤️","💀","💯","👀","👍","👎","🤝","🙌",
-                ].map((em) => (
-                  <button key={em} type="button" onClick={() => insertEmoji(em)}>
-                    {em}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {replyingTo && (
-              <div className="reply-bar">
-                <div className="reply-bar-text">
-                  <strong>
-                    Replying to{" "}
-                    {replyingTo.sender_id === currentUser.id
-                      ? "yourself"
-                      : displayName(selectedUser)}
-                  </strong>
-                  <span>
-                    {replyingTo.type === "image"
-                      ? "📷 photo"
-                      : replyingTo.type === "audio"
-                      ? "🎤 voice note"
-                      : replyingTo.type === "file"
-                      ? `📄 ${replyingTo.file_name || "file"}`
-                      : replyingTo.content}
-                  </span>
-                </div>
-                <button type="button" onClick={() => setReplyingTo(null)}>
-                  <X size={16} />
-                </button>
-              </div>
-            )}
-
-            {editingMsg && (
-              <div className="reply-bar editing">
-                <div className="reply-bar-text">
-                  <strong>Editing message</strong>
-                  <span>Press Save to update it</span>
-                </div>
-                <button type="button" onClick={cancelEdit}>
-                  <X size={16} />
-                </button>
-              </div>
-            )}
-
-            <form className="composer" onSubmit={sendMessage}>
-              <button
-                type="button"
-                className={`composer-icon ${showGiphy ? "active" : ""}`}
-                onClick={toggleGiphy}
-                aria-label="Send a GIF"
-                title={showGiphy ? "Close GIF picker" : "Send a GIF"}
-              >
-                {showGiphy ? <X size={18} /> : <ImageIcon size={18} />}
-              </button>
-              <button
-                type="button"
-                className={`composer-icon ${showEmoji ? "active" : ""}`}
-                onClick={() => setShowEmoji((s) => !s)}
-                aria-label="Emoji"
-                title="Emoji"
-              >
-                <Smile size={18} />
-              </button>
-              <button
-                type="button"
-                className="composer-icon"
-                onClick={() => chatFileInputRef.current?.click()}
-                disabled={uploadingFile}
-                aria-label="Attach a file"
-                title="Attach an image or file"
-              >
-                <Paperclip size={18} />
-              </button>
-              <input
-                ref={chatFileInputRef}
-                type="file"
-                hidden
-                onChange={uploadChatFile}
-              />
-              <button
-                type="button"
-                className={`composer-icon composer-later ${scheduled.pending.length ? "has-pending" : ""}`}
-                onClick={() => setSendLaterOpen(true)}
-                aria-label="Send later"
-                title={
-                  scheduled.pending.length
-                    ? `${scheduled.pending.length} message${scheduled.pending.length === 1 ? "" : "s"} waiting to send`
-                    : "Send later"
-                }
-              >
-                <Clock size={18} />
-                {scheduled.pending.length > 0 && (
-                  <span className="icon-btn-count">{scheduled.pending.length}</span>
-                )}
-              </button>
-              {voice.recording || voice.clip ? (
-                voiceBar()
-              ) : (
-                <>
-                  <input
-                    value={messageText}
-                    onChange={(e) => {
-                      setMessageText(e.target.value);
-                      if (!editingMsg) notifyTyping();
-                    }}
-                    placeholder={
-                      uploadingFile
-                        ? "Uploading…"
-                        : editingMsg
-                        ? "Edit your message…"
-                        : "Type a message…"
-                    }
-                  />
-                  {composerTail()}
-                </>
-              )}
-            </form>
-          </>
-        ) : selectedGroup ? (
-          <>
-            <header className="chat-header">
-              <div className="chat-header-left">
-                <button
-                  className="mobile-back"
-                  onClick={() => setShowSidebar(true)}
-                  aria-label="Back to chats"
-                >
-                  ‹
-                </button>
-                <div className="group-avatar">
-                  <Users size={16} />
-                </div>
-                <div className="chat-header-name">
-                  <h3>{selectedGroup.name}</h3>
-                  <span className="presence-line">
-                    {Object.keys(groupMembers).length} member
-                    {Object.keys(groupMembers).length === 1 ? "" : "s"}
-                    {groupTyping ? ` · ${groupTyping} is typing…` : ""}
-                  </span>
-                </div>
-              </div>
-              <div className="chat-header-right">
-                <div className="group-member-avatars">
-                  {Object.values(groupMembers)
-                    .slice(0, 5)
-                    .map((m) => (
-                      <Avatar
-                        key={m.id}
-                        url={m.avatar_url}
-                        name={m.username}
-                        size="sm"
-                      />
-                    ))}
-                </div>
-                <button
-                  className={`icon-btn header-optional ${social.pinsOpen ? "active" : ""}`}
-                  onClick={() => social.setPinsOpen((v) => !v)}
-                  aria-label="Pinned messages"
-                  title={
-                    social.messagePins.length
-                      ? `${social.messagePins.length} pinned message${social.messagePins.length === 1 ? "" : "s"}`
-                      : "Pinned messages"
-                  }
-                >
-                  <Pin size={16} />
-                  {social.messagePins.length > 0 && (
-                    <span className="icon-btn-count">{social.messagePins.length}</span>
-                  )}
-                </button>
-                <button
-                  className="icon-btn"
-                  onClick={() => social.setGroupManageOpen(true)}
-                  aria-label="Group settings"
-                  title={
-                    social.canManageGroup
-                      ? "Manage group"
-                      : "Group members"
-                  }
-                >
-                  <SettingsIcon size={16} />
-                </button>
-                <button
-                  className="report-user-btn"
-                  onClick={leaveGroup}
-                  title="Leave group"
-                >
-                  Leave
-                </button>
-              </div>
-            </header>
-
-            <Plans
-              group={selectedGroup}
-              userId={currentUser.id}
-              isAdmin={!!profile?.is_admin}
-            />
-
-            {social.pinsOpen && (
-              <PinnedMessagesPanel
-                pins={social.resolvedPins}
-                onClose={() => social.setPinsOpen(false)}
-                onJump={(m) => {
-                  social.setPinsOpen(false);
-                  jumpToMessage(m.id);
-                }}
-                onTogglePin={social.toggleMessagePin}
-              />
-            )}
-            <div className="messages" ref={messagesRef} onScroll={onMessagesScroll}>
-              {loadingChat && groupMessages.length === 0 && (
-                <div className="messages-status">Loading messages…</div>
-              )}
-              {!loadingChat && groupMessages.length === 0 && (
-                <div className="messages-status">
-                  Nothing here yet — start the conversation.
-                </div>
-              )}
-              {decorateMessages(groupMessages).map(
-                ({ msg, newDay, startsRun, endsRun }) => {
-                const mine = msg.sender_id === currentUser.id;
-                const isImage = msg.type === "image";
-                const deleted = !!msg.deleted_at;
-                const sender = groupMembers[msg.sender_id];
-                const repliedTo = msg.reply_to
-                  ? groupMessages.find((m) => m.id === msg.reply_to)
-                  : null;
-                return (
-                  <Fragment key={msg.id}>
-                  {newDay && (
-                    <div className="day-divider">
-                      <span>{dayLabel(msg.created_at)}</span>
-                    </div>
-                  )}
-                  <div
-                    data-msg-id={msg.id}
-                    className={`bubble-wrap ${mine ? "mine" : "theirs"} ${
-                      startsRun ? "run-start" : ""
-                    } ${endsRun ? "run-end" : ""}`}
-                  >
-                    {/* Only label the first message of a run — repeating the
-                        sender's name above every bubble is pure noise. */}
-                    {!mine && startsRun && (
-                      <span className="group-sender">
-                        <UserLabel user={sender} name={sender?.username || "Unknown"} />
-                      </span>
-                    )}
-                    {repliedTo && (
-                      <div className="reply-quote">
-                        <span className="reply-quote-name">
-                          {repliedTo.sender_id === currentUser.id
-                            ? "You"
-                            : groupMembers[repliedTo.sender_id]?.username ||
-                              "Unknown"}
-                        </span>
-                        <span className="reply-quote-text">
-                          {repliedTo.deleted_at
-                            ? "message removed"
-                            : repliedTo.type === "image"
-                            ? "Image"
-                            : repliedTo.type === "audio"
-                            ? "🎤 voice note"
-                            : repliedTo.type === "file"
-                            ? `📄 ${repliedTo.file_name || "file"}`
-                            : repliedTo.content}
-                        </span>
-                      </div>
-                    )}
-                    <div
-                      className={`bubble ${
-                        isImage && !deleted ? "bubble-image" : ""
-                      } ${deleted ? "deleted" : ""}`}
-                      onTouchStart={() => !deleted && startPress(msg)}
-                      onTouchEnd={endPress}
-                      onTouchMove={endPress}
-                      onMouseDown={() => !deleted && startPress(msg)}
-                      onMouseUp={endPress}
-                      onMouseLeave={endPress}
-                    >
-                      {deleted ? (
-                        <p className="msg-deleted">🚫 message removed</p>
-                      ) : isImage ? (
-                        <img
-                          className="msg-image"
-                          src={msg.content}
-                          alt="Shared image — open viewer"
-                          loading="lazy"
-                          onClick={() => setViewerImageId(msg.id)}
-                        />
-                      ) : msg.type === "audio" ? (
-                        <VoiceNote
-                          src={msg.content}
-                          durationMs={msg.duration_ms}
-                          messageId={msg.id}
-                          mine={mine}
-                        />
-                      ) : msg.type === "file" ? (
-                        <a
-                          className="file-chip"
-                          href={msg.content}
-                          target="_blank"
-                          rel="noreferrer"
-                          download={msg.file_name || true}
-                        >
-                          <FileIcon size={20} />
-                          <span className="file-chip-name">
-                            {msg.file_name || "file"}
-                          </span>
-                          <Download size={15} />
-                        </a>
-                      ) : (
-                        <p>{renderTextWithLinks(msg.content)}</p>
-                      )}
-                      {!deleted && endsRun && (
-                        <div className="msg-footer">
-                          <span>
-                            {fmtTime(msg.created_at)}
-                            {msg.edited_at ? " · edited" : ""}
-                          </span>
-                        </div>
-                      )}
-
-                      {!deleted && (
-                        <div className="bubble-actions">
-                          <button
-                            aria-label="Reply"
-                            title="Reply"
-                            onClick={() => startReply(msg)}
-                          >
-                            <CornerUpLeft size={14} />
-                          </button>
-                        </div>
-                      )}
-
-                      {reactPickerMsg === msg.id && !deleted && (
-                        <div className="msg-menu">
-                          <div className="msg-menu-actions">
-                            <button onClick={() => startReply(msg)}>
-                              ↩ Reply
-                            </button>
-                            {/* Only owners and admins may pin in a group; the
-                                RPC enforces it, this just avoids offering it. */}
-                            {social.canManageGroup && (
-                              <button
-                                onClick={() => {
-                                  setReactPickerMsg(null);
-                                  social.toggleMessagePin(msg);
-                                }}
-                              >
-                                📌 {social.isMessagePinned(msg.id) ? "Unpin" : "Pin"}
-                              </button>
-                            )}
-                            {mine && msg.type === "text" && (
-                              <button onClick={() => startEdit(msg)}>
-                                ✏️ Edit
-                              </button>
-                            )}
-                            {mine && (
-                              <button
-                                className="danger"
-                                onClick={() => deleteMessage(msg)}
-                              >
-                                🗑️ Unsend
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  </Fragment>
-                );
-              })}
-              {groupTyping && (
-                <div className="bubble-wrap theirs run-start run-end">
-                  <div className="bubble typing-bubble">
-                    <span className="typing-dot" />
-                    <span className="typing-dot" />
-                    <span className="typing-dot" />
-                  </div>
-                </div>
-              )}
-              <div ref={bottomRef} />
-              {reactPickerMsg && (
-                <div
-                  className="react-overlay"
-                  onClick={() => setReactPickerMsg(null)}
-                />
-              )}
-            </div>
-
-            {!stuckToBottom && (
-              <button className="jump-latest" onClick={jumpToLatest}>
-                <ArrowDown size={14} /> Jump to latest
-              </button>
-            )}
-
-            {showEmoji && (
-              <div className="emoji-panel">
-                {[
-                  "😀","😂","😍","🥰","😎","😅","🤔","😴",
-                  "😭","😡","😱","🥳","🙏","🔥","🎉","✨",
-                  "❤️","💀","💯","👀","👍","👎","🤝","🙌",
-                ].map((em) => (
-                  <button key={em} type="button" onClick={() => insertEmoji(em)}>
-                    {em}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {replyingTo && (
-              <div className="reply-bar">
-                <div className="reply-bar-text">
-                  <strong>
-                    Replying to{" "}
-                    {replyingTo.sender_id === currentUser.id
-                      ? "yourself"
-                      : groupMembers[replyingTo.sender_id]?.username || "Unknown"}
-                  </strong>
-                  <span>
-                    {replyingTo.type === "image"
-                      ? "Image"
-                      : replyingTo.type === "audio"
-                      ? "🎤 voice note"
-                      : replyingTo.type === "file"
-                      ? `📄 ${replyingTo.file_name || "file"}`
-                      : replyingTo.content}
-                  </span>
-                </div>
-                <button type="button" onClick={() => setReplyingTo(null)}>
-                  <X size={16} />
-                </button>
-              </div>
-            )}
-
-            {editingMsg && (
-              <div className="reply-bar editing">
-                <div className="reply-bar-text">
-                  <strong>Editing message</strong>
-                  <span>Press Save to update it</span>
-                </div>
-                <button type="button" onClick={cancelEdit}>
-                  <X size={16} />
-                </button>
-              </div>
-            )}
-
-            <form className="composer" onSubmit={sendGroupMessage}>
-              <button
-                type="button"
-                className={`composer-icon ${showEmoji ? "active" : ""}`}
-                onClick={() => setShowEmoji((s) => !s)}
-                aria-label="Emoji"
-                title="Emoji"
-              >
-                <Smile size={18} />
-              </button>
-              <button
-                type="button"
-                className="composer-icon"
-                onClick={() => chatFileInputRef.current?.click()}
-                disabled={uploadingFile}
-                aria-label="Attach a file"
-                title="Attach an image or file"
-              >
-                <Paperclip size={18} />
-              </button>
-              <button
-                type="button"
-                className={`composer-icon composer-later ${scheduled.pending.length ? "has-pending" : ""}`}
-                onClick={() => setSendLaterOpen(true)}
-                aria-label="Send later"
-                title={
-                  scheduled.pending.length
-                    ? `${scheduled.pending.length} message${scheduled.pending.length === 1 ? "" : "s"} waiting to send`
-                    : "Send later"
-                }
-              >
-                <Clock size={18} />
-                {scheduled.pending.length > 0 && (
-                  <span className="icon-btn-count">{scheduled.pending.length}</span>
-                )}
-              </button>
-              {voice.recording || voice.clip ? (
-                voiceBar()
-              ) : (
-                <>
-                  <input
-                    value={messageText}
-                    onChange={(e) => {
-                      setMessageText(e.target.value);
-                      if (!editingMsg) notifyGroupTyping();
-                    }}
-                    placeholder={
-                      uploadingFile ? "Uploading…" : "Message the group…"
-                    }
-                  />
-                  {composerTail()}
-                </>
-              )}
-            </form>
-          </>
-        ) : (
-          <div className="empty-chat">
-            <h1>Pick a chat to get started</h1>
-            <p>
-              {friends.length === 0 && groups.length === 0
-                ? "Search a username in the sidebar to add your first friend, or start a group."
-                : "Choose a friend or group on the left. Plans, games and photos all live inside the chat."}
-            </p>
-            <button
-              className="empty-chat-cta"
-              onClick={() => setShowSidebar(true)}
-            >
-              <Users size={15} /> Browse chats
-            </button>
-          </div>
-        )}
-      </section>
-
-      {showNewGroup && (
-        <div className="modal-overlay" onClick={() => setShowNewGroup(false)}>
-          <div className="new-group-card" onClick={(e) => e.stopPropagation()}>
-            <div className="new-group-head">
-              <h3>New group</h3>
-              <button onClick={() => setShowNewGroup(false)} aria-label="Close">
-                <X size={18} />
-              </button>
-            </div>
-            <input
-              className="settings-input"
-              value={newGroupName}
-              onChange={(e) => setNewGroupName(e.target.value)}
-              placeholder="Group name"
-              maxLength={40}
-            />
-            <p className="new-group-label">Add friends</p>
-            <div className="new-group-friends">
-              {friends.length === 0 && (
-                <p className="new-group-empty">Add some friends first.</p>
-              )}
-              {friends.filter((f) => !blockedIds.has(f.id)).map((f) => {
-                const checked = newGroupMembers.includes(f.id);
-                return (
-                  <button
-                    key={f.id}
-                    className={`ng-friend ${checked ? "checked" : ""}`}
-                    onClick={() =>
-                      setNewGroupMembers((prev) =>
-                        checked
-                          ? prev.filter((id) => id !== f.id)
-                          : [...prev, f.id]
-                      )
-                    }
-                  >
-                    <Avatar url={f.avatar_url} name={f.username} size="sm" />
-                    <span>{displayName(f)}</span>
-                    {checked && <Check size={16} />}
-                  </button>
-                );
-              })}
-            </div>
-            <button
-              className="ng-create"
-              onClick={createGroup}
-              disabled={
-                creatingGroup ||
-                !newGroupName.trim() ||
-                newGroupMembers.length === 0
-              }
-            >
-              {creatingGroup
-                ? "Creating…"
-                : `Create group${
-                    newGroupMembers.length
-                      ? ` (${newGroupMembers.length + 1})`
-                      : ""
-                  }`}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {premiumReturn && (
-        <div className={`premium-return ${premiumReturn === "ok" ? "ok" : ""}`}>
-          {premiumReturn === "ok" ? (
-            <>
-              <Star size={16} />
-              <span>You're a Supporter. Thank you.</span>
-            </>
-          ) : premiumReturn === "pending" ? (
-            <span>Confirming your payment with Stripe…</span>
-          ) : premiumReturn === "slow" ? (
-            <span>
-              Payment received — it's taking a moment to show up. Refresh in a
-              minute.
-            </span>
-          ) : (
-            <span>Checkout cancelled — you haven't been charged.</span>
-          )}
-          {premiumReturn !== "pending" && (
-            <button onClick={() => setPremiumReturn(null)} aria-label="Dismiss">
-              <X size={15} />
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Framing the avatar. Sits above Settings, which is where it's opened
-          from, and unmounts on cancel so the decoded bitmap is released. */}
-      {cropFile && (
-        <AvatarCropper
-          file={cropFile}
-          onCancel={() => setCropFile(null)}
-          onSave={saveAvatarBlob}
-        />
-      )}
-
-      {/* ---- social layers: profile card, media viewer, group management ---- */}
-      {profileCardUser && (
-        <ProfileCardModal
-          key={profileCardUser.id}
-          user={profileCardUser}
-          isFriend={friends.some((f) => f.id === profileCardUser.id)}
-          onClose={() => setProfileCardUser(null)}
-          onMessage={openChat}
-          onAdd={sendRequest}
-          onReport={reportUser}
-          onBlock={blockUser}
-        />
-      )}
-
-      {viewerImageId && (
-        <MediaViewer
-          key={viewerImageId}
-          media={selectedGroup ? groupMessages : messages}
-          activeId={viewerImageId}
-          onClose={() => setViewerImageId(null)}
-        />
-      )}
-
-      {sendLaterOpen && (selectedUser || selectedGroup) && (
-        <SendLaterDialog
-          text={messageText}
-          pending={scheduled.pending}
-          onSchedule={(content, at) =>
-            scheduled.schedule(content, at, selectedUser?.id)
-          }
-          onCancel={scheduled.cancel}
-          onClose={() => setSendLaterOpen(false)}
-        />
-      )}
-
-      {social.groupManageOpen && selectedGroup && (
-        <GroupManageModal
-          group={selectedGroup}
-          members={groupMembers}
-          myRole={social.groupRole}
-          onClose={() => social.setGroupManageOpen(false)}
-          onRename={social.renameGroup}
-          onSetRole={social.setMemberRole}
-          onRemove={social.removeMember}
-          onTransfer={social.transferOwnership}
-          onDelete={social.deleteGroup}
-          onProfile={(m) => {
-            social.setGroupManageOpen(false);
-            setProfileCardUser(m);
-          }}
-        />
-      )}
-
-      <Premium
-        open={showPremium}
-        onClose={() => {
-          setShowPremium(false);
-          setCheckoutError("");
-        }}
-        onSubscribe={startCheckout}
-        isPremium={isPremium}
-        busy={checkoutBusy}
-        error={checkoutError}
-      />
+      {!isDeepView && <Header profile={data.profile} pendingCount={data.requests.length} onBell={() => setTab("inbox")} />}
+      <div className="app-content">
+        {tab === "home" && <HomeScreen {...data} userId={userId} actions={actions} />}
+        {tab === "spaces" && <SpacesScreen spaces={data.spaces} selectedSpace={selectedSpace} setSelectedSpace={setSelectedSpace} messages={messages} messageText={messageText} setMessageText={setMessageText} sendMessage={sendCurrentMessage} plans={data.plans} polls={data.polls} activities={data.activities} userId={userId} actions={actions} />}
+        {tab === "inbox" && <InboxScreen friends={data.friends} requests={data.requests} selectedFriend={selectedFriend} setSelectedFriend={setSelectedFriend} messages={messages} messageText={messageText} setMessageText={setMessageText} sendMessage={sendCurrentMessage} userId={userId} actions={actions} />}
+        {tab === "you" && <ProfileScreen profile={data.profile} privacy={data.privacy} locations={data.locations.filter((l) => l.owner_id === userId)} onPrivacy={updatePrivacy} onProfileSaved={refresh} onEnableNotifications={enableNotifications} onStopLocations={stopLocations} onDeleteAccount={deleteAccount} onLogout={() => supabase.auth.signOut()} />}
+      </div>
+      {!isDeepView && <BottomNav tab={tab} setTab={(next) => { setTab(next); if (next !== "spaces") setSelectedSpace(null); if (next !== "inbox") setSelectedFriend(null); }} openCreate={() => actions.openCreate()} />}
+      {createMode && <CreateModal mode={createMode === true ? null : createMode} setMode={setCreateMode} spaces={data.spaces} presetSpace={presetSpace} onClose={() => { setCreateMode(false); setPresetSpace(null); }} onCreated={refresh} userId={userId} />}
+      <Toast message={toast} onClose={() => setToast("")} />
     </main>
   );
 }
