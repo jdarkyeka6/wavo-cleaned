@@ -1,0 +1,85 @@
+name: Ensure exactly one Apple distribution slot
+
+on:
+  push:
+    branches:
+      - release/wavo-2-app-store
+
+permissions:
+  contents: write
+
+jobs:
+  ensure-slot:
+    if: contains(github.event.head_commit.message, 'Ensure exactly one Apple distribution slot')
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/wavo-2-app-store
+      - name: Set up Ruby and Fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+          working-directory: ios/App
+      - name: Ensure exactly one Distribution slot is free
+        working-directory: ios/App
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+        run: |
+          bundle exec ruby <<'RUBY'
+          require 'base64'
+          require 'time'
+          require 'spaceship'
+
+          raw = ENV.fetch('ASC_KEY_CONTENT').strip
+          key_text = raw.include?('BEGIN PRIVATE KEY') ? raw : Base64.decode64(raw)
+          abort 'Invalid App Store Connect private key' unless key_text.include?('BEGIN PRIVATE KEY')
+
+          client = Spaceship::ConnectAPI::Client.auth(
+            key_id: ENV.fetch('ASC_KEY_ID').strip,
+            issuer_id: ENV.fetch('ASC_ISSUER_ID').strip,
+            key: key_text
+          )
+
+          type = Spaceship::ConnectAPI::Certificate::CertificateType::DISTRIBUTION
+          fetch = lambda do
+            Spaceship::ConnectAPI::Certificate.all(
+              client: client,
+              filter: { certificateType: [type] }
+            ).select(&:valid?)
+          end
+
+          certs = fetch.call
+          puts "Valid Apple Distribution certificates before: #{certs.length}"
+          certs.sort_by { |c| Time.parse(c.expiration_date) }.each do |c|
+            puts "  #{c.id} | expires #{c.expiration_date}"
+          end
+
+          unless [2, 3].include?(certs.length)
+            abort "Safety stop: expected 2 or 3 valid Distribution certificates, found #{certs.length}."
+          end
+
+          if certs.length == 3
+            target = certs.min_by { |c| Time.parse(c.expiration_date) }
+            puts "Revoking oldest Distribution certificate #{target.id}, expiring #{target.expiration_date}."
+            target.delete!(client: client)
+          else
+            puts 'A slot is already free; revoking nothing.'
+          end
+
+          remaining = fetch.call
+          abort "Verification failed: expected exactly 2 valid Distribution certificates, found #{remaining.length}." unless remaining.length == 2
+
+          File.write('../../cert-slot-ready.txt', "Apple Distribution certificate slot verified: 2 valid certificates remain.\n")
+          puts 'Verified: exactly 2 valid Apple Distribution certificates remain.'
+          RUBY
+      - name: Record verification marker
+        run: |
+          git config user.name "wavo-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add cert-slot-ready.txt
+          git commit -m "Record Apple certificate slot verification"
+          git push origin HEAD:release/wavo-2-app-store
