@@ -1,0 +1,391 @@
+/*
+ * WAVO NATIVE — premium social redesign
+ *
+ * Deliberately scoped to html[data-wavo-native="true"]. The browser product
+ * keeps the existing Warm Dusk interface; Capacitor builds get this system.
+ */
+
+html[data-wavo-native="true"] {
+  color-scheme: dark;
+  --bg: #07080d;
+  --bg-deep: #030408;
+  --on-accent: #07110d;
+  --panel: rgba(15, 17, 25, 0.94);
+  --panel-2: rgba(22, 24, 35, 0.94);
+  --card: rgba(27, 30, 42, 0.92);
+  --line: rgba(255, 255, 255, 0.10);
+  --line-soft: rgba(255, 255, 255, 0.055);
+  --text: #f7f8fb;
+  --text-dim: #a8adba;
+  --text-faint: #707684;
+  --coral: #61f2b1;
+  --coral-soft: rgba(97, 242, 177, 0.14);
+  --amber: #b6ff74;
+  --read: #75a7ff;
+  --online: #61f2b1;
+  --ring: rgba(255, 255, 255, 0.18);
+  --fill-soft: rgba(255, 255, 255, 0.07);
+  --fill: rgba(255, 255, 255, 0.12);
+  --fill-strong: rgba(255, 255, 255, 0.18);
+  --glass: blur(28px) saturate(165%);
+  --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.56);
+  --shadow-sm: 0 10px 30px rgba(0, 0, 0, 0.28);
+  --display: "SF Pro Display", "Inter", system-ui, sans-serif;
+  --body: "SF Pro Text", "Inter", system-ui, sans-serif;
+  --r-lg: 26px;
+  --r-md: 18px;
+  --r-sm: 13px;
+  background: #07080d;
+}
+
+html[data-wavo-native="true"] body {
+  background:
+    radial-gradient(70vw 44vh at 90% -10%, rgba(97, 242, 177, 0.16), transparent 62%),
+    radial-gradient(70vw 50vh at -20% 105%, rgba(117, 167, 255, 0.12), transparent 66%),
+    #07080d;
+  letter-spacing: -0.008em;
+  -webkit-font-smoothing: antialiased;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+html[data-wavo-native="true"] body::before {
+  display: none;
+}
+
+/* Authentication: brand-first, clean, confident. */
+html[data-wavo-native="true"] .auth-page {
+  padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
+  background:
+    radial-gradient(circle at 50% 12%, rgba(97, 242, 177, 0.18), transparent 34%),
+    linear-gradient(180deg, #0d1114 0%, #07080d 66%);
+}
+
+html[data-wavo-native="true"] .auth-card {
+  max-width: 420px;
+  padding: 42px 24px 28px;
+  background: rgba(18, 20, 28, 0.80);
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 30px;
+  backdrop-filter: blur(30px) saturate(155%);
+}
+
+html[data-wavo-native="true"] .auth-card::before {
+  display: none;
+}
+
+html[data-wavo-native="true"] .logo-mark {
+  width: 68px;
+  height: 68px;
+  border-radius: 22px;
+  color: #07110d;
+  background: linear-gradient(145deg, #b6ff74 0%, #61f2b1 54%, #75a7ff 140%);
+  box-shadow: 0 18px 44px rgba(97, 242, 177, .26), inset 0 1px rgba(255,255,255,.55);
+}
+
+html[data-wavo-native="true"] .auth-card h1 {
+  font-size: 34px;
+  letter-spacing: -1.4px;
+}
+
+html[data-wavo-native="true"] .auth-form input,
+html[data-wavo-native="true"] .settings-input {
+  min-height: 52px;
+  border-radius: 16px;
+  background: rgba(255,255,255,.055);
+  border-color: rgba(255,255,255,.11);
+}
+
+html[data-wavo-native="true"] .auth-form button,
+html[data-wavo-native="true"] .primary-btn {
+  min-height: 52px;
+  border-radius: 16px;
+  color: #07110d;
+  background: linear-gradient(135deg, #b6ff74, #61f2b1);
+  box-shadow: 0 14px 32px rgba(97, 242, 177, .18);
+}
+
+/* App shell */
+html[data-wavo-native="true"] .app-shell {
+  height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  background: transparent;
+}
+
+html[data-wavo-native="true"] .sidebar {
+  background: rgba(10, 11, 17, .92);
+  border-right-color: rgba(255,255,255,.08);
+  backdrop-filter: blur(28px) saturate(150%);
+}
+
+html[data-wavo-native="true"] .brand-row {
+  min-height: 72px;
+  padding: 16px 18px 12px;
+  border-bottom: 0;
+}
+
+html[data-wavo-native="true"] .brand-row h2 {
+  color: var(--text);
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  font-size: 1.65rem;
+  font-weight: 800;
+  letter-spacing: -1px;
+}
+
+html[data-wavo-native="true"] .user-list {
+  padding: 6px 10px 18px;
+  gap: 4px;
+}
+
+html[data-wavo-native="true"] .user-row {
+  min-height: 68px;
+  padding: 10px;
+  border-radius: 20px;
+  border: 1px solid transparent;
+}
+
+html[data-wavo-native="true"] .user-row:hover,
+html[data-wavo-native="true"] .user-row.active {
+  background: linear-gradient(120deg, rgba(97,242,177,.13), rgba(117,167,255,.06));
+  border-color: rgba(97,242,177,.15);
+}
+
+html[data-wavo-native="true"] .avatar,
+html[data-wavo-native="true"] .avatar-presence {
+  box-shadow: 0 0 0 1px rgba(255,255,255,.10);
+}
+
+html[data-wavo-native="true"] .avatar-presence.online::after {
+  border-color: #0b0d13;
+  background: #61f2b1;
+}
+
+/* Conversation */
+html[data-wavo-native="true"] .chat {
+  position: relative;
+  background:
+    radial-gradient(50% 32% at 100% 0%, rgba(97,242,177,.07), transparent 72%),
+    #090a10;
+}
+
+html[data-wavo-native="true"] .chat-header {
+  min-height: 72px;
+  padding: 10px 14px;
+  background: rgba(9, 10, 16, .76);
+  border-bottom: 1px solid rgba(255,255,255,.075);
+  backdrop-filter: blur(26px) saturate(160%);
+}
+
+html[data-wavo-native="true"] .chat-header-name h3 {
+  font-size: 1rem;
+  font-weight: 750;
+  letter-spacing: -.25px;
+}
+
+html[data-wavo-native="true"] .presence-line.is-online {
+  color: #61f2b1;
+}
+
+html[data-wavo-native="true"] .icon-btn,
+html[data-wavo-native="true"] .mobile-back {
+  width: 38px;
+  height: 38px;
+  border-radius: 13px;
+  background: rgba(255,255,255,.055);
+  border: 1px solid rgba(255,255,255,.08);
+}
+
+html[data-wavo-native="true"] .icon-btn.active {
+  color: #61f2b1;
+  background: rgba(97,242,177,.12);
+  border-color: rgba(97,242,177,.22);
+}
+
+html[data-wavo-native="true"] .messages {
+  padding-top: 18px;
+  padding-bottom: 18px;
+  scrollbar-width: none;
+}
+
+html[data-wavo-native="true"] .messages::-webkit-scrollbar {
+  display: none;
+}
+
+html[data-wavo-native="true"] .day-separator span {
+  color: #7d8391;
+  background: rgba(255,255,255,.045);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 999px;
+  padding: 5px 10px;
+}
+
+html[data-wavo-native="true"] .bubble {
+  border-radius: 20px;
+  background: #171923;
+  border: 1px solid rgba(255,255,255,.055);
+  box-shadow: 0 5px 18px rgba(0,0,0,.12);
+}
+
+html[data-wavo-native="true"] .message.mine .bubble,
+html[data-wavo-native="true"] .msg.mine .bubble,
+html[data-wavo-native="true"] .bubble.mine {
+  color: #07110d;
+  background: linear-gradient(145deg, #b6ff74 0%, #61f2b1 85%);
+  border-color: rgba(255,255,255,.18);
+}
+
+html[data-wavo-native="true"] .composer {
+  padding: 9px 10px calc(10px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, rgba(9,10,16,0), rgba(9,10,16,.94) 28%);
+  border-top: 0;
+}
+
+html[data-wavo-native="true"] .composer-inner,
+html[data-wavo-native="true"] .message-input-wrap {
+  border-radius: 22px;
+  background: rgba(28,31,42,.94);
+  border: 1px solid rgba(255,255,255,.10);
+  box-shadow: 0 14px 36px rgba(0,0,0,.30);
+}
+
+html[data-wavo-native="true"] .send-btn {
+  color: #07110d;
+  background: linear-gradient(145deg, #b6ff74, #61f2b1);
+  box-shadow: 0 8px 20px rgba(97,242,177,.20);
+}
+
+/* Plans are the hero capability, not an attachment afterthought. */
+html[data-wavo-native="true"] .plan-card {
+  padding: 15px;
+  border: 1px solid rgba(97,242,177,.20);
+  border-left: 1px solid rgba(97,242,177,.20);
+  border-radius: 22px;
+  background:
+    linear-gradient(145deg, rgba(97,242,177,.11), transparent 48%),
+    rgba(24,27,37,.96);
+  box-shadow: 0 16px 42px rgba(0,0,0,.28);
+}
+
+html[data-wavo-native="true"] .plan-card.mine {
+  border-color: rgba(182,255,116,.25);
+}
+
+html[data-wavo-native="true"] .plan-card-head {
+  color: #61f2b1;
+}
+
+html[data-wavo-native="true"] .plan-card-title {
+  margin-top: 9px;
+  font-size: 1.08rem;
+  letter-spacing: -.25px;
+}
+
+html[data-wavo-native="true"] .plan-rsvp {
+  min-height: 38px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.045);
+}
+
+html[data-wavo-native="true"] .plan-rsvp.on {
+  color: #07110d;
+  background: #61f2b1;
+  border-color: #61f2b1;
+}
+
+/* Panels, sheets and settings */
+html[data-wavo-native="true"] .modal-backdrop,
+html[data-wavo-native="true"] .overlay {
+  background: rgba(0,0,0,.66);
+  backdrop-filter: blur(12px);
+}
+
+html[data-wavo-native="true"] .modal,
+html[data-wavo-native="true"] .settings-modal,
+html[data-wavo-native="true"] .chat-menu {
+  background: rgba(19,21,30,.97);
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 26px;
+  box-shadow: 0 30px 90px rgba(0,0,0,.62);
+}
+
+html[data-wavo-native="true"] .settings-section {
+  border-radius: 20px;
+  border-color: rgba(255,255,255,.075);
+  background: rgba(255,255,255,.035);
+}
+
+html[data-wavo-native="true"] .mini-btn,
+html[data-wavo-native="true"] .ghost-btn,
+html[data-wavo-native="true"] .cos-chip,
+html[data-wavo-native="true"] .theme-option {
+  border-radius: 14px;
+}
+
+html[data-wavo-native="true"] :focus-visible {
+  outline: 3px solid rgba(97,242,177,.5);
+  outline-offset: 2px;
+}
+
+/* Native phone behaviour */
+@media (max-width: 700px) {
+  html[data-wavo-native="true"] .app-shell {
+    display: block;
+  }
+
+  html[data-wavo-native="true"] .sidebar {
+    width: 100%;
+    border-right: 0;
+    background:
+      radial-gradient(80% 34% at 100% 0%, rgba(97,242,177,.10), transparent 75%),
+      #090a10;
+  }
+
+  html[data-wavo-native="true"] .brand-row {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  html[data-wavo-native="true"] .user-list {
+    padding: 8px 12px 24px;
+  }
+
+  html[data-wavo-native="true"] .user-row {
+    min-height: 72px;
+    padding: 10px 11px;
+  }
+
+  html[data-wavo-native="true"] .chat-header {
+    min-height: 64px;
+  }
+
+  html[data-wavo-native="true"] .messages {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  html[data-wavo-native="true"] .modal {
+    width: calc(100% - 20px);
+    max-height: calc(100dvh - 28px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    border-radius: 28px;
+  }
+
+  html[data-wavo-native="true"] .chat-menu {
+    border-radius: 26px 26px 0 0;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html[data-wavo-native="true"] .user-row,
+  html[data-wavo-native="true"] .bubble,
+  html[data-wavo-native="true"] .plan-card,
+  html[data-wavo-native="true"] .icon-btn {
+    transition: transform .18s ease, background .2s ease, border-color .2s ease;
+  }
+
+  html[data-wavo-native="true"] .user-row:active,
+  html[data-wavo-native="true"] .icon-btn:active,
+  html[data-wavo-native="true"] .plan-rsvp:active {
+    transform: scale(.975);
+  }
+}
