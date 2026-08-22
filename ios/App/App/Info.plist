@@ -49,6 +49,8 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Wavo uses your location only when you choose to share your arrival with people in a plan.</string>
 	<!-- Voice notes. iOS kills the app outright if it touches the microphone
 	     without this string, and the string is what the permission sheet
 	     shows the user. -->

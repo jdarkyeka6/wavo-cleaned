@@ -1,0 +1,142 @@
+name: Prepare Wavo 2 native release
+
+on:
+  push:
+    branches:
+      - release/wavo-2-app-store
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    if: ${{ !contains(github.event.head_commit.message, '[wavo2-sync]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          ref: release/wavo-2-app-store
+
+      - name: Pull tested Wavo 2 shell
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/jdarkyeka6/wavo-clean/app-store-overhaul/src/App.jsx -o src/App.jsx
+          curl -fsSL https://raw.githubusercontent.com/jdarkyeka6/wavo-clean/app-store-overhaul/src/styles.css -o src/styles.css
+          curl -fsSL https://raw.githubusercontent.com/jdarkyeka6/wavo-clean/app-store-overhaul/src/wavoData.js -o src/wavoData.js
+
+      - name: Apply native and App Review patches
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          app = Path('src/App.jsx')
+          text = app.read_text()
+
+          def replace(old, new, label):
+              global text
+              if old not in text:
+                  raise SystemExit(f'Could not apply {label}')
+              text = text.replace(old, new, 1)
+
+          replace(
+              '  createActivity,\n',
+              '  blockUser,\n  createActivity,\n  deleteMyAccount,\n  reportUser,\n',
+              'safety imports',
+          )
+
+          replace(
+              '        const { data, error: authError } = await supabase.auth.signUp({ email, password });\n        if (authError) throw authError;\n        if (!data.user) throw new Error("Signup failed");\n        const { error: profileError } = await supabase.from("profiles").insert({ id: data.user.id, username: username.trim() });\n        if (profileError) throw profileError;\n',
+              '        const { data, error: authError } = await supabase.auth.signUp({\n          email,\n          password,\n          options: { data: { username: username.trim() } },\n        });\n        if (authError) throw authError;\n        if (!data.user) throw new Error("Signup failed");\n',
+              'signup profile trigger compatibility',
+          )
+
+          replace(
+              '        <header className="chat-topbar"><button onClick={() => setSelectedFriend(null)}><ChevronLeft /></button><Avatar profile={selectedFriend} size="sm" /><div><strong>{selectedFriend.username}</strong><span>{selectedFriend.status || "Wavo friend"}</span></div></header>\n',
+              '        <header className="chat-topbar"><button onClick={() => setSelectedFriend(null)}><ChevronLeft /></button><Avatar profile={selectedFriend} size="sm" /><div><strong>{selectedFriend.username}</strong><span>{selectedFriend.status || "Wavo friend"}</span></div></header>\n        <div className="chat-safety-strip"><button type="button" onClick={() => actions.report(selectedFriend.id)}>Report</button><button type="button" className="danger-soft" onClick={() => actions.block(selectedFriend.id)}>Block</button></div>\n',
+              'chat safety controls',
+          )
+
+          replace(
+              'function ProfileScreen({ profile, privacy, locations, onPrivacy, onProfileSaved, onEnableNotifications, onStopLocations, onLogout }) {',
+              'function ProfileScreen({ profile, privacy, locations, onPrivacy, onProfileSaved, onEnableNotifications, onStopLocations, onDeleteAccount, onLogout }) {',
+              'profile delete prop',
+          )
+
+          replace(
+              '      <section className="settings-card"><div className="settings-head"><Bell /><div><strong>Notifications</strong><span>Enable message and plan alerts when you want them.</span></div></div><button className="secondary-btn" onClick={onEnableNotifications}>Enable notifications</button></section>\n      <button className="logout-button" onClick={onLogout}><LogOut size={18} /> Log out</button>\n',
+              '      <section className="settings-card"><div className="settings-head"><Bell /><div><strong>Notifications</strong><span>Enable message and plan alerts when you want them.</span></div></div><button className="secondary-btn" onClick={onEnableNotifications}>Enable notifications</button></section>\n      <section className="settings-card danger-zone"><div className="settings-head"><Shield /><div><strong>Account safety</strong><span>Blocking and reporting are available from a friend chat. Account deletion is permanent.</span></div></div><button type="button" className="danger-soft" onClick={() => { if (window.confirm("Permanently delete your Wavo account and its account data? This cannot be undone.")) onDeleteAccount(); }}>Delete account</button></section>\n      <button className="logout-button" onClick={onLogout}><LogOut size={18} /> Log out</button>\n',
+              'delete account UI',
+          )
+
+          replace(
+              '    react: async (waveId, emoji) => { await reactToWave(userId, waveId, emoji); await refresh(); },\n    shareLocation: async (plan) => {',
+              '    react: async (waveId, emoji) => { await reactToWave(userId, waveId, emoji); await refresh(); },\n    report: async (targetId) => {\n      const reason = window.prompt("What should Wavo review about this account?", "Inappropriate behaviour");\n      if (!reason?.trim()) return;\n      await reportUser(userId, targetId, reason.trim());\n      setToast("Report submitted");\n    },\n    block: async (targetId) => {\n      if (!window.confirm("Block this person? They will no longer be able to message or add you.")) return;\n      await blockUser(targetId);\n      setSelectedFriend(null);\n      await refresh();\n      setToast("User blocked");\n    },\n    shareLocation: async (plan) => {',
+              'safety actions',
+          )
+
+          replace(
+              '  async function stopLocations() {\n    await stopAllLocationSharing(userId);\n    await refresh();\n    setToast("Location sharing stopped");\n  }\n\n  if (booting)',
+              '  async function stopLocations() {\n    await stopAllLocationSharing(userId);\n    await refresh();\n    setToast("Location sharing stopped");\n  }\n\n  async function deleteAccount() {\n    try {\n      await deleteMyAccount();\n      await supabase.auth.signOut();\n    } catch (err) {\n      console.error("[wavo] delete account", err);\n      setToast(GENERIC_ERROR);\n    }\n  }\n\n  if (booting)',
+              'delete account action',
+          )
+
+          replace(
+              '        {tab === "you" && <ProfileScreen profile={data.profile} privacy={data.privacy} locations={data.locations.filter((l) => l.owner_id === userId)} onPrivacy={updatePrivacy} onProfileSaved={refresh} onEnableNotifications={enableNotifications} onStopLocations={stopLocations} onLogout={() => supabase.auth.signOut()} />}\n',
+              '        {tab === "you" && <ProfileScreen profile={data.profile} privacy={data.privacy} locations={data.locations.filter((l) => l.owner_id === userId)} onPrivacy={updatePrivacy} onProfileSaved={refresh} onEnableNotifications={enableNotifications} onStopLocations={stopLocations} onDeleteAccount={deleteAccount} onLogout={() => supabase.auth.signOut()} />}\n',
+              'profile delete callback',
+          )
+
+          app.write_text(text)
+
+          data_file = Path('src/wavoData.js')
+          data_text = data_file.read_text()
+          data_text += '''\n\nexport async function blockUser(targetId) {\n  const { error } = await supabase.rpc("block_user", { target: targetId });\n  if (error) throw error;\n}\n\nexport async function reportUser(userId, targetId, reason) {\n  const { error } = await supabase.from("flags").insert({\n    reporter_id: userId,\n    reported_user_id: targetId,\n    reason: reason.slice(0, 500),\n    resolved: false,\n  });\n  if (error) throw error;\n}\n\nexport async function deleteMyAccount() {\n  const { error } = await supabase.rpc("delete_my_account");\n  if (error) throw error;\n}\n'''
+          data_file.write_text(data_text)
+
+          css = Path('src/styles.css')
+          css_text = css.read_text() + '''\n\n/* App Review safety controls */\n.chat-safety-strip { display: flex; justify-content: flex-end; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }\n.chat-safety-strip button { min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--text-dim); font: inherit; font-weight: 700; cursor: pointer; }\n.chat-safety-strip .danger-soft, .danger-zone .danger-soft { color: #ff8e8e; border-color: rgba(255, 120, 120, .28); background: rgba(255, 90, 90, .08); }\n.danger-zone { border-color: rgba(255, 120, 120, .18); }\n'''
+          css.write_text(css_text)
+
+          plist = Path('ios/App/App/Info.plist')
+          plist_text = plist.read_text()
+          marker = '\t<!-- Voice notes. iOS kills the app outright if it touches the microphone'
+          if 'NSLocationWhenInUseUsageDescription' not in plist_text:
+              if marker not in plist_text:
+                  raise SystemExit('Could not add iOS location usage description')
+              plist_text = plist_text.replace(
+                  marker,
+                  '\t<key>NSLocationWhenInUseUsageDescription</key>\n\t<string>Wavo uses your location only when you choose to share your arrival with people in a plan.</string>\n\t' + marker.lstrip('\t'),
+                  1,
+              )
+          plist.write_text(plist_text)
+          PY
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build Wavo 2
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: npm run build
+
+      - name: Sync native iOS assets
+        run: npx cap sync ios
+
+      - name: Commit prepared release
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.jsx src/styles.css src/wavoData.js ios/App/App/Info.plist ios/App/App/public ios/App/App/capacitor.config.json ios/App/CapApp-SPM || true
+          if git diff --cached --quiet; then
+            echo "No release changes to commit."
+          else
+            git commit -m "Prepare Wavo 2 for native App Store build [wavo2-sync]"
+            git push origin HEAD:release/wavo-2-app-store
+          fi
