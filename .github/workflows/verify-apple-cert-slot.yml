@@ -1,0 +1,50 @@
+name: Verify Apple distribution certificate slot
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  verify:
+    if: github.head_ref == 'release/wavo-2-app-store'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Ruby and Fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+          working-directory: ios/App
+      - name: Verify a Distribution certificate slot is free
+        working-directory: ios/App
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+        run: |
+          bundle exec ruby <<'RUBY'
+          require 'base64'
+          require 'spaceship'
+
+          raw = ENV.fetch('ASC_KEY_CONTENT').strip
+          key_text = raw.include?('BEGIN PRIVATE KEY') ? raw : Base64.decode64(raw)
+          abort 'Invalid App Store Connect private key' unless key_text.include?('BEGIN PRIVATE KEY')
+
+          client = Spaceship::ConnectAPI::Client.auth(
+            key_id: ENV.fetch('ASC_KEY_ID').strip,
+            issuer_id: ENV.fetch('ASC_ISSUER_ID').strip,
+            key: key_text
+          )
+
+          type = Spaceship::ConnectAPI::Certificate::CertificateType::DISTRIBUTION
+          certs = Spaceship::ConnectAPI::Certificate.all(
+            client: client,
+            filter: { certificateType: [type] }
+          ).select(&:valid?)
+
+          puts "Valid Apple Distribution certificates: #{certs.length}"
+          abort "No free slot yet: #{certs.length} valid Distribution certificates remain" unless certs.length <= 2
+          puts 'Verified: at least one Distribution certificate slot is free.'
+          RUBY
