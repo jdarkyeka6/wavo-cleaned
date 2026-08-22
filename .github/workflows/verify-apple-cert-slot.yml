@@ -39,12 +39,11 @@ jobs:
             key: key_text
           )
 
-          type = Spaceship::ConnectAPI::Certificate::CertificateType::DISTRIBUTION
+          distribution_type = Spaceship::ConnectAPI::Certificate::CertificateType::DISTRIBUTION
           fetch = lambda do
-            Spaceship::ConnectAPI::Certificate.all(
-              client: client,
-              filter: { certificateType: [type] }
-            ).select(&:valid?)
+            Spaceship::ConnectAPI::Certificate.all(client: client)
+              .select(&:valid?)
+              .select { |c| c.certificate_type == distribution_type }
           end
 
           certs = fetch.call
