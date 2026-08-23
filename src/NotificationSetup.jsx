@@ -10,6 +10,8 @@ import { isNativeApp, isIOS } from './lib/platform'
 import './notification-setup.css'
 
 const DISMISSED_KEY = 'wavo_notification_prompt_dismissed'
+const PUSH_DISABLED_KEY = 'wavo_push_disabled'
+const PUSH_TOKEN_KEY = 'wavo_push_device_token'
 
 export default function NotificationSetup() {
   const [userId, setUserId] = useState(null)
@@ -40,14 +42,18 @@ export default function NotificationSetup() {
     let cancelled = false
 
     async function initialisePush() {
+      const deliberatelyDisabled = localStorage.getItem(PUSH_DISABLED_KEY) === '1'
+
       if (isNativeApp && isIOS()) {
         const { PushNotifications } = await import('@capacitor/push-notifications')
         const permission = await PushNotifications.checkPermissions()
 
-        if (permission.receive === 'granted') {
-          await registerForPush(userId)
+        if (permission.receive === 'granted' && !deliberatelyDisabled) {
+          const token = await registerForPush(userId)
+          if (token) localStorage.setItem(PUSH_TOKEN_KEY, token)
         } else if (
           permission.receive !== 'denied' &&
+          !deliberatelyDisabled &&
           localStorage.getItem(DISMISSED_KEY) !== '1' &&
           !cancelled
         ) {
@@ -82,8 +88,12 @@ export default function NotificationSetup() {
       }
 
       // Web users who have already granted permission should quietly refresh
-      // their subscription without showing another prompt.
-      if ('Notification' in window && Notification.permission === 'granted') {
+      // their subscription, unless they explicitly disabled Wavo notifications.
+      if (
+        !deliberatelyDisabled &&
+        'Notification' in window &&
+        Notification.permission === 'granted'
+      ) {
         await registerForPush(userId)
       }
     }
@@ -110,6 +120,8 @@ export default function NotificationSetup() {
       }
       const token = await registerForPush(userId)
       if (token) {
+        if (typeof token === 'string') localStorage.setItem(PUSH_TOKEN_KEY, token)
+        localStorage.removeItem(PUSH_DISABLED_KEY)
         localStorage.removeItem(DISMISSED_KEY)
         setVisible(false)
         setToast({ title: 'Notifications are on', body: 'Wavo can now alert you about new messages.' })
