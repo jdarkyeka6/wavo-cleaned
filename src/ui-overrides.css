@@ -1,0 +1,209 @@
+.bottom-nav {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  justify-items: stretch !important;
+}
+
+.bottom-nav > button {
+  width: 100% !important;
+  min-width: 0 !important;
+  justify-self: stretch !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  padding-inline: 2px !important;
+}
+
+.bottom-nav > button > svg,
+.bottom-nav > button > span {
+  margin-inline: auto !important;
+}
+
+.bottom-nav > button > span {
+  width: 100%;
+  text-align: center;
+}
+
+.bottom-nav .nav-create {
+  width: 50px !important;
+  min-width: 50px !important;
+  height: 50px !important;
+  justify-self: center !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 0 !important;
+}
+
+/* Keep icon-and-copy rows on the exact same alignment grid everywhere. */
+.settings-head,
+.create-grid > button {
+  grid-template-columns: 32px minmax(0, 1fr) !important;
+}
+
+.settings-head > svg,
+.create-grid > button > svg {
+  justify-self: center;
+}
+
+.create-grid > button > div,
+.settings-head > div {
+  min-width: 0;
+  text-align: left;
+}
+
+.section-heading:has(.wavo-open-waves) {
+  justify-content: flex-start;
+}
+
+.wavo-open-waves {
+  margin-left: auto;
+  padding: 0;
+  color: #7bdfff;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.wavo-open-waves + button {
+  margin-left: 12px;
+}
+
+.wavo-audience-presets {
+  display: grid;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255,255,255,.025);
+}
+
+.wavo-preset-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.wavo-preset-title > span,
+.wavo-preset-title > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wavo-preset-title > span {
+  color: #cbd8eb;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.wavo-preset-title > button {
+  padding: 6px 8px;
+  border-radius: 10px;
+  color: #7bdfff;
+  background: rgba(50,214,255,.07);
+  border: 1px solid rgba(50,214,255,.13);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.wavo-preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.wavo-preset-chip {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  overflow: hidden;
+  border: 1px solid rgba(79,140,255,.22);
+  border-radius: 999px;
+  background: rgba(79,140,255,.09);
+}
+
+.wavo-preset-chip > button {
+  padding: 7px 10px;
+  background: transparent;
+  color: #d9e7ff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.wavo-preset-chip > .wavo-preset-delete {
+  padding-left: 6px;
+  border-left: 1px solid rgba(255,255,255,.08);
+  color: #9aa9c1;
+}
+
+.wavo-preset-empty {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.wavo-preset-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.wavo-preset-form input {
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 12px;
+}
+
+.wavo-preset-form button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  background: rgba(79,140,255,.16);
+  border: 1px solid rgba(79,140,255,.24);
+  color: #dfe9ff;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+[data-wavo-notification-host] {
+  display: grid;
+}
+
+.wavo-notification-toggle {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.wavo-notification-toggle.enabled {
+  color: #ffd3d8;
+  border-color: rgba(255,107,122,.22);
+  background: rgba(255,107,122,.08);
+}
+
+@media (max-width: 430px) {
+  .wavo-preset-form {
+    grid-template-columns: 1fr;
+  }
+
+  .wavo-preset-form button {
+    width: 100%;
+  }
+
+  .section-heading:has(.wavo-open-waves) {
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .wavo-open-waves {
+    font-size: 11px;
+  }
+}
