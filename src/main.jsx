@@ -2,9 +2,11 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import './index.css'
+import './ui-overrides.css'
 import App from './App.jsx'
 import ConfigError from './ConfigError.jsx'
 import NotificationSetup from './NotificationSetup.jsx'
+import UiEnhancements from './UiEnhancements.jsx'
 import { isConfigured } from './lib/config'
 
 // A build with no Supabase config cannot work, and used to fail by throwing
@@ -16,6 +18,7 @@ createRoot(document.getElementById('root')).render(
       <BrowserRouter>
         <App />
         <NotificationSetup />
+        <UiEnhancements />
       </BrowserRouter>
     ) : (
       <ConfigError />
