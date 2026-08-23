@@ -49,14 +49,10 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
-	<!-- Voice notes. iOS kills the app outright if it touches the microphone
-	     without this string, and the string is what the permission sheet
-	     shows the user. -->
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Wavo needs your microphone so you can send voice notes in chats.</string>
-	<!-- Lets iOS wake the app to handle an incoming push. Without it APNs can
-	     still show the banner, but the app never gets the payload while
-	     backgrounded. -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Wavo uses your location only when you choose to share your arrival or location with people you select.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

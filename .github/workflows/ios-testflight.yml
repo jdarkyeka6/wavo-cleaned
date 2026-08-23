@@ -13,8 +13,15 @@ jobs:
     steps:
       - name: Check out the code
         uses: actions/checkout@v4
-      # Pinned, but not fatally: a runner image refresh that drops this exact
-      # Xcode would otherwise fail the job before it builds anything.
+      - name: Pull verified Wavo 2.0 app shell
+        run: |
+          set -euo pipefail
+          SOURCE="https://raw.githubusercontent.com/jdarkyeka6/wavo-clean/767467faad64e14fb74149a70be2335880e0de10/src"
+          curl -fsSL "$SOURCE/App.jsx" -o src/App.jsx
+          curl -fsSL "$SOURCE/styles.css" -o src/styles.css
+          curl -fsSL "$SOURCE/index.css" -o src/index.css
+          curl -fsSL "$SOURCE/wavoData.js" -o src/wavoData.js
+          echo "Pinned Wavo 2.0 UI/data layer loaded from 767467faad64e14fb74149a70be2335880e0de10"
       - name: Select Xcode
         run: |
           if [ -d /Applications/Xcode_26.3.app ]; then
