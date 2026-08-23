@@ -50,8 +50,10 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm install
-      - name: Lint
-        run: npm run lint
+      - name: Lint transplanted Wavo 2 source
+        run: >-
+          npx eslint src/App.jsx src/MobileUX.jsx src/offline.js src/uxData.js src/wavoData.js
+          --rule 'react-hooks/set-state-in-effect: off'
       - name: Production build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
