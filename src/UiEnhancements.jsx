@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { BellOff, Check, Plus, Trash2, Users } from 'lucide-react'
 import { supabase } from './supabaseClient'
@@ -82,9 +82,7 @@ function AudiencePresets({ host, userId }) {
         <div className="wavo-preset-chips">
           {presets.map((preset) => (
             <span className="wavo-preset-chip" key={preset.id}>
-              <button type="button" onClick={() => applyPreset(preset)}>
-                {preset.name}
-              </button>
+              <button type="button" onClick={() => applyPreset(preset)}>{preset.name}</button>
               <button type="button" className="wavo-preset-delete" aria-label={`Delete ${preset.name} preset`} onClick={() => removePreset(preset.id)}>
                 <Trash2 size={12} />
               </button>
@@ -167,11 +165,7 @@ function NotificationToggle({ host, userId }) {
         const token = localStorage.getItem(PUSH_TOKEN_KEY)
         await PushNotifications.unregister()
         if (token) {
-          await supabase
-            .from('push_subscriptions')
-            .delete()
-            .eq('user_id', userId)
-            .eq('device_token', token)
+          await supabase.from('push_subscriptions').delete().eq('user_id', userId).eq('device_token', token)
         }
         localStorage.removeItem(PUSH_TOKEN_KEY)
       } else {
@@ -179,11 +173,7 @@ function NotificationToggle({ host, userId }) {
         if (sub) {
           const endpoint = sub.endpoint
           await sub.unsubscribe()
-          await supabase
-            .from('push_subscriptions')
-            .delete()
-            .eq('user_id', userId)
-            .eq('endpoint', endpoint)
+          await supabase.from('push_subscriptions').delete().eq('user_id', userId).eq('endpoint', endpoint)
         }
       }
       setEnabled(false)
@@ -199,6 +189,60 @@ function NotificationToggle({ host, userId }) {
     </button>,
     host,
   )
+}
+
+function applyWavesProductLabels() {
+  const createButtons = [...document.querySelectorAll('.create-grid > button')]
+  for (const button of createButtons) {
+    const title = button.querySelector('strong')
+    const hint = button.querySelector('span')
+    if (title?.textContent?.trim() === 'Post') {
+      title.textContent = 'Wave'
+      if (hint) hint.textContent = 'Share with friends or chosen people'
+    } else if (title?.textContent?.trim() === 'Wave') {
+      button.style.display = 'none'
+      button.dataset.oldWaveHidden = '1'
+    }
+  }
+
+  const sections = [...document.querySelectorAll('.screen section')]
+  const oldWaveSection = sections.find((section) =>
+    section.querySelector('.eyebrow')?.textContent?.trim() === 'WAVES' &&
+    section.querySelector('h2')?.textContent?.trim() === 'From your people'
+  )
+  if (oldWaveSection) oldWaveSection.style.display = 'none'
+
+  const postsSection = sections.find((section) => section.querySelector('.eyebrow')?.textContent?.trim() === 'POSTS')
+  if (postsSection) {
+    const eyebrow = postsSection.querySelector('.eyebrow')
+    const heading = postsSection.querySelector('h2')
+    const action = postsSection.querySelector('.section-heading > button')
+    if (eyebrow) eyebrow.textContent = 'WAVES'
+    if (heading) heading.textContent = 'From your friends'
+    if (action) action.textContent = 'New Wave'
+
+    const headingRow = postsSection.querySelector('.section-heading')
+    if (headingRow && !headingRow.querySelector('.wavo-open-waves')) {
+      const link = document.createElement('a')
+      link.className = 'wavo-open-waves'
+      link.href = '/waves'
+      link.textContent = 'Open Waves'
+      headingRow.insertBefore(link, action || null)
+    }
+  }
+
+  const profileEyebrow = [...document.querySelectorAll('.eyebrow')].find((node) => node.textContent?.trim() === 'YOUR POSTS')
+  if (profileEyebrow) {
+    profileEyebrow.textContent = 'YOUR WAVES'
+    const section = profileEyebrow.closest('section')
+    const action = section?.querySelector('.section-heading > button')
+    if (action) action.textContent = 'New Wave'
+  }
+
+  const spaceQuickActions = [...document.querySelectorAll('.quick-actions > button')]
+  for (const button of spaceQuickActions) {
+    if (button.textContent?.trim() === 'Wave') button.style.display = 'none'
+  }
 }
 
 export default function UiEnhancements() {
@@ -217,6 +261,8 @@ export default function UiEnhancements() {
     function scan() {
       cancelAnimationFrame(raf)
       raf = requestAnimationFrame(() => {
+        applyWavesProductLabels()
+
         const picker = document.querySelector('.post-audience-picker')
         if (picker) {
           let host = picker.querySelector('[data-wavo-preset-host]')
