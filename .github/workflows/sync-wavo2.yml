@@ -1,0 +1,73 @@
+name: Sync Wavo 2 UI
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  sync-and-verify:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'sync-wavo2-mobile-ci'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout cleaned release repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Checkout current Wavo 2 source
+        uses: actions/checkout@v4
+        with:
+          repository: jdarkyeka6/wavo-clean
+          ref: app-store-overhaul
+          path: _wavo2
+      - name: Copy Wavo 2 product layer
+        run: |
+          cp _wavo2/src/App.jsx src/App.jsx
+          cp _wavo2/src/styles.css src/styles.css
+          cp _wavo2/src/index.css src/index.css
+          cp _wavo2/src/mobile-ux.css src/mobile-ux.css
+          cp _wavo2/src/MobileUX.jsx src/MobileUX.jsx
+          cp _wavo2/src/offline.js src/offline.js
+          cp _wavo2/src/uxData.js src/uxData.js
+          cp _wavo2/src/wavoData.js src/wavoData.js
+          cp _wavo2/public/sw.js public/sw.js
+      - name: Apply cleaned-repo production fixes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/App.jsx')
+          s = p.read_text()
+          old = '''        const { data, error: authError } = await supabase.auth.signUp({ email, password });\n        if (authError) throw authError;\n        if (!data.user) throw new Error("Signup failed");\n        const { error: profileError } = await supabase.from("profiles").insert({ id: data.user.id, username: username.trim() });\n        if (profileError) throw profileError;'''
+          new = '''        const { data, error: authError } = await supabase.auth.signUp({\n          email,\n          password,\n          options: { data: { username: username.trim() } },\n        });\n        if (authError) throw authError;\n        if (!data.user) throw new Error("Signup failed");'''
+          if old not in s:
+              raise SystemExit('signup anchor changed; refusing unsafe sync')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Remove temporary upstream checkout
+        run: rm -rf _wavo2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install
+      - name: Lint
+        run: npm run lint
+      - name: Production build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: npm run build
+      - name: Verify native release files still exist
+        run: |
+          test -f capacitor.config.json
+          test -f ios/App/App/Info.plist
+          test -f ios/App/fastlane/Fastfile
+          test -f src/push.js
+          test -f src/lib/platform.js
+      - name: Commit verified sync
+        run: |
+          git config user.name "wavo-sync-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/App.jsx src/styles.css src/index.css src/mobile-ux.css src/MobileUX.jsx src/offline.js src/uxData.js src/wavoData.js public/sw.js package-lock.json
+          git commit -m "Sync Wavo 2 mobile-first UI into cleaned repo" || exit 0
+          git push origin HEAD:${{ github.head_ref }}
