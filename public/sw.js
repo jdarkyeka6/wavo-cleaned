@@ -2,8 +2,11 @@
 // Sits in the browser even when the Wavo tab is closed, listens for push
 // events from the push service, and shows the OS-level notification pop-up.
  
-self.addEventListener("install", () => {
-  // Activate immediately on first install (don't wait for old SW to die)
+const CACHE_NAME = "wavo-shell-v2";
+const SHELL = ["/", "/index.html", "/favicon.svg"];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL)).catch(() => {}));
   self.skipWaiting();
 });
  
@@ -12,9 +15,24 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
  
+
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  if (req.method !== "GET") return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+  event.respondWith(caches.match(req).then((cached) => {
+    const network = fetch(req).then((res) => {
+      if (res && res.ok) caches.open(CACHE_NAME).then((cache) => cache.put(req, res.clone()));
+      return res;
+    }).catch(() => cached);
+    return cached || network;
+  }));
+});
+
 // Fires when the push service delivers a message from our Edge Function
 self.addEventListener("push", (event) => {
-  let data = {};
+  let data;
   try {
     data = event.data ? event.data.json() : {};
   } catch {

@@ -14,32 +14,6 @@ body,
   height: 100%;
 }
 
-html,
-body {
-  /* Kills the rubber-band bounce past the top and bottom. Layout-neutral. */
-  overscroll-behavior: none;
-  /* Stop iOS resizing text on rotate, which reflows the whole layout. */
-  -webkit-text-size-adjust: 100%;
-  text-size-adjust: 100%;
-}
-
-/* Deliberately NOT `overflow-x: hidden` on html/body. Setting overflow on one
-   axis makes the other compute to `auto` rather than `visible`, and with
-   `height: 100%` above that turns the document into a fixed-height clipping
-   box — which silently stopped the landing page scrolling past 780px while
-   its content was still 1603px tall. Sideways drift is prevented on the app
-   shell instead, which is the only place that can produce it. */
-.app-shell {
-  overflow-x: hidden;
-}
-
-/* Removes the double-tap-to-zoom gesture (and the 300ms click delay that
-   comes with waiting to see if a second tap is coming). Panning and normal
-   scrolling still work. */
-#root {
-  touch-action: manipulation;
-}
-
 body {
   font-family: "Outfit", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -52,38 +26,3 @@ input,
 textarea {
   font-family: inherit;
 }
-
-/* Shown when a build has no Supabase config — see src/ConfigError.jsx.
-   Lives in index.css, not styles.css, because a build broken this early may
-   not have got as far as loading the app's stylesheet. */
-.config-error {
-  min-height: 100dvh;
-  display: grid;
-  place-items: center;
-  padding: 28px;
-  background: #14131f;
-  color: #ECECF1;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-}
-.config-error > div { max-width: 30rem; }
-.config-error h1 {
-  margin: 0 0 14px;
-  font-size: 1.35rem;
-  color: #FF6B5B;
-}
-.config-error p {
-  margin: 0 0 12px;
-  font-size: 0.94rem;
-  line-height: 1.55;
-  color: #A9A9B8;
-}
-.config-error code {
-  display: inline-block;
-  margin: 4px 6px 0 0;
-  padding: 3px 7px;
-  border-radius: 6px;
-  background: #221f31;
-  color: #FFB454;
-  font-size: 0.84rem;
-}
-.config-error-hint { font-size: 0.85rem; color: #6E6E80; }
