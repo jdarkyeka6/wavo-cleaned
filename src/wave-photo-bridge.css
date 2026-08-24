@@ -1,0 +1,29 @@
+.wavo-post-media {
+  margin: 12px 12px 0;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.07);
+  background: #03060d;
+}
+
+.wavo-post-media img,
+.wavo-post-media video {
+  display: block;
+  width: 100%;
+  max-height: 620px;
+  object-fit: contain;
+  background: #03060d;
+}
+
+html[data-wavo-ui="mobile-web"] .wavo-post-media,
+html[data-wavo-ui="mobile-app"] .wavo-post-media {
+  margin: 10px 10px 0;
+  border-radius: 16px;
+}
+
+html[data-wavo-ui="mobile-web"] .wavo-post-media img,
+html[data-wavo-ui="mobile-web"] .wavo-post-media video,
+html[data-wavo-ui="mobile-app"] .wavo-post-media img,
+html[data-wavo-ui="mobile-app"] .wavo-post-media video {
+  max-height: min(70vh, 560px);
+}
