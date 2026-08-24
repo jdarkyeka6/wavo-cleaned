@@ -11,6 +11,7 @@ import WavesPage from './WavesPage.jsx'
 import { isConfigured } from './lib/config'
 import { installUiMode } from './lib/layout'
 import './responsive-platform.css'
+import './responsive-platform-edge.css'
 
 // Decide the presentation before React paints. This gives every screen one
 // reliable source of truth: desktop-web, mobile-web, or mobile-app.
