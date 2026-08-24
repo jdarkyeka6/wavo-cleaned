@@ -1,7 +1,7 @@
 {
-  "name": "wavo-crypto",
+  "name": "wavo",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "android:add": "cap add android",
     "android:sync": "npm run build && cap sync android",
-    "android:open": "cap open android"
+    "android:open": "cap open android",
+    "ios:sync": "npm run build && cap sync ios",
+    "ios:open": "cap open ios"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.2",
