@@ -1,0 +1,17 @@
+# Run from the repository root on the release Mac
+
+npm ci
+npm run build
+npm run ios:sync
+npm run ios:open
+
+# Then in Xcode 26 or later:
+# 1. Select the Wavo/App target.
+# 2. Confirm bundle ID lol.wavo.app and the correct Apple Developer Team.
+# 3. Confirm version 1.0 and build 10 in the archive metadata.
+# 4. Select Any iOS Device (arm64) / Generic iOS Device.
+# 5. Product -> Archive.
+# 6. Organizer -> Validate App.
+# 7. Distribute App -> App Store Connect -> Upload.
+#
+# Do not commit certificates, provisioning profiles, API keys or App Review passwords.
