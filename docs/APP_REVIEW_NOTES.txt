@@ -1,0 +1,31 @@
+Wavo is a private friend-and-group communication and coordination app.
+
+The app is intentionally different from an open public social network: users connect with people they choose, direct messages are persistent, and Spaces combine group chat with plans, polls, activities and quick updates in one place. Posts can be shared with all accepted friends or only selected people. Waves are quick updates for friends or a Space. The app also includes offline message queueing, opt-in arrival/location sharing, native notifications and voice notes.
+
+SAFETY / USER-GENERATED CONTENT
+A persistent, visibly labelled Safety button is available while signed in. It contains:
+- Report someone / content concerns
+- Block & unblock
+- Community Standards
+- Contact Wavo support
+- Permanent account deletion
+
+The dedicated Waves experience also provides a content-specific Report Wave action. New user-generated text is subject to server-side safety filtering. Reports are stored for moderation review, and blocking removes normal friend/DM access between the accounts.
+
+ACCOUNT DELETION
+While signed in: Safety -> Delete account -> read the warning -> type DELETE -> Permanently delete account.
+The server-side deletion flow removes the account and associated Wavo data handled by the deletion process, including uploaded files. No website visit is required.
+
+PAYMENTS
+The native iOS app does not render Wavo Premium purchase UI, Stripe checkout, subscription prices or an external purchase link. Native-platform detection suppresses that purchase surface. Existing account entitlements may still be displayed.
+
+LOCATION / MICROPHONE
+Location is requested only when the reviewer explicitly chooses an arrival/location-sharing action. Microphone access is requested only for voice-note recording. Notifications are optional and requested by user action.
+
+PRIVACY POLICY
+https://wavo.lol/privacy.html
+
+SUPPORT
+https://wavo.lol/support.html
+
+If the review account provided in App Store Connect is populated, please try Home, Inbox, a Space, Posts/Waves, a plan/poll, and the Safety Centre to see the app's core functionality.

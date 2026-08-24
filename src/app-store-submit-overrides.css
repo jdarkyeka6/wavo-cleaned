@@ -1,0 +1,20 @@
+/* App Store release hardening: keep Safety/account controls clearly labelled
+   even on narrow iPhones. The base safety stylesheet intentionally collapses
+   this to an icon below 420px, which makes reporting and account deletion less
+   discoverable than we want for the native app. */
+.safety-launcher {
+  min-width: 82px;
+  justify-content: center;
+}
+
+@media (max-width: 420px) {
+  .safety-launcher {
+    width: auto !important;
+    min-width: 82px !important;
+    padding: 0 13px !important;
+  }
+
+  .safety-launcher span {
+    display: inline !important;
+  }
+}
