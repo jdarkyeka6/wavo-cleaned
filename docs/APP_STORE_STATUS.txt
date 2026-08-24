@@ -1,0 +1,24 @@
+WAVO APP STORE RELEASE CANDIDATE
+Version: 1.0
+Build: 10
+Bundle ID: lol.wavo.app
+Branch: app-store-submission-2026
+
+CODE/BACKEND PREPARATION: COMPLETE
+- UGC filtering: enabled
+- Report/block controls: enabled
+- Community Standards: enabled
+- Support queue: enabled
+- In-app account deletion: enabled
+- Audience RLS: verified
+- Internal RPC hardening: applied
+- Native Premium purchase UI: suppressed
+- Public privacy/support/terms: updated
+- Vercel build: passing at release-candidate preparation
+
+HUMAN/MAC RELEASE GATE REMAINING
+- Physical iPhone Release smoke test
+- Xcode 26+ archive with correct Apple signing team
+- App Store Connect screenshots/metadata/privacy/age-rating entry
+- Populated App Review demo credentials
+- Validate and upload archive
