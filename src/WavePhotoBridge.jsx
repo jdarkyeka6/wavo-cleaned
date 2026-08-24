@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import { getFriends, getPosts } from './wavoData'
 import './wave-photo-bridge.css'
@@ -53,30 +54,33 @@ function isNewWaveAction(button) {
   return text === 'new post' || text === 'new wave'
 }
 
-function openPhotoComposer(event) {
-  event.preventDefault()
-  event.stopPropagation()
-  event.stopImmediatePropagation?.()
-  window.location.assign('/waves?compose=1')
-}
-
-function installCreateEntryPoints() {
+function installCreateEntryPoints(navigate) {
   const createButtons = [...document.querySelectorAll('.create-grid > button')]
   for (const button of createButtons) {
     if (!isPrimaryWaveCreateButton(button) || button.dataset.wavoPhotoRoute === '1') continue
     button.dataset.wavoPhotoRoute = '1'
-    button.addEventListener('click', openPhotoComposer, true)
+    button.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation?.()
+      navigate('/waves?compose=1')
+    }, true)
   }
 
   const actionButtons = [...document.querySelectorAll('.section-heading > button')]
   for (const button of actionButtons) {
     if (!isNewWaveAction(button) || button.dataset.wavoPhotoRoute === '1') continue
     button.dataset.wavoPhotoRoute = '1'
-    button.addEventListener('click', openPhotoComposer, true)
+    button.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation?.()
+      navigate('/waves?compose=1')
+    }, true)
   }
 }
 
-function maybeAutoOpenComposer() {
+function maybeAutoOpenComposer(navigate) {
   if (window.location.pathname !== '/waves') return false
   const params = new URLSearchParams(window.location.search)
   if (params.get('compose') !== '1') return false
@@ -87,7 +91,7 @@ function maybeAutoOpenComposer() {
 
   if (!button) return false
   button.click()
-  window.history.replaceState(window.history.state, '', '/waves')
+  navigate('/waves', { replace: true })
   return true
 }
 
@@ -149,6 +153,7 @@ function injectMediaIntoCards(mediaRows) {
 }
 
 export default function WavePhotoBridge() {
+  const navigate = useNavigate()
   const [userId, setUserId] = useState(null)
   const [mediaRows, setMediaRows] = useState([])
 
@@ -198,8 +203,8 @@ export default function WavePhotoBridge() {
     function scan() {
       window.cancelAnimationFrame(raf)
       raf = window.requestAnimationFrame(() => {
-        installCreateEntryPoints()
-        maybeAutoOpenComposer()
+        installCreateEntryPoints(navigate)
+        maybeAutoOpenComposer(navigate)
         injectMediaIntoCards(mediaRows)
       })
     }
@@ -211,7 +216,7 @@ export default function WavePhotoBridge() {
       window.cancelAnimationFrame(raf)
       observer.disconnect()
     }
-  }, [mediaRows])
+  }, [mediaRows, navigate])
 
   return null
 }
