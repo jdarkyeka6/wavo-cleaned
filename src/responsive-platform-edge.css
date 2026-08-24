@@ -1,0 +1,37 @@
+/* Final edge-case corrections for the explicit Wavo layout modes. */
+
+/* iPhone Safari can still expose display cutouts when viewport-fit=cover. */
+html[data-wavo-ui="mobile-web"] {
+  --wavo-safe-top: env(safe-area-inset-top, 0px);
+  --wavo-safe-right: env(safe-area-inset-right, 0px);
+  --wavo-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --wavo-safe-left: env(safe-area-inset-left, 0px);
+  --ux-safe-top: var(--wavo-safe-top);
+  --ux-safe-bottom: var(--wavo-safe-bottom);
+}
+
+/* Native mode stays compact even on unusually wide native viewports/tablets. */
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .quick-actions,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .bottom-nav {
+  display: grid !important;
+}
+
+/* Prevent the desktop search-sheet dimensions leaking into a wide native app. */
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .search-sheet {
+  align-self: stretch !important;
+  width: 100% !important;
+  height: auto !important;
+  max-width: none !important;
+  max-height: calc(var(--wavo-viewport-height) - var(--wavo-safe-top)) !important;
+  border-radius: 0 !important;
+}
+
+/* Keep long rows/cards from forcing horizontal overflow on either mobile mode. */
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .card-row,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .settings-head,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .create-grid > button,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .friend-row,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .space-card,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .waves-card > header {
+  min-width: 0;
+}
