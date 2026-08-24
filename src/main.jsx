@@ -15,6 +15,7 @@ import { isConfigured } from './lib/config'
 import { installUiMode } from './lib/layout'
 import './responsive-platform.css'
 import './responsive-platform-edge.css'
+import './app-store-submit-overrides.css'
 
 // Decide the presentation before React paints. This gives every screen one
 // reliable source of truth: desktop-web, mobile-web, or mobile-app.
