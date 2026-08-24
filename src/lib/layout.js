@@ -34,6 +34,7 @@ function applyViewportVars(root) {
   root.style.setProperty('--wavo-viewport-width', `${width}px`)
   root.style.setProperty('--wavo-viewport-height', `${height}px`)
   root.style.setProperty('--wavo-keyboard-height', `${keyboard}px`)
+  root.dataset.wavoKeyboard = keyboard > 120 ? 'open' : 'closed'
 }
 
 export function applyUiMode() {
@@ -53,6 +54,10 @@ export function applyUiMode() {
   root.classList.toggle('wavo-native-app', isNativeApp)
 
   applyViewportVars(root)
+
+  // Handy when checking a real device with Safari/Chrome dev tools.
+  window.__WAVO_UI_MODE__ = mode
+  window.__WAVO_PLATFORM__ = platform
   window.dispatchEvent(new CustomEvent('wavo:ui-mode', { detail: { mode, platform } }))
   return mode
 }
