@@ -1,0 +1,480 @@
+/*
+ * Wavo layout modes
+ *
+ * The app has three explicit presentation modes instead of relying on one
+ * pile of width media queries:
+ *   desktop-web  - normal browser wider than 760px
+ *   mobile-web   - normal browser 760px or narrower
+ *   mobile-app   - Capacitor native shell (iOS/Android)
+ *
+ * src/lib/layout.js writes data-wavo-ui onto <html>. Keep platform-specific
+ * sizing here so individual screens do not need to guess what device they are
+ * running on.
+ */
+
+:root {
+  --wavo-safe-top: 0px;
+  --wavo-safe-right: 0px;
+  --wavo-safe-bottom: 0px;
+  --wavo-safe-left: 0px;
+  --wavo-page-gutter: 24px;
+  --wavo-content-max: 1100px;
+  --wavo-control-height: 40px;
+  --wavo-nav-height: 72px;
+  --wavo-viewport-width: 100vw;
+  --wavo-viewport-height: 100vh;
+  --wavo-keyboard-height: 0px;
+}
+
+html[data-wavo-ui="mobile-app"] {
+  --wavo-safe-top: env(safe-area-inset-top, 0px);
+  --wavo-safe-right: env(safe-area-inset-right, 0px);
+  --wavo-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --wavo-safe-left: env(safe-area-inset-left, 0px);
+  --ux-safe-top: var(--wavo-safe-top);
+  --ux-safe-bottom: var(--wavo-safe-bottom);
+  --wavo-page-gutter: 14px;
+  --wavo-control-height: 44px;
+  --wavo-nav-height: 66px;
+}
+
+html[data-wavo-ui="mobile-web"] {
+  /* Browser chrome already owns the physical screen edges. */
+  --wavo-safe-top: 0px;
+  --wavo-safe-right: 0px;
+  --wavo-safe-bottom: 0px;
+  --wavo-safe-left: 0px;
+  --ux-safe-top: 0px;
+  --ux-safe-bottom: 0px;
+  --wavo-page-gutter: 14px;
+  --wavo-control-height: 44px;
+  --wavo-nav-height: 66px;
+}
+
+html[data-wavo-ui="desktop-web"] {
+  --ux-safe-top: 0px;
+  --ux-safe-bottom: 0px;
+}
+
+/* ---------- Desktop web ---------- */
+
+html[data-wavo-ui="desktop-web"] .app-shell {
+  width: 100%;
+  min-height: 100vh;
+  padding-bottom: 104px;
+}
+
+html[data-wavo-ui="desktop-web"] .app-header {
+  height: 70px;
+  padding: 12px 22px;
+}
+
+html[data-wavo-ui="desktop-web"] .app-content {
+  width: min(calc(100% - 48px), 1180px);
+  max-width: 1180px;
+  margin-inline: auto;
+}
+
+html[data-wavo-ui="desktop-web"] .screen {
+  width: 100%;
+  max-width: var(--wavo-content-max);
+  margin-inline: auto;
+  padding: 30px 28px 58px;
+  gap: 30px;
+}
+
+html[data-wavo-ui="desktop-web"] .screen-title h1,
+html[data-wavo-ui="desktop-web"] .hero-card h1,
+html[data-wavo-ui="desktop-web"] .space-hero h1 {
+  font-size: clamp(36px, 4vw, 50px);
+}
+
+html[data-wavo-ui="desktop-web"] .hero-card {
+  min-height: 230px;
+  padding: 32px;
+}
+
+html[data-wavo-ui="desktop-web"] .attention-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+html[data-wavo-ui="desktop-web"] .space-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+html[data-wavo-ui="desktop-web"] .mini-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+html[data-wavo-ui="desktop-web"] .quick-actions {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+html[data-wavo-ui="desktop-web"] .bottom-nav {
+  left: 50% !important;
+  right: auto !important;
+  bottom: 0 !important;
+  width: min(620px, calc(100% - 48px)) !important;
+  max-width: 620px !important;
+  min-height: 70px !important;
+  height: auto !important;
+  padding: 8px 12px !important;
+  transform: translateX(-50%);
+  border-radius: 24px 24px 0 0 !important;
+}
+
+html[data-wavo-ui="desktop-web"] .bottom-nav > button {
+  min-height: 52px !important;
+}
+
+html[data-wavo-ui="desktop-web"] .modal-backdrop,
+html[data-wavo-ui="desktop-web"] .waves-modal-backdrop,
+html[data-wavo-ui="desktop-web"] .ux-overlay {
+  align-items: center !important;
+  justify-content: center;
+  padding: 28px;
+}
+
+html[data-wavo-ui="desktop-web"] .create-modal,
+html[data-wavo-ui="desktop-web"] .modal-card,
+html[data-wavo-ui="desktop-web"] .create-card {
+  width: min(680px, calc(100vw - 56px)) !important;
+  max-width: 680px !important;
+  max-height: min(860px, calc(100vh - 56px)) !important;
+  margin: 0 !important;
+  border-radius: 30px !important;
+  border-bottom: 1px solid var(--line-strong) !important;
+  padding: 22px !important;
+}
+
+html[data-wavo-ui="desktop-web"] .modal-grabber,
+html[data-wavo-ui="desktop-web"] .sheet-handle {
+  display: none;
+}
+
+html[data-wavo-ui="desktop-web"] .create-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+html[data-wavo-ui="desktop-web"] .stack-form input,
+html[data-wavo-ui="desktop-web"] .stack-form textarea,
+html[data-wavo-ui="desktop-web"] .stack-form select {
+  font-size: 14px !important;
+}
+
+html[data-wavo-ui="desktop-web"] .search-sheet,
+html[data-wavo-ui="desktop-web"] .ux-sheet {
+  width: min(760px, calc(100vw - 56px));
+  max-height: min(820px, calc(100vh - 56px));
+  border-radius: 26px;
+}
+
+html[data-wavo-ui="desktop-web"] .chat-screen {
+  width: min(100%, 1100px);
+  min-height: calc(100vh - 70px);
+  margin-inline: auto;
+}
+
+html[data-wavo-ui="desktop-web"] .dm-row {
+  max-width: min(70%, 720px);
+}
+
+/* Dedicated Waves page, desktop. */
+html[data-wavo-ui="desktop-web"] .waves-intro,
+html[data-wavo-ui="desktop-web"] .waves-feed {
+  width: min(calc(100% - 48px), 760px);
+  max-width: 760px;
+}
+
+html[data-wavo-ui="desktop-web"] .waves-intro {
+  padding: 36px 0 24px;
+}
+
+html[data-wavo-ui="desktop-web"] .waves-feed {
+  padding: 0;
+}
+
+html[data-wavo-ui="desktop-web"] .waves-composer,
+html[data-wavo-ui="desktop-web"] .waves-reply {
+  width: min(680px, calc(100vw - 56px));
+  max-height: min(860px, calc(100vh - 56px));
+  border-radius: 30px;
+  border-bottom: 1px solid rgba(255,255,255,.12);
+}
+
+/* ---------- Mobile web + native mobile app ---------- */
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) body,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) #root {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .app-shell {
+  width: 100%;
+  max-width: none !important;
+  min-height: var(--wavo-viewport-height);
+  padding-bottom: calc(var(--wavo-nav-height) + var(--wavo-safe-bottom) + 14px) !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .app-header {
+  width: 100%;
+  height: auto !important;
+  min-height: calc(58px + var(--wavo-safe-top));
+  padding: calc(9px + var(--wavo-safe-top)) calc(var(--wavo-page-gutter) + var(--wavo-safe-right)) 9px calc(var(--wavo-page-gutter) + var(--wavo-safe-left)) !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .app-content,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .screen {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .screen {
+  padding: 14px calc(var(--wavo-page-gutter) + var(--wavo-safe-right)) 28px calc(var(--wavo-page-gutter) + var(--wavo-safe-left)) !important;
+  gap: 22px !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .screen-title {
+  gap: 12px !important;
+  margin: 2px 0 16px !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .screen-title h1,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .hero-card h1,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .space-hero h1 {
+  font-size: clamp(28px, 9vw, 38px) !important;
+  line-height: 1.03 !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .screen-title p,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .hero-card p,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .space-hero p {
+  font-size: 14px !important;
+  line-height: 1.45 !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .hero-card,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .profile-hero,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .space-hero {
+  min-height: 0 !important;
+  padding: 16px !important;
+  border-radius: 20px !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .attention-grid,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .space-grid,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .mini-grid,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .create-grid {
+  grid-template-columns: 1fr !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .quick-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .quick-actions button,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .create-grid > button {
+  min-width: 0 !important;
+  min-height: 58px !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .plan-card,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .poll-card,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .wave-card,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .post-card,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .settings-card,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .empty-card,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .add-friend-card,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .space-chat-card {
+  border-radius: 18px !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .bottom-nav {
+  position: fixed !important;
+  z-index: 90;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  max-width: none !important;
+  height: calc(var(--wavo-nav-height) + var(--wavo-safe-bottom)) !important;
+  min-height: calc(var(--wavo-nav-height) + var(--wavo-safe-bottom)) !important;
+  padding: 6px calc(8px + var(--wavo-safe-right)) var(--wavo-safe-bottom) calc(8px + var(--wavo-safe-left)) !important;
+  transform: none !important;
+  border-radius: 0 !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .bottom-nav > button {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 52px !important;
+  padding: 3px 2px !important;
+  gap: 3px !important;
+  font-size: 10px !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .bottom-nav .nav-create {
+  width: 50px !important;
+  min-width: 50px !important;
+  height: 50px !important;
+  min-height: 50px !important;
+  margin-top: -14px !important;
+  padding: 0 !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) button,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) a.icon-button,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .icon-button,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .round-action {
+  touch-action: manipulation;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) input,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) textarea,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) select {
+  min-width: 0;
+  font-size: 16px !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .modal-backdrop,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .waves-modal-backdrop,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .ux-overlay {
+  align-items: flex-end !important;
+  justify-content: center;
+  padding: var(--wavo-safe-top) 0 0 !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .create-modal,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .modal-card,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .create-card,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .ux-sheet {
+  width: 100% !important;
+  max-width: none !important;
+  max-height: calc(var(--wavo-viewport-height) - var(--wavo-safe-top) - 6px) !important;
+  margin: 0 !important;
+  border-radius: 28px 28px 0 0 !important;
+  padding: 16px calc(var(--wavo-page-gutter) + var(--wavo-safe-right)) calc(16px + var(--wavo-safe-bottom)) calc(var(--wavo-page-gutter) + var(--wavo-safe-left)) !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .audience-list,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .waves-friend-picker {
+  max-height: min(280px, calc(var(--wavo-viewport-height) * .34)) !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen {
+  width: 100% !important;
+  height: var(--wavo-viewport-height) !important;
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) auto !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-topbar {
+  padding: calc(8px + var(--wavo-safe-top)) calc(10px + var(--wavo-safe-right)) 8px calc(10px + var(--wavo-safe-left)) !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .dm-messages,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .space-messages {
+  min-height: 0;
+  overflow-y: auto !important;
+  padding: 12px calc(12px + var(--wavo-safe-right)) 18px calc(12px + var(--wavo-safe-left)) !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .dm-row {
+  max-width: 88% !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .composer {
+  padding: 8px calc(10px + var(--wavo-safe-right)) calc(8px + var(--wavo-safe-bottom)) calc(10px + var(--wavo-safe-left)) !important;
+}
+
+html[data-wavo-ui="mobile-app"][data-wavo-keyboard="open"] .composer,
+html[data-wavo-ui="mobile-app"][data-wavo-keyboard="open"] .waves-composer,
+html[data-wavo-ui="mobile-app"][data-wavo-keyboard="open"] .waves-reply,
+html[data-wavo-ui="mobile-app"][data-wavo-keyboard="open"] .ux-sheet {
+  padding-bottom: 8px !important;
+}
+
+/* Dedicated Waves page, compact. */
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .waves-page {
+  min-height: var(--wavo-viewport-height);
+  padding-bottom: calc(28px + var(--wavo-safe-bottom));
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .waves-topbar {
+  min-height: calc(60px + var(--wavo-safe-top));
+  padding: calc(8px + var(--wavo-safe-top)) calc(12px + var(--wavo-safe-right)) 8px calc(12px + var(--wavo-safe-left));
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .waves-intro,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .waves-feed {
+  width: 100%;
+  max-width: none;
+  padding-left: calc(var(--wavo-page-gutter) + var(--wavo-safe-left));
+  padding-right: calc(var(--wavo-page-gutter) + var(--wavo-safe-right));
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .waves-intro {
+  padding-top: 22px;
+  padding-bottom: 16px;
+  align-items: flex-start;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .waves-intro h1 {
+  font-size: clamp(32px, 11vw, 44px);
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .waves-card {
+  border-radius: 20px;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .waves-card-media {
+  margin-inline: 10px;
+  border-radius: 16px;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .waves-card-media img,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .waves-card-media video {
+  max-height: calc(var(--wavo-viewport-height) * .68);
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .waves-composer,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .waves-reply {
+  width: 100%;
+  max-width: none;
+  max-height: calc(var(--wavo-viewport-height) - var(--wavo-safe-top) - 6px);
+  border-radius: 28px 28px 0 0;
+  border-bottom: 0;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .waves-composer {
+  padding: 16px calc(var(--wavo-page-gutter) + var(--wavo-safe-right)) calc(16px + var(--wavo-safe-bottom)) calc(var(--wavo-page-gutter) + var(--wavo-safe-left));
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .waves-reply {
+  padding: 16px calc(var(--wavo-page-gutter) + var(--wavo-safe-right)) calc(16px + var(--wavo-safe-bottom)) calc(var(--wavo-page-gutter) + var(--wavo-safe-left));
+}
+
+@media (max-width: 430px) {
+  :is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .waves-preset-create,
+  :is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .wavo-preset-form {
+    grid-template-columns: 1fr !important;
+  }
+
+  :is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .modal-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  :is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .modal-actions .primary-btn {
+    max-width: 68%;
+    white-space: normal;
+  }
+}
