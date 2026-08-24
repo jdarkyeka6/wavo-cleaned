@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 import { getFriends, getPosts } from './wavoData'
 import './wave-photo-bridge.css'
@@ -10,8 +10,19 @@ function normalise(value) {
   return String(value || '').trim()
 }
 
-function postKey(author, body) {
-  return `${normalise(author).toLowerCase()}\u0000${normalise(body)}`
+function relativeTime(value) {
+  if (!value) return ''
+  const diff = Date.now() - new Date(value).getTime()
+  const minutes = Math.max(0, Math.floor(diff / 60_000))
+  if (minutes < 1) return 'now'
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h`
+  return `${Math.floor(hours / 24)}d`
+}
+
+function postKey(author, body, relative = '') {
+  return `${normalise(author).toLowerCase()}\u0000${normalise(body)}\u0000${normalise(relative)}`
 }
 
 async function getSignedMedia(post) {
@@ -85,7 +96,7 @@ function injectMediaIntoCards(mediaRows) {
 
   const byKey = new Map()
   for (const row of mediaRows) {
-    const key = postKey(row.author?.username, row.body)
+    const key = postKey(row.author?.username, row.body, relativeTime(row.created_at))
     if (!byKey.has(key)) byKey.set(key, [])
     byKey.get(key).push(row)
   }
@@ -96,7 +107,8 @@ function injectMediaIntoCards(mediaRows) {
   for (const card of cards) {
     const author = card.querySelector('.wave-head strong')?.textContent
     const body = card.querySelector(':scope > p')?.textContent || ''
-    const key = postKey(author, body)
+    const relative = card.querySelector('.wave-head > div span')?.textContent || ''
+    const key = postKey(author, body, relative)
     const rows = byKey.get(key)
     if (!rows?.length) continue
 
