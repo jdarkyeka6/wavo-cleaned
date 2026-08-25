@@ -8,7 +8,7 @@ import ConfigError from './ConfigError.jsx'
 import NotificationSetup from './NotificationSetup.jsx'
 import UiEnhancements from './UiEnhancements.jsx'
 import WavePhotoBridge from './WavePhotoBridge.jsx'
-import WavesPage from './WavesPage.jsx'
+import WavesPageV2 from './WavesPageV2.jsx'
 import { isConfigured } from './lib/config'
 import { installUiMode } from './lib/layout'
 import './responsive-platform.css'
@@ -37,7 +37,7 @@ createRoot(document.getElementById('root')).render(
       <BrowserRouter>
         <WavePhotoBridge />
         <Routes>
-          <Route path="/waves" element={<WavesPage />} />
+          <Route path="/waves" element={<WavesPageV2 />} />
           <Route path="*" element={<WavoApp />} />
         </Routes>
       </BrowserRouter>
