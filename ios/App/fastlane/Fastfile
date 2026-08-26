@@ -11,7 +11,6 @@ platform :ios do
     issuer_id = ENV["ASC_ISSUER_ID"].to_s.strip
     team_id   = ENV["APPLE_TEAM_ID"].to_s.strip
 
-    # 1. Write the .p8 key to a file, then authenticate.
     raw = ENV["ASC_KEY_CONTENT"].to_s.strip
     key_text =
       if raw.include?("BEGIN PRIVATE KEY")
@@ -26,10 +25,7 @@ platform :ios do
       end
 
     unless key_text.include?("BEGIN PRIVATE KEY")
-      UI.user_error!(
-        "ASC_KEY_CONTENT is neither a PEM .p8 key nor base64 of one. Paste " \
-        "either the .p8 file's text or its base64 encoding into the secret."
-      )
+      UI.user_error!("ASC_KEY_CONTENT is neither a PEM .p8 key nor base64 of one.")
     end
 
     key_path = File.expand_path("~/asc_api_key.p8")
@@ -41,7 +37,6 @@ platform :ios do
       key_filepath: key_path
     )
 
-    # 2. Fresh temporary keychain for the signing certificate.
     keychain_name = "wavo-ci.keychain"
     keychain_pw = "ci-temp-pw"
     create_keychain(
@@ -53,10 +48,6 @@ platform :ios do
       lock_when_sleeps: false
     )
 
-    # 3. Distribution certificate.
-    # If Apple says the team is already at the distribution-certificate limit,
-    # revoke exactly one certificate: the iOS Distribution cert with the earliest
-    # expiration date. Then retry once so CI can create/import a fresh cert.
     cert_args = {
       api_key: api_key,
       generate_apple_certs: true,
@@ -75,13 +66,17 @@ platform :ios do
       require "spaceship"
       require "time"
 
-      distribution_type = Spaceship::ConnectAPI::Certificate::CertificateType::IOS_DISTRIBUTION
-      distribution_certs = Spaceship::ConnectAPI::Certificate.all(
-        filter: { certificateType: distribution_type }
-      )
+      allowed_types = [
+        Spaceship::ConnectAPI::Certificate::CertificateType::DISTRIBUTION,
+        Spaceship::ConnectAPI::Certificate::CertificateType::IOS_DISTRIBUTION
+      ]
+
+      distribution_certs = Spaceship::ConnectAPI::Certificate.all.select do |candidate|
+        allowed_types.include?(candidate.certificate_type)
+      end
 
       if distribution_certs.empty?
-        UI.user_error!("Apple reported the Distribution certificate limit, but no iOS Distribution certificates were returned for revocation.")
+        UI.user_error!("Apple reported the Distribution certificate limit, but no distribution certificates were returned for revocation.")
       end
 
       oldest = distribution_certs.min_by do |candidate|
@@ -93,15 +88,14 @@ platform :ios do
       end
 
       UI.important(
-        "Distribution certificate limit reached. Revoking oldest iOS Distribution certificate " \
-        "#{oldest.display_name || oldest.name || oldest.id} (expires #{oldest.expiration_date || 'unknown'}), then retrying."
+        "Distribution certificate limit reached. Revoking oldest distribution certificate " \
+        "#{oldest.display_name || oldest.name || oldest.id} (#{oldest.certificate_type}, expires #{oldest.expiration_date || 'unknown'}), then retrying."
       )
       oldest.delete!
-      sleep 2
+      sleep 3
       cert(**cert_args)
     end
 
-    # 4. Provisioning profile matching that certificate.
     sigh(
       api_key: api_key,
       app_identifier: APP_IDENTIFIER,
@@ -110,7 +104,6 @@ platform :ios do
 
     profile_name = lane_context[SharedValues::SIGH_NAME]
 
-    # 5. Write signing settings straight into the project file.
     update_code_signing_settings(
       path: "App.xcodeproj",
       use_automatic_signing: false,
@@ -120,8 +113,6 @@ platform :ios do
       targets: ["App"]
     )
 
-    # 5b. Bump the build number to the next unused value on App Store Connect,
-    #     so each upload has a unique, higher number than the last.
     latest = latest_testflight_build_number(
       api_key: api_key,
       app_identifier: APP_IDENTIFIER,
@@ -132,7 +123,6 @@ platform :ios do
       build_number: latest + 1
     )
 
-    # 6. Build & archive.
     build_app(
       project: "App.xcodeproj",
       scheme: "App",
@@ -146,7 +136,6 @@ platform :ios do
       }
     )
 
-    # 7. Upload to TestFlight.
     upload_to_testflight(
       api_key: api_key,
       skip_waiting_for_build_processing: true
