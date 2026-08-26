@@ -12,12 +12,6 @@ platform :ios do
     team_id   = ENV["APPLE_TEAM_ID"].to_s.strip
 
     # 1. Write the .p8 key to a file, then authenticate.
-    #
-    # PIPELINE-SETUP.md tells you to base64-encode the .p8 before pasting it
-    # into the secret, but this wrote whatever it was given straight to disk.
-    # Following the instructions therefore produced a file full of base64 text
-    # where a PEM key was expected, and the very first App Store Connect call
-    # failed. Accept either form: decode when it doesn't already look like PEM.
     raw = ENV["ASC_KEY_CONTENT"].to_s.strip
     key_text =
       if raw.include?("BEGIN PRIVATE KEY")
@@ -60,12 +54,52 @@ platform :ios do
     )
 
     # 3. Distribution certificate.
-    cert(
+    # If Apple says the team is already at the distribution-certificate limit,
+    # revoke exactly one certificate: the iOS Distribution cert with the earliest
+    # expiration date. Then retry once so CI can create/import a fresh cert.
+    cert_args = {
       api_key: api_key,
       generate_apple_certs: true,
       keychain_path: File.expand_path("~/Library/Keychains/#{keychain_name}-db"),
       keychain_password: keychain_pw
-    )
+    }
+
+    begin
+      cert(**cert_args)
+    rescue => e
+      msg = e.message.to_s
+      unless msg.downcase.include?("maximum number") && msg.downcase.include?("distribution certificate")
+        raise
+      end
+
+      require "spaceship"
+      require "time"
+
+      distribution_type = Spaceship::ConnectAPI::Certificate::CertificateType::IOS_DISTRIBUTION
+      distribution_certs = Spaceship::ConnectAPI::Certificate.all(
+        filter: { certificateType: [distribution_type] }
+      )
+
+      if distribution_certs.empty?
+        UI.user_error!("Apple reported the Distribution certificate limit, but no iOS Distribution certificates were returned for revocation.")
+      end
+
+      oldest = distribution_certs.min_by do |candidate|
+        begin
+          Time.parse(candidate.expiration_date.to_s)
+        rescue StandardError
+          Time.at(0)
+        end
+      end
+
+      UI.important(
+        "Distribution certificate limit reached. Revoking oldest iOS Distribution certificate " \
+        "#{oldest.display_name || oldest.name || oldest.id} (expires #{oldest.expiration_date || 'unknown'}), then retrying."
+      )
+      oldest.delete!
+      sleep 2
+      cert(**cert_args)
+    end
 
     # 4. Provisioning profile matching that certificate.
     sigh(
