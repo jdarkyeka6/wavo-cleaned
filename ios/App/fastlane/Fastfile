@@ -77,7 +77,7 @@ platform :ios do
 
       distribution_type = Spaceship::ConnectAPI::Certificate::CertificateType::IOS_DISTRIBUTION
       distribution_certs = Spaceship::ConnectAPI::Certificate.all(
-        filter: { certificateType: [distribution_type] }
+        filter: { certificateType: distribution_type }
       )
 
       if distribution_certs.empty?
