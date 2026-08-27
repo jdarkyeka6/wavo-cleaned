@@ -20,6 +20,7 @@ import { isNativeApp, isIOS } from "./lib/platform";
 // to verify our signature, not to make one. Without it the browser has nothing
 // to encrypt to, so web push stays off.
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || "";
+const IOS_TOKEN_STORAGE_KEY = "wavo_push_device_token";
 
 // Web Push needs the key as a Uint8Array, not a base64url string.
 function urlBase64ToUint8Array(base64String) {
@@ -133,48 +134,64 @@ async function subscribeWeb(userId) {
 async function subscribeNative(userId) {
   const { PushNotifications } = await import("@capacitor/push-notifications");
 
-  // The token arrives asynchronously through an event, not a return value, so
-  // this resolves on whichever of registration/registrationError fires first.
-  const token = await new Promise((resolve) => {
-    let settled = false;
-    const done = (value) => {
-      if (settled) return;
-      settled = true;
-      resolve(value);
-    };
+  // The token arrives asynchronously through an event, not a return value.
+  // Install temporary listeners, register with APNs, then remove the listeners
+  // as soon as this registration attempt settles so repeated logins don't stack
+  // duplicate registration callbacks.
+  let resolveRegistration;
+  const tokenPromise = new Promise((resolve) => {
+    resolveRegistration = resolve;
+  });
 
-    PushNotifications.addListener("registration", (t) => done(t.value));
-    PushNotifications.addListener("registrationError", (err) => {
+  let settled = false;
+  let timeoutId;
+  const done = (value) => {
+    if (settled) return;
+    settled = true;
+    if (timeoutId) clearTimeout(timeoutId);
+    resolveRegistration(value);
+  };
+
+  const registrationHandle = await PushNotifications.addListener(
+    "registration",
+    (t) => done(t.value),
+  );
+  const registrationErrorHandle = await PushNotifications.addListener(
+    "registrationError",
+    (err) => {
       console.warn("[wavo] APNs registration failed:", err);
       done(null);
+    },
+  );
+
+  try {
+    await PushNotifications.register();
+
+    // A simulator, or a build without the push entitlement, may fire neither
+    // event. Without this the promise would hang for the life of the session.
+    timeoutId = setTimeout(() => done(null), 10000);
+    const token = await tokenPromise;
+    if (!token) return null;
+
+    // Native devices use a narrow RPC rather than a direct table upsert. This
+    // lets a shared iPhone safely transfer the same APNs token to whichever Wavo
+    // account is currently authenticated while keeping table RLS strict.
+    const { error } = await supabase.rpc("claim_ios_push_subscription", {
+      p_device_token: token,
+      p_user_agent: navigator.userAgent.slice(0, 200),
     });
 
-    PushNotifications.register();
+    if (error) {
+      console.warn("[wavo] Failed to save iOS push subscription:", error);
+      return null;
+    }
 
-    // A simulator, or a build without the push entitlement, fires neither
-    // event. Without this the promise would hang for the life of the session.
-    setTimeout(() => done(null), 10000);
-  });
-
-  if (!token) return null;
-
-  // Native devices use a narrow RPC rather than a direct table upsert. This
-  // avoids two production failures:
-  //  1. ON CONFLICT(device_token) could not use the old partial unique index.
-  //  2. A device previously used by another Wavo account could hit RLS because
-  //     the existing token row still belonged to that account.
-  // The RPC always assigns the token to the currently authenticated auth.uid().
-  const { error } = await supabase.rpc("claim_ios_push_subscription", {
-    p_device_token: token,
-    p_user_agent: navigator.userAgent.slice(0, 200),
-  });
-
-  if (error) {
-    console.warn("[wavo] Failed to save iOS push subscription:", error);
-    return null;
+    localStorage.setItem(IOS_TOKEN_STORAGE_KEY, token);
+    return token;
+  } finally {
+    registrationHandle.remove();
+    registrationErrorHandle.remove();
   }
-
-  return token;
 }
 
 /**
@@ -201,18 +218,28 @@ export const subscribeToPush = registerForPush;
 
 /**
  * Stop this device receiving pushes, and forget it server-side.
- * Call on logout when the device is shared.
+ * Call on logout, especially on shared devices.
  */
 export async function unsubscribeFromPush() {
   if (isNativeApp) {
     try {
+      const token = localStorage.getItem(IOS_TOKEN_STORAGE_KEY);
+      if (token) {
+        const { error } = await supabase.rpc("release_ios_push_subscription", {
+          p_device_token: token,
+        });
+        if (error) {
+          console.warn("[wavo] Failed to release iOS push subscription:", error);
+        } else {
+          localStorage.removeItem(IOS_TOKEN_STORAGE_KEY);
+        }
+      }
+
       const { PushNotifications } = await import("@capacitor/push-notifications");
       await PushNotifications.removeAllListeners();
-    } catch {
-      // Plugin missing in a web build of the native bundle — nothing to undo.
+    } catch (err) {
+      console.warn("[wavo] Failed to unsubscribe native push:", err);
     }
-    // The APNs token isn't revocable from here; the next signed-in account can
-    // safely claim the same token through claim_ios_push_subscription().
     return;
   }
 
