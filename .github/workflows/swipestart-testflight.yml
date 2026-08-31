@@ -1,0 +1,81 @@
+name: SwipeStart to TestFlight
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/swipestart-testflight.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: swipestart-testflight
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Check out SwipeStart
+        uses: actions/checkout@v4
+        with:
+          repository: jdarkyeka6/startup-generator
+          ref: main
+          path: swipestart
+
+      - name: Select Xcode
+        run: |
+          if [ -d /Applications/Xcode_26.3.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.3.app
+          fi
+          xcodebuild -version
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Capacitor
+        working-directory: swipestart
+        run: npm install
+
+      - name: Prepare offline web bundle
+        working-directory: swipestart
+        run: npm run prepare:web
+
+      - name: Generate iOS project
+        working-directory: swipestart
+        run: |
+          npx cap add ios
+          npx cap sync ios
+
+      - name: Install SwipeStart app icon
+        working-directory: swipestart
+        run: |
+          python3 scripts/make-ios-icon.py ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png
+          file ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png
+
+      - name: Install TestFlight lane
+        working-directory: swipestart
+        run: |
+          mkdir -p ios/App/fastlane
+          cp ios-ci/Gemfile ios/App/Gemfile
+          cp ios-ci/Fastfile ios/App/fastlane/Fastfile
+
+      - name: Set up Ruby and Fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: swipestart/ios/App
+
+      - name: Build, sign and upload SwipeStart
+        working-directory: swipestart/ios/App
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bundle exec fastlane beta
