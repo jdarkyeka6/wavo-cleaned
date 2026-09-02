@@ -1,6 +1,6 @@
 name: SwipeStart to TestFlight
 
-# Triggered 2026-09-02 for locked swipe viewport + swipe-up Maybe build (retry after Apple cert propagation fix).
+# Triggered 2026-09-02 for full-screen card focus mode.
 on:
   workflow_dispatch: {}
   push:
@@ -51,6 +51,12 @@ jobs:
         run: |
           npx cap add ios
           npx cap sync ios
+
+      - name: Declare export compliance
+        working-directory: swipestart
+        run: |
+          /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" ios/App/App/Info.plist 2>/dev/null || \
+          /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" ios/App/App/Info.plist
 
       - name: Install SwipeStart app icon
         working-directory: swipestart
