@@ -1,5 +1,6 @@
 name: Sun Shield to TestFlight
 
+# Triggered for SunShield V0.3 explanatory results update.
 on:
   workflow_dispatch: {}
   push:
