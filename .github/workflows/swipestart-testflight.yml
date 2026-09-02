@@ -1,5 +1,6 @@
 name: SwipeStart to TestFlight
 
+# Triggered 2026-09-02 for locked swipe viewport + swipe-up Maybe build.
 on:
   workflow_dispatch: {}
   push:
