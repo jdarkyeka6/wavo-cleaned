@@ -1,6 +1,6 @@
 name: SwipeStart to TestFlight
 
-# Triggered 2026-09-02 for locked swipe viewport + swipe-up Maybe build.
+# Triggered 2026-09-02 for locked swipe viewport + swipe-up Maybe build (retry after Apple cert propagation fix).
 on:
   workflow_dispatch: {}
   push:
