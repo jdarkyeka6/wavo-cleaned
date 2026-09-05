@@ -11,6 +11,7 @@ import AdminRoute from './AdminRoute.jsx'
 import CallContinuityBridge from './CallContinuityBridge.jsx'
 import CallKitCoordinator from './CallKitCoordinator.jsx'
 import CallQualityOverlay from './CallQualityOverlay.jsx'
+import CallTimeoutGuard from './CallTimeoutGuard.jsx'
 import ChatMotionCalls from './ChatMotionCalls.js'
 import ConfigError from './ConfigError.jsx'
 import DropInVoice from './DropInVoice.jsx'
@@ -37,6 +38,7 @@ function WavoApp() {
       <NotificationSetup />
       <UiEnhancements />
       <ChatMotionCalls />
+      <CallTimeoutGuard />
       <CallQualityOverlay />
       <CallContinuityBridge />
       <DropInVoice />
