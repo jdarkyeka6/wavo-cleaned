@@ -1,5 +1,7 @@
 import { supabase } from './supabaseClient'
 
+const RING_WINDOW_MS = 45_000
+
 export async function createCall(callerId, calleeId, mode = 'video') {
   const { data, error } = await supabase
     .from('call_sessions')
@@ -22,7 +24,9 @@ export async function updateCallStatus(callId, status) {
 }
 
 export async function getOpenCalls(userId) {
-  const cutoff = new Date(Date.now() - 90_000).toISOString()
+  // Only surface genuinely current calls. A device opening Wavo later must not
+  // resurrect an old ringing row and make a timed-out call appear again.
+  const cutoff = new Date(Date.now() - RING_WINDOW_MS).toISOString()
   const { data, error } = await supabase
     .from('call_sessions')
     .select('*')

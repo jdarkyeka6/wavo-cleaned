@@ -1,6 +1,7 @@
 # Fastlane: builds Wavo and ships it to TestFlight.
 
 APP_IDENTIFIER = "lol.wavo.app"
+LIVE_ACTIVITY_IDENTIFIER = "lol.wavo.app.WavoLiveActivity"
 
 default_platform(:ios)
 
@@ -37,6 +38,18 @@ platform :ios do
       key_filepath: key_path
     )
 
+    require "spaceship"
+
+    live_bundle = Spaceship::ConnectAPI::BundleId.find(LIVE_ACTIVITY_IDENTIFIER)
+    unless live_bundle
+      UI.message("Registering #{LIVE_ACTIVITY_IDENTIFIER} for the Live Activity extension")
+      Spaceship::ConnectAPI::BundleId.create(
+        name: "Wavo Live Activity",
+        platform: Spaceship::ConnectAPI::BundleIdPlatform::IOS,
+        identifier: LIVE_ACTIVITY_IDENTIFIER
+      )
+    end
+
     keychain_name = "wavo-ci.keychain"
     keychain_pw = "ci-temp-pw"
     create_keychain(
@@ -63,7 +76,6 @@ platform :ios do
         raise
       end
 
-      require "spaceship"
       require "time"
 
       allowed_types = [
@@ -101,16 +113,31 @@ platform :ios do
       app_identifier: APP_IDENTIFIER,
       force: true
     )
+    app_profile_name = lane_context[SharedValues::SIGH_NAME]
 
-    profile_name = lane_context[SharedValues::SIGH_NAME]
+    sigh(
+      api_key: api_key,
+      app_identifier: LIVE_ACTIVITY_IDENTIFIER,
+      force: true
+    )
+    live_profile_name = lane_context[SharedValues::SIGH_NAME]
 
     update_code_signing_settings(
       path: "App.xcodeproj",
       use_automatic_signing: false,
       team_id: team_id,
       code_sign_identity: "Apple Distribution",
-      profile_name: profile_name,
+      profile_name: app_profile_name,
       targets: ["App"]
+    )
+
+    update_code_signing_settings(
+      path: "App.xcodeproj",
+      use_automatic_signing: false,
+      team_id: team_id,
+      code_sign_identity: "Apple Distribution",
+      profile_name: live_profile_name,
+      targets: ["WavoLiveActivity"]
     )
 
     latest = latest_testflight_build_number(
@@ -118,9 +145,19 @@ platform :ios do
       app_identifier: APP_IDENTIFIER,
       initial_build_number: 0
     )
+    next_build = latest + 1
     increment_build_number(
       xcodeproj: "App.xcodeproj",
-      build_number: latest + 1
+      build_number: next_build
+    )
+
+    # Keep the embedded extension on exactly the same CFBundleVersion as the host app.
+    update_info_plist(
+      plist_path: "WavoLiveActivity/Info.plist",
+      block: proc do |plist|
+        plist["CFBundleVersion"] = next_build.to_s
+        plist["CFBundleShortVersionString"] = "1.0"
+      end
     )
 
     build_app(
@@ -131,7 +168,8 @@ platform :ios do
         signingStyle: "manual",
         teamID: team_id,
         provisioningProfiles: {
-          APP_IDENTIFIER => profile_name
+          APP_IDENTIFIER => app_profile_name,
+          LIVE_ACTIVITY_IDENTIFIER => live_profile_name
         }
       }
     )

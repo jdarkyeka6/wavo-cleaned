@@ -1,0 +1,111 @@
+.wavo-spotify-connect {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 18px;
+  background: rgba(255,255,255,.035);
+}
+
+.wavo-spotify-connect-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.wavo-spotify-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(74, 222, 128, .12);
+}
+
+.wavo-spotify-connect-head > div {
+  display: grid;
+  gap: 2px;
+}
+
+.wavo-spotify-connect-head strong {
+  font-size: 13px;
+}
+
+.wavo-spotify-connect-head span {
+  color: var(--muted, #9297a4);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.wavo-spotify-ok {
+  color: #4ade80;
+}
+
+.wavo-spotify-primary,
+.wavo-spotify-actions button,
+.wavo-spotify-error {
+  border: 0;
+  font: inherit;
+}
+
+.wavo-spotify-primary {
+  width: 100%;
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff;
+  color: #0c0f14;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.wavo-spotify-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.wavo-spotify-actions button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 10px;
+  border-radius: 11px;
+  background: rgba(255,255,255,.09);
+  color: inherit;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.wavo-spotify-actions button.disconnect {
+  color: #ffb4b4;
+}
+
+.wavo-spotify-connect p {
+  margin: 10px 0 0;
+  color: var(--muted, #9297a4);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.wavo-spotify-error {
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 75, 87, .1);
+  color: #ffb4b4;
+  font-size: 11px;
+  text-align: left;
+}
+
+.wavo-spotify-primary:disabled,
+.wavo-spotify-actions button:disabled {
+  opacity: .55;
+}

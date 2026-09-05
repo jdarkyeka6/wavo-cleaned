@@ -124,7 +124,7 @@ export function ActivitySharingSettings({ friends = [], sharing, onChange, busy 
       />
       <SettingToggle
         label="Spotify"
-        description="Ready for Spotify activity once the Wavo Spotify connection is added."
+        description="Share the track you are listening to after connecting Spotify below."
         value={sharing.share_spotify}
         onChange={(value) => onChange({ share_spotify: value })}
       />
