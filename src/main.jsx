@@ -14,6 +14,7 @@ import CallQualityOverlay from './CallQualityOverlay.jsx'
 import ChatMotionCalls from './ChatMotionCalls.js'
 import ConfigError from './ConfigError.jsx'
 import DropInVoice from './DropInVoice.jsx'
+import LiveActivityCoordinator from './LiveActivityCoordinator.jsx'
 import NotificationSetup from './NotificationSetup.jsx'
 import PeopleDashboard from './PeopleDashboard.jsx'
 import SmartMessageActions from './SmartMessageActions.jsx'
@@ -42,6 +43,7 @@ function WavoApp() {
       <WavoTogether />
       <PeopleDashboard />
       <SmartMessageActions />
+      <LiveActivityCoordinator />
     </>
   )
 }
