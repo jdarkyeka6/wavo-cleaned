@@ -1,0 +1,205 @@
+/* Swipe-back motion + 1:1 video-call shell. */
+
+.chat-screen {
+  touch-action: pan-y;
+  transform: translate3d(var(--wavo-chat-drag, 0px), 0, 0);
+  transform-origin: center left;
+  will-change: transform;
+}
+
+.chat-screen.wavo-chat-swiping {
+  transition: none !important;
+  box-shadow: -18px 0 48px rgba(0, 0, 0, calc(.12 + var(--wavo-chat-progress, 0) * .34));
+}
+
+.chat-screen.wavo-chat-swipe-reset {
+  transition: transform 205ms cubic-bezier(.2, .78, .24, 1), box-shadow 205ms ease !important;
+  box-shadow: none;
+}
+
+.chat-screen.wavo-chat-swipe-leaving {
+  transition: transform 190ms cubic-bezier(.22, .82, .24, 1), box-shadow 190ms ease !important;
+  box-shadow: -26px 0 62px rgba(0, 0, 0, .4);
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-topbar.wavo-call-ready {
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto !important;
+}
+
+.wavo-video-call-button {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  display: grid;
+  place-items: center;
+  padding: 0 !important;
+  border-radius: 13px;
+  color: #b9efff;
+  background: rgba(64, 154, 255, .11) !important;
+  border: 1px solid rgba(91, 186, 255, .17) !important;
+}
+
+.wavo-video-call-button:active { transform: scale(.94); }
+.wavo-video-call-button svg { width: 20px; height: 20px; }
+.wavo-chat-motion-root { position: relative; z-index: 250; }
+
+.wavo-incoming-call,
+.wavo-video-call {
+  position: fixed;
+  z-index: 260;
+  inset: 0;
+  width: 100%;
+  height: var(--wavo-viewport-height, 100dvh);
+  overflow: hidden;
+}
+
+.wavo-incoming-call {
+  display: grid;
+  place-items: end center;
+  padding: 18px 14px calc(18px + env(safe-area-inset-bottom));
+  background: rgba(2, 6, 15, .58);
+  backdrop-filter: blur(18px);
+  animation: wavo-call-fade-in 180ms ease both;
+}
+
+.wavo-incoming-call-card {
+  position: relative;
+  width: min(100%, 430px);
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 28px 22px 22px;
+  border-radius: 30px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: radial-gradient(circle at 50% 0%, rgba(70, 153, 255, .22), transparent 48%), rgba(10, 17, 31, .97);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, .52);
+  animation: wavo-call-sheet-in 260ms cubic-bezier(.2, .82, .24, 1) both;
+}
+
+.wavo-incoming-call-card h2 { margin: 2px 0 0; font-size: 26px; }
+.wavo-incoming-call-card p { margin: 0 0 8px; color: #9eabc0; }
+.wavo-call-kicker { color: #72dfff; font-size: 10px; font-weight: 900; letter-spacing: .16em; }
+
+.wavo-call-avatar {
+  width: 86px;
+  height: 86px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 30px;
+  color: white;
+  font-size: 30px;
+  font-weight: 900;
+  background: linear-gradient(145deg, rgba(50, 214, 255, .28), rgba(89, 101, 255, .34));
+  border: 1px solid rgba(255, 255, 255, .13);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, .28);
+}
+
+.wavo-call-avatar.compact { width: 72px; height: 72px; border-radius: 25px; font-size: 25px; }
+.wavo-call-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.wavo-call-close {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .075);
+  color: #e3eaff;
+  border: 1px solid rgba(255, 255, 255, .08);
+}
+
+.wavo-incoming-call-card > .wavo-call-close { position: absolute; top: 14px; right: 14px; }
+.wavo-incoming-actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+.wavo-incoming-actions button { min-height: 54px; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 17px; font-weight: 850; }
+.wavo-call-decline { background: rgba(255, 86, 104, .13); color: #ff9aaa; border: 1px solid rgba(255, 86, 104, .2); }
+.wavo-call-accept { background: linear-gradient(135deg, #35d4a2, #36b889); color: #031910; box-shadow: 0 12px 30px rgba(53, 212, 162, .22); }
+
+.wavo-video-call { background: #050812; animation: wavo-call-fade-in 160ms ease both; }
+.wavo-call-backdrop { position: absolute; inset: 0; background: radial-gradient(circle at 18% 18%, rgba(57, 138, 255, .24), transparent 38%), radial-gradient(circle at 84% 78%, rgba(104, 78, 255, .18), transparent 34%), linear-gradient(180deg, rgba(6, 10, 21, .45), rgba(4, 7, 15, .88)); pointer-events: none; }
+
+.wavo-remote-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transform: scale(1.015);
+  transition: opacity 240ms ease, transform 300ms ease;
+  background: #050812;
+}
+
+.wavo-remote-video.ready { opacity: 1; transform: scale(1); }
+.wavo-call-head { position: absolute; z-index: 3; top: 0; left: 0; right: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: calc(14px + env(safe-area-inset-top)) 16px 16px; background: linear-gradient(180deg, rgba(0, 0, 0, .54), transparent); }
+.wavo-call-head > div { min-width: 0; display: grid; gap: 2px; }
+.wavo-call-head strong { margin-top: 2px; font-size: 20px; }
+.wavo-call-head small { color: rgba(235, 243, 255, .65); font-size: 11px; }
+
+.wavo-local-preview {
+  position: absolute;
+  z-index: 4;
+  top: calc(82px + env(safe-area-inset-top));
+  right: 14px;
+  width: min(31vw, 128px);
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #111828;
+  border: 1px solid rgba(255, 255, 255, .16);
+  box-shadow: 0 15px 42px rgba(0, 0, 0, .38);
+}
+
+.wavo-local-preview video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.wavo-camera-off-label { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 7px; color: #aebbd0; font-size: 10px; background: #111827; }
+.wavo-call-waiting { position: absolute; z-index: 3; inset: 0; display: grid; place-items: center; align-content: center; gap: 9px; pointer-events: none; }
+.wavo-call-waiting strong { margin-top: 4px; font-size: 20px; }
+.wavo-call-waiting span { color: #8e9bb0; font-size: 12px; }
+
+.wavo-call-controls {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px;
+  border-radius: 24px;
+  background: rgba(8, 13, 24, .72);
+  border: 1px solid rgba(255, 255, 255, .1);
+  backdrop-filter: blur(24px);
+  box-shadow: 0 16px 46px rgba(0, 0, 0, .32);
+}
+
+.wavo-call-controls button { width: 50px; height: 50px; display: grid; place-items: center; padding: 0; border-radius: 17px; color: white; background: rgba(255, 255, 255, .1); border: 1px solid rgba(255, 255, 255, .08); }
+.wavo-call-controls button.is-off { color: #ffb2bd; background: rgba(255, 92, 112, .13); }
+.wavo-call-controls button.hangup { width: 58px; height: 58px; border-radius: 20px; background: linear-gradient(145deg, #ff5d70, #e84055); box-shadow: 0 12px 30px rgba(255, 74, 96, .28); }
+
+.wavo-call-error {
+  position: fixed;
+  z-index: 280;
+  left: 50%;
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  width: min(calc(100% - 28px), 430px);
+  transform: translateX(-50%);
+  padding: 13px 15px;
+  border-radius: 16px;
+  color: #ffe7eb;
+  background: rgba(116, 28, 43, .96);
+  border: 1px solid rgba(255, 123, 143, .25);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .4);
+  text-align: left;
+  font-size: 12px;
+  font-weight: 720;
+}
+
+@keyframes wavo-call-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes wavo-call-sheet-in { from { opacity: 0; transform: translateY(28px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+@media (min-width: 761px) {
+  .wavo-incoming-call { place-items: center; }
+  .wavo-video-call { inset: 24px; width: auto; height: auto; border-radius: 28px; border: 1px solid rgba(255, 255, 255, .12); box-shadow: 0 28px 90px rgba(0, 0, 0, .5); }
+}
