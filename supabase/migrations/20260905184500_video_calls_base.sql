@@ -13,20 +13,27 @@ create table if not exists public.call_sessions (
   constraint call_sessions_distinct_people check (caller_id <> callee_id)
 );
 
-create index if not exists call_sessions_callee_status_created_idx
-  on public.call_sessions (callee_id, status, created_at desc);
+create index if not exists call_sessions_callee_open_idx
+  on public.call_sessions (callee_id, created_at desc)
+  where status in ('ringing', 'active');
 
-create index if not exists call_sessions_caller_status_created_idx
-  on public.call_sessions (caller_id, status, created_at desc);
+create index if not exists call_sessions_caller_open_idx
+  on public.call_sessions (caller_id, created_at desc)
+  where status in ('ringing', 'active');
 
 alter table public.call_sessions enable row level security;
+
+revoke all on table public.call_sessions from anon;
+revoke all on table public.call_sessions from authenticated;
+grant select, insert on table public.call_sessions to authenticated;
+grant update (status) on table public.call_sessions to authenticated;
 
 drop policy if exists "call participants can read" on public.call_sessions;
 create policy "call participants can read"
   on public.call_sessions
   for select
   to authenticated
-  using (auth.uid() = caller_id or auth.uid() = callee_id);
+  using ((select auth.uid()) = caller_id or (select auth.uid()) = callee_id);
 
 drop policy if exists "friends can start calls" on public.call_sessions;
 create policy "friends can start calls"
@@ -34,7 +41,7 @@ create policy "friends can start calls"
   for insert
   to authenticated
   with check (
-    auth.uid() = caller_id
+    (select auth.uid()) = caller_id
     and caller_id <> callee_id
     and public.are_friends(caller_id, callee_id)
     and not public.blocked_between(caller_id, callee_id)
@@ -45,13 +52,13 @@ create policy "call participants can update"
   on public.call_sessions
   for update
   to authenticated
-  using (auth.uid() = caller_id or auth.uid() = callee_id)
-  with check (auth.uid() = caller_id or auth.uid() = callee_id);
+  using ((select auth.uid()) = caller_id or (select auth.uid()) = callee_id)
+  with check ((select auth.uid()) = caller_id or (select auth.uid()) = callee_id);
 
 create or replace function public.touch_call_session_updated_at()
 returns trigger
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 begin
@@ -59,6 +66,8 @@ begin
   return new;
 end;
 $$;
+
+revoke all on function public.touch_call_session_updated_at() from public;
 
 drop trigger if exists call_sessions_touch_updated_at on public.call_sessions;
 create trigger call_sessions_touch_updated_at
@@ -85,12 +94,13 @@ create policy "call participants can send realtime signals"
   for insert
   to authenticated
   with check (
-    realtime.topic() like 'wavo-call:%'
+    realtime.messages.extension = 'broadcast'
+    and (select realtime.topic()) like 'wavo-call:%'
     and exists (
       select 1
       from public.call_sessions c
-      where c.id::text = split_part(realtime.topic(), ':', 2)
-        and (auth.uid() = c.caller_id or auth.uid() = c.callee_id)
+      where c.id::text = split_part((select realtime.topic()), ':', 2)
+        and ((select auth.uid()) = c.caller_id or (select auth.uid()) = c.callee_id)
         and c.status in ('ringing', 'active')
         and c.expires_at > now()
     )
@@ -102,12 +112,13 @@ create policy "call participants can receive realtime signals"
   for select
   to authenticated
   using (
-    realtime.topic() like 'wavo-call:%'
+    realtime.messages.extension = 'broadcast'
+    and (select realtime.topic()) like 'wavo-call:%'
     and exists (
       select 1
       from public.call_sessions c
-      where c.id::text = split_part(realtime.topic(), ':', 2)
-        and (auth.uid() = c.caller_id or auth.uid() = c.callee_id)
+      where c.id::text = split_part((select realtime.topic()), ':', 2)
+        and ((select auth.uid()) = c.caller_id or (select auth.uid()) = c.callee_id)
         and c.status in ('ringing', 'active')
         and c.expires_at > now()
     )
