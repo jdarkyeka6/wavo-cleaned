@@ -1,28 +1,25 @@
 // Push notification helpers.
 //
-// Two mechanisms behind one interface, because the two builds of Wavo can't
-// share one:
-//
-//   web  — Service Worker + PushManager + VAPID. Works in Chrome, Edge,
-//          Firefox, desktop Safari, Android, and on iPhone only when Wavo has
-//          been added to the Home Screen (iOS 16.4+).
-//   ios  — APNs device token via @capacitor/push-notifications. The native
-//          shell is a WKWebView, which has no PushManager at all, so the web
-//          path silently does nothing there no matter how it's configured.
-//
-// Both end up as a row in push_subscriptions, and send-push fans out to
-// whatever it finds. Callers just call registerForPush().
+// Wavo uses three device-addressing paths:
+//   web      — Service Worker + PushManager + VAPID.
+//   ios      — normal APNs alert token via @capacitor/push-notifications.
+//   ios_voip — PushKit token used only for real incoming-call delivery to CallKit.
 
 import { supabase } from "./supabaseClient";
 import { isNativeApp, isIOS } from "./lib/platform";
+import {
+  addVoipTokenListener,
+  callKitSupported,
+  getCallKitState,
+} from "./callKitBridge";
 
-// Public half of the VAPID pair. Safe to ship — it's the key push services use
-// to verify our signature, not to make one. Without it the browser has nothing
-// to encrypt to, so web push stays off.
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || "";
 const IOS_TOKEN_STORAGE_KEY = "wavo_push_device_token";
+const IOS_VOIP_TOKEN_STORAGE_KEY = "wavo_voip_device_token";
 
-// Web Push needs the key as a Uint8Array, not a base64url string.
+let voipListenerHandle = null;
+let voipListenerUserId = null;
+
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -39,8 +36,6 @@ export function pushSupported() {
   );
 }
 
-// Register the service worker (the doorman) once. Web only — there is no
-// service worker inside the native shell.
 export async function registerServiceWorker() {
   if (isNativeApp) return null;
   if (!("serviceWorker" in navigator)) return null;
@@ -54,15 +49,10 @@ export async function registerServiceWorker() {
   }
 }
 
-// Ask "may we send notifications?" — only when it makes sense.
-// Returns true if permission is granted, false otherwise.
 export async function ensureNotificationPermission() {
   if (isNativeApp) {
     if (!isIOS()) return false;
     const { PushNotifications } = await import("@capacitor/push-notifications");
-    // checkPermissions first: requestPermissions on an already-denied app is a
-    // no-op that still returns 'denied', and we don't want to treat that as an
-    // error worth logging every login.
     let status = await PushNotifications.checkPermissions();
     if (status.receive === "prompt" || status.receive === "prompt-with-rationale") {
       status = await PushNotifications.requestPermissions();
@@ -77,8 +67,6 @@ export async function ensureNotificationPermission() {
   return result === "granted";
 }
 
-// Save a web device row. `last_seen_at` is what makes a returning device a bump
-// rather than a duplicate, and it's how a stale device is recognisable later.
 async function saveWebSubscription(row) {
   const { error } = await supabase
     .from("push_subscriptions")
@@ -104,9 +92,6 @@ async function subscribeWeb(userId) {
   if (Notification.permission !== "granted") return null;
 
   const reg = await navigator.serviceWorker.ready;
-
-  // Reuse an existing subscription if there is one. Re-subscribing would mint
-  // a new endpoint and orphan the old row.
   let sub = await reg.pushManager.getSubscription();
   if (!sub) {
     sub = await reg.pushManager.subscribe({
@@ -116,9 +101,6 @@ async function subscribeWeb(userId) {
   }
 
   const json = sub.toJSON();
-  // The whole PushSubscription goes in `subscription` because that is exactly
-  // what web-push wants handed back to it — endpoint and keys as one object.
-  // The endpoint is also stored flat, since it's the unique key.
   await saveWebSubscription({
     user_id: userId,
     platform: "web",
@@ -129,15 +111,11 @@ async function subscribeWeb(userId) {
   return sub;
 }
 
-// --- ios ---------------------------------------------------------------
+// --- standard iOS APNs -----------------------------------------------
 
 async function subscribeNative(userId) {
   const { PushNotifications } = await import("@capacitor/push-notifications");
 
-  // The token arrives asynchronously through an event, not a return value.
-  // Install temporary listeners, register with APNs, then remove the listeners
-  // as soon as this registration attempt settles so repeated logins don't stack
-  // duplicate registration callbacks.
   let resolveRegistration;
   const tokenPromise = new Promise((resolve) => {
     resolveRegistration = resolve;
@@ -166,16 +144,10 @@ async function subscribeNative(userId) {
 
   try {
     await PushNotifications.register();
-
-    // A simulator, or a build without the push entitlement, may fire neither
-    // event. Without this the promise would hang for the life of the session.
     timeoutId = setTimeout(() => done(null), 10000);
     const token = await tokenPromise;
     if (!token) return null;
 
-    // Native devices use a narrow RPC rather than a direct table upsert. This
-    // lets a shared iPhone safely transfer the same APNs token to whichever Wavo
-    // account is currently authenticated while keeping table RLS strict.
     const { error } = await supabase.rpc("claim_ios_push_subscription", {
       p_device_token: token,
       p_user_agent: navigator.userAgent.slice(0, 200),
@@ -194,10 +166,60 @@ async function subscribeNative(userId) {
   }
 }
 
+// --- iOS PushKit / CallKit -------------------------------------------
+
+async function claimVoipToken(userId, token) {
+  if (!userId || !token) return null;
+
+  const { error } = await supabase.rpc("claim_ios_voip_push_subscription", {
+    p_device_token: token,
+    p_user_agent: navigator.userAgent.slice(0, 200),
+  });
+
+  if (error) {
+    console.warn("[wavo] Failed to save iOS VoIP token:", error);
+    return null;
+  }
+
+  localStorage.setItem(IOS_VOIP_TOKEN_STORAGE_KEY, token);
+  return token;
+}
+
+async function ensureVoipTokenListener(userId) {
+  if (!callKitSupported()) return;
+  if (voipListenerHandle && voipListenerUserId === userId) return;
+
+  if (voipListenerHandle) {
+    try { await voipListenerHandle.remove(); } catch {}
+    voipListenerHandle = null;
+  }
+
+  voipListenerUserId = userId;
+  voipListenerHandle = await addVoipTokenListener(async ({ token }) => {
+    if (!token || !voipListenerUserId) return;
+    await claimVoipToken(voipListenerUserId, token);
+  });
+}
+
 /**
- * Register this device for push and record it against the user.
- * Safe to call on every login: it reuses an existing subscription and bumps
- * last_seen_at.
+ * Register Wavo's PushKit token for CallKit incoming calls.
+ * This does not depend on normal notification permission; PushKit and CallKit
+ * are the system calling path, not an alert-notification workaround.
+ */
+export async function registerVoipForPush(userId) {
+  if (!userId || !callKitSupported()) return null;
+  try {
+    await ensureVoipTokenListener(userId);
+    const state = await getCallKitState();
+    return state?.voipToken ? await claimVoipToken(userId, state.voipToken) : null;
+  } catch (err) {
+    console.warn("[wavo] VoIP push registration failed:", err);
+    return null;
+  }
+}
+
+/**
+ * Register normal message/alert push for this device.
  */
 export async function registerForPush(userId) {
   if (!userId) return null;
@@ -213,13 +235,8 @@ export async function registerForPush(userId) {
   }
 }
 
-// Kept as the old name so existing call sites don't change meaning.
 export const subscribeToPush = registerForPush;
 
-/**
- * Stop this device receiving pushes, and forget it server-side.
- * Call on logout, especially on shared devices.
- */
 export async function unsubscribeFromPush() {
   if (isNativeApp) {
     try {
@@ -233,6 +250,24 @@ export async function unsubscribeFromPush() {
         } else {
           localStorage.removeItem(IOS_TOKEN_STORAGE_KEY);
         }
+      }
+
+      const voipToken = localStorage.getItem(IOS_VOIP_TOKEN_STORAGE_KEY);
+      if (voipToken) {
+        const { error } = await supabase.rpc("release_ios_voip_push_subscription", {
+          p_device_token: voipToken,
+        });
+        if (error) {
+          console.warn("[wavo] Failed to release iOS VoIP subscription:", error);
+        } else {
+          localStorage.removeItem(IOS_VOIP_TOKEN_STORAGE_KEY);
+        }
+      }
+
+      if (voipListenerHandle) {
+        try { await voipListenerHandle.remove(); } catch {}
+        voipListenerHandle = null;
+        voipListenerUserId = null;
       }
 
       const { PushNotifications } = await import("@capacitor/push-notifications");
