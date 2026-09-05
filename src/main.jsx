@@ -5,6 +5,7 @@ import './index.css'
 import './ui-overrides.css'
 import App from './App.jsx'
 import AdminRoute from './AdminRoute.jsx'
+import ChatMotionCalls from './ChatMotionCalls.js'
 import ConfigError from './ConfigError.jsx'
 import NotificationSetup from './NotificationSetup.jsx'
 import UiEnhancements from './UiEnhancements.jsx'
@@ -23,6 +24,7 @@ function WavoApp() {
       <App />
       <NotificationSetup />
       <UiEnhancements />
+      <ChatMotionCalls />
     </>
   )
 }
