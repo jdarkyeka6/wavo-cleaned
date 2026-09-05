@@ -3,13 +3,17 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import './index.css'
 import './ui-overrides.css'
+import './call-resilience.js'
 import './chat-call-peer-fix.js'
 import './chat-keyboard-viewport.js'
 import App from './App.jsx'
 import AdminRoute from './AdminRoute.jsx'
+import CallContinuityBridge from './CallContinuityBridge.jsx'
 import CallKitCoordinator from './CallKitCoordinator.jsx'
+import CallQualityOverlay from './CallQualityOverlay.jsx'
 import ChatMotionCalls from './ChatMotionCalls.js'
 import ConfigError from './ConfigError.jsx'
+import DropInVoice from './DropInVoice.jsx'
 import NotificationSetup from './NotificationSetup.jsx'
 import UiEnhancements from './UiEnhancements.jsx'
 import WavePhotoBridge from './WavePhotoBridge.jsx'
@@ -30,6 +34,9 @@ function WavoApp() {
       <NotificationSetup />
       <UiEnhancements />
       <ChatMotionCalls />
+      <CallQualityOverlay />
+      <CallContinuityBridge />
+      <DropInVoice />
       <WavoTogether />
     </>
   )
