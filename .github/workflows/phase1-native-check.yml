@@ -42,6 +42,7 @@ jobs:
 
           group = project.main_group.find_subpath('WavoLiveActivity', true)
           group.set_source_tree('<group>')
+          group.path = 'WavoLiveActivity'
           ref_for = lambda do |name|
             group.files.find { |f| f.path == name } || group.new_file(name)
           end
