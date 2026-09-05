@@ -19,6 +19,7 @@ import GroupVideoCalls from './GroupVideoCalls.jsx'
 import LiveActivityCoordinator from './LiveActivityCoordinator.jsx'
 import NotificationSetup from './NotificationSetup.jsx'
 import PeopleDashboard from './PeopleDashboard.jsx'
+import Phase3Hub from './Phase3Hub.jsx'
 import SmartMessageActions from './SmartMessageActions.jsx'
 import SpotifyPresenceCoordinator from './SpotifyPresenceCoordinator.jsx'
 import UiEnhancements from './UiEnhancements.jsx'
@@ -46,6 +47,7 @@ function WavoApp() {
       <DropInVoice />
       <GroupVideoCalls />
       <WavoTogether />
+      <Phase3Hub />
       <PeopleDashboard />
       <SmartMessageActions />
       <SpotifyPresenceCoordinator />
