@@ -49,8 +49,10 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Wavo needs your camera when you choose to make a video call.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Wavo needs your microphone so you can send voice notes in chats.</string>
+	<string>Wavo needs your microphone when you choose to send voice notes or make voice and video calls.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Wavo uses your location only when you choose to share your arrival or location with people you select.</string>
 	<key>UIBackgroundModes</key>
