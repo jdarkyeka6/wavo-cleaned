@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import './index.css'
 import './ui-overrides.css'
 import './chat-call-peer-fix.js'
+import './chat-keyboard-viewport.js'
 import App from './App.jsx'
 import AdminRoute from './AdminRoute.jsx'
 import ChatMotionCalls from './ChatMotionCalls.js'
@@ -16,6 +17,7 @@ import { isConfigured } from './lib/config'
 import { installUiMode } from './lib/layout'
 import './responsive-platform.css'
 import './responsive-platform-edge.css'
+import './chat-keyboard-viewport.css'
 
 installUiMode()
 
