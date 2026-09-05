@@ -1,9 +1,6 @@
 name: iOS to TestFlight
 on:
   workflow_dispatch: {}
-  push:
-    branches:
-      - wavo-next-now-presence
 jobs:
   build:
     runs-on: macos-15
@@ -12,7 +9,6 @@ jobs:
         uses: actions/checkout@v4
       - name: Select Xcode
         run: |
-          # Build 17 trigger: chat viewport scroll fix.
           if [ -d /Applications/Xcode_26.3.app ]; then
             sudo xcode-select -s /Applications/Xcode_26.3.app
           else
