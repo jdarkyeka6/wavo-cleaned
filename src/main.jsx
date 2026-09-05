@@ -14,6 +14,7 @@ import NotificationSetup from './NotificationSetup.jsx'
 import UiEnhancements from './UiEnhancements.jsx'
 import WavePhotoBridge from './WavePhotoBridge.jsx'
 import WavesPageV2 from './WavesPageV2.jsx'
+import WavoTogether from './WavoTogether.jsx'
 import { isConfigured } from './lib/config'
 import { installUiMode } from './lib/layout'
 import './responsive-platform.css'
@@ -29,6 +30,7 @@ function WavoApp() {
       <NotificationSetup />
       <UiEnhancements />
       <ChatMotionCalls />
+      <WavoTogether />
     </>
   )
 }
