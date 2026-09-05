@@ -1,6 +1,7 @@
 import Foundation
 import ActivityKit
 
+@available(iOS 16.1, *)
 struct WavoActivityAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable {
         var subtitle: String
