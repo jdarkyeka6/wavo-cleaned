@@ -36,7 +36,7 @@ revoke all on table public.group_call_rooms, public.group_call_members from anon
 grant select, insert, update on table public.group_call_rooms to authenticated;
 grant select, insert, delete on table public.group_call_members to authenticated;
 
-create or replace function public.is_group_member(p_group_id uuid, p_user_id uuid)
+create or replace function public.is_wavo_space_member(p_group_id uuid, p_user_id uuid)
 returns boolean
 language sql
 stable
@@ -54,24 +54,24 @@ as $$
   );
 $$;
 
-revoke all on function public.is_group_member(uuid, uuid) from public;
-grant execute on function public.is_group_member(uuid, uuid) to authenticated;
+revoke all on function public.is_wavo_space_member(uuid, uuid) from public;
+grant execute on function public.is_wavo_space_member(uuid, uuid) to authenticated;
 
 create policy "space members can read group calls"
   on public.group_call_rooms for select to authenticated
-  using (public.is_group_member(group_id, (select auth.uid())));
+  using (public.is_wavo_space_member(group_id, (select auth.uid())));
 
 create policy "space members can start group calls"
   on public.group_call_rooms for insert to authenticated
   with check (
     (select auth.uid()) = created_by
-    and public.is_group_member(group_id, (select auth.uid()))
+    and public.is_wavo_space_member(group_id, (select auth.uid()))
   );
 
 create policy "space members can end group calls"
   on public.group_call_rooms for update to authenticated
-  using (public.is_group_member(group_id, (select auth.uid())))
-  with check (public.is_group_member(group_id, (select auth.uid())));
+  using (public.is_wavo_space_member(group_id, (select auth.uid())))
+  with check (public.is_wavo_space_member(group_id, (select auth.uid())));
 
 create policy "space members can read call members"
   on public.group_call_members for select to authenticated
@@ -79,7 +79,7 @@ create policy "space members can read call members"
     exists (
       select 1 from public.group_call_rooms r
       where r.id = room_id
-        and public.is_group_member(r.group_id, (select auth.uid()))
+        and public.is_wavo_space_member(r.group_id, (select auth.uid()))
     )
   );
 
@@ -92,7 +92,7 @@ create policy "space members can join group calls"
       where r.id = room_id
         and r.status = 'active'
         and r.expires_at > now()
-        and public.is_group_member(r.group_id, (select auth.uid()))
+        and public.is_wavo_space_member(r.group_id, (select auth.uid()))
     )
   );
 
