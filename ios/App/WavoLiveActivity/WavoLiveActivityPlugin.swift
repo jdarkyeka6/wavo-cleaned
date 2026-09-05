@@ -4,7 +4,7 @@ import Capacitor
 
 @objc(WavoLiveActivityPlugin)
 public class WavoLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
-    public static let shared = WavoLiveActivityPlugin()
+    public nonisolated(unsafe) static let shared = WavoLiveActivityPlugin()
 
     public let identifier = "WavoLiveActivityPlugin"
     public let jsName = "WavoLiveActivity"
@@ -98,7 +98,12 @@ public class WavoLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
 
-        let current = activity.contentState
+        let current: WavoActivityAttributes.ContentState
+        if #available(iOS 16.2, *) {
+            current = activity.content.state
+        } else {
+            current = activity.contentState
+        }
         let startsAt = parseDate(call.getString("startsAt")) ?? current.startsAt
         let endsAt = parseDate(call.getString("endsAt")) ?? current.endsAt
         let next = WavoActivityAttributes.ContentState(
