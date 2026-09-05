@@ -20,6 +20,7 @@ import LiveActivityCoordinator from './LiveActivityCoordinator.jsx'
 import NotificationSetup from './NotificationSetup.jsx'
 import PeopleDashboard from './PeopleDashboard.jsx'
 import SmartMessageActions from './SmartMessageActions.jsx'
+import SpotifyPresenceCoordinator from './SpotifyPresenceCoordinator.jsx'
 import UiEnhancements from './UiEnhancements.jsx'
 import WavePhotoBridge from './WavePhotoBridge.jsx'
 import WavesPageV2 from './WavesPageV2.jsx'
@@ -47,6 +48,7 @@ function WavoApp() {
       <WavoTogether />
       <PeopleDashboard />
       <SmartMessageActions />
+      <SpotifyPresenceCoordinator />
       <LiveActivityCoordinator />
     </>
   )
