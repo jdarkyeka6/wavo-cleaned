@@ -7,6 +7,7 @@ import './chat-call-peer-fix.js'
 import './chat-keyboard-viewport.js'
 import App from './App.jsx'
 import AdminRoute from './AdminRoute.jsx'
+import CallKitCoordinator from './CallKitCoordinator.jsx'
 import ChatMotionCalls from './ChatMotionCalls.js'
 import ConfigError from './ConfigError.jsx'
 import NotificationSetup from './NotificationSetup.jsx'
@@ -37,6 +38,7 @@ createRoot(document.getElementById('root')).render(
     {isConfigured ? (
       <BrowserRouter>
         <WavePhotoBridge />
+        <CallKitCoordinator />
         <Routes>
           <Route path="/waves" element={<WavesPageV2 />} />
           <Route path="/admin" element={<AdminRoute />} />
