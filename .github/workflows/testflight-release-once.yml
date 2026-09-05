@@ -1,0 +1,73 @@
+name: Combined Wavo TestFlight Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/testflight-release-once.yml
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          if [ -d /Applications/Xcode_26.3.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.3.app
+          else
+            echo "Xcode_26.3 not on this runner; using the default:"
+            ls -d /Applications/Xcode*.app || true
+          fi
+          xcodebuild -version
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install npm dependencies
+        run: npm install
+      - name: Check the app config is present
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          missing=""
+          [ -z "$VITE_SUPABASE_URL" ] && missing="$missing VITE_SUPABASE_URL"
+          [ -z "$VITE_SUPABASE_ANON_KEY" ] && missing="$missing VITE_SUPABASE_ANON_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secret(s):$missing"
+            exit 1
+          fi
+          echo "Supabase config present."
+      - name: Build the current Wavo source
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_GIPHY_API_KEY: ${{ secrets.VITE_GIPHY_API_KEY }}
+        run: npm run build
+      - name: Verify the bundle carries the config
+        run: |
+          if ! grep -rq "supabase.co" dist/assets/*.js; then
+            echo "::error::Built bundle contains no Supabase URL - the app would black-screen."
+            exit 1
+          fi
+          echo "Bundle contains the Supabase URL."
+      - name: Sync web build into iOS
+        run: npx cap sync ios
+      - name: Set up Ruby and Fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: ios/App
+      - name: Build and upload to TestFlight
+        working-directory: ios/App
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bundle exec fastlane beta
