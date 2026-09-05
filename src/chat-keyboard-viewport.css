@@ -1,0 +1,40 @@
+:root {
+  --wavo-chat-viewport-offset-top: 0px;
+}
+
+/* iOS 26 can pan WKWebView's visual viewport when a chat input receives focus,
+   even when the document itself reports scrollTop = 0. While the keyboard is
+   open, pin the deep-chat shell to the measured visual viewport and compensate
+   for that pan. Message history keeps scrolling inside .dm-messages instead. */
+html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"],
+html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"] body,
+html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"] #root {
+  height: var(--wavo-viewport-height, 100dvh) !important;
+  min-height: 0 !important;
+  max-height: var(--wavo-viewport-height, 100dvh) !important;
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
+}
+
+html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"] .app-shell:has(.chat-screen) {
+  position: fixed !important;
+  z-index: 1;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: auto !important;
+  width: var(--wavo-viewport-width, 100vw) !important;
+  height: var(--wavo-viewport-height, 100dvh) !important;
+  min-height: 0 !important;
+  max-height: var(--wavo-viewport-height, 100dvh) !important;
+  overflow: hidden !important;
+  padding-bottom: 0 !important;
+  transform: translate3d(0, var(--wavo-chat-viewport-offset-top, 0px), 0);
+  will-change: transform;
+}
+
+html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"] .chat-screen {
+  height: 100% !important;
+  max-height: 100% !important;
+  min-height: 0 !important;
+}
