@@ -46,7 +46,7 @@ as $$
   select exists (
     select 1 from public.groups g
     where g.id = p_group_id
-      and g.created_by = p_user_id
+      and g.created_by = p_user_id::text
   ) or exists (
     select 1 from public.group_members gm
     where gm.group_id = p_group_id
@@ -100,8 +100,6 @@ create policy "people can leave group calls"
   on public.group_call_members for delete to authenticated
   using ((select auth.uid()) = user_id);
 
--- Private Realtime Broadcast signalling. Only members who joined the active
--- room can send or receive offers, answers and ICE candidates.
 drop policy if exists "group call members can send realtime signals" on realtime.messages;
 create policy "group call members can send realtime signals"
   on realtime.messages for insert to authenticated
