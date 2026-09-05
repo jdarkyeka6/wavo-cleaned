@@ -1,9 +1,6 @@
 name: iOS to TestFlight
 on:
   workflow_dispatch: {}
-  push:
-    branches:
-      - wavo-next-now-presence
 jobs:
   build:
     runs-on: macos-15
