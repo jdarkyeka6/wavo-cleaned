@@ -107,3 +107,88 @@ $$;
 
 revoke all on function public.get_visible_presence() from public;
 grant execute on function public.get_visible_presence() to authenticated;
+
+-- Smart Actions can turn a DM question into a tiny persistent poll without
+-- forcing the users into a Space.
+create table if not exists public.dm_polls (
+  id uuid primary key default gen_random_uuid(),
+  creator_id uuid not null references public.profiles(id) on delete cascade,
+  receiver_id uuid not null references public.profiles(id) on delete cascade,
+  question text not null check (char_length(question) between 1 and 240),
+  options jsonb not null,
+  created_at timestamptz not null default now(),
+  closes_at timestamptz,
+  constraint dm_polls_distinct_people check (creator_id <> receiver_id),
+  constraint dm_polls_options_array check (jsonb_typeof(options) = 'array' and jsonb_array_length(options) between 2 and 6)
+);
+
+create table if not exists public.dm_poll_votes (
+  poll_id uuid not null references public.dm_polls(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  option_index integer not null check (option_index between 0 and 5),
+  updated_at timestamptz not null default now(),
+  primary key (poll_id, user_id)
+);
+
+create index if not exists dm_polls_people_idx on public.dm_polls(creator_id, receiver_id, created_at desc);
+
+alter table public.dm_polls enable row level security;
+alter table public.dm_poll_votes enable row level security;
+revoke all on table public.dm_polls, public.dm_poll_votes from anon;
+grant select, insert, update, delete on table public.dm_polls, public.dm_poll_votes to authenticated;
+
+create policy "dm poll participants read"
+  on public.dm_polls for select to authenticated
+  using ((select auth.uid()) = creator_id or (select auth.uid()) = receiver_id);
+create policy "friends create dm polls"
+  on public.dm_polls for insert to authenticated
+  with check (
+    (select auth.uid()) = creator_id
+    and public.are_friends(creator_id, receiver_id)
+    and not public.blocked_between(creator_id, receiver_id)
+  );
+create policy "dm poll creator updates"
+  on public.dm_polls for update to authenticated
+  using ((select auth.uid()) = creator_id)
+  with check ((select auth.uid()) = creator_id);
+create policy "dm poll creator deletes"
+  on public.dm_polls for delete to authenticated
+  using ((select auth.uid()) = creator_id);
+
+create policy "dm poll participants read votes"
+  on public.dm_poll_votes for select to authenticated
+  using (
+    exists (
+      select 1 from public.dm_polls p
+      where p.id = poll_id
+        and ((select auth.uid()) = p.creator_id or (select auth.uid()) = p.receiver_id)
+    )
+  );
+create policy "dm poll participants vote"
+  on public.dm_poll_votes for insert to authenticated
+  with check (
+    (select auth.uid()) = user_id
+    and exists (
+      select 1 from public.dm_polls p
+      where p.id = poll_id
+        and ((select auth.uid()) = p.creator_id or (select auth.uid()) = p.receiver_id)
+        and (p.closes_at is null or p.closes_at > now())
+        and option_index < jsonb_array_length(p.options)
+    )
+  );
+create policy "dm poll participant changes vote"
+  on public.dm_poll_votes for update to authenticated
+  using ((select auth.uid()) = user_id)
+  with check (
+    (select auth.uid()) = user_id
+    and exists (
+      select 1 from public.dm_polls p
+      where p.id = poll_id
+        and ((select auth.uid()) = p.creator_id or (select auth.uid()) = p.receiver_id)
+        and (p.closes_at is null or p.closes_at > now())
+        and option_index < jsonb_array_length(p.options)
+    )
+  );
+create policy "dm poll voter removes vote"
+  on public.dm_poll_votes for delete to authenticated
+  using ((select auth.uid()) = user_id);
