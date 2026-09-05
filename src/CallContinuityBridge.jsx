@@ -92,7 +92,7 @@ export default function CallContinuityBridge() {
         .maybeSingle()
       if (disposed || peerError || !peer?.id) return
       const key = `${me}:${peer.id}`
-      if (key === lastKey && calls.length) return
+      if (key === lastKey) return
       lastKey = key
 
       const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
