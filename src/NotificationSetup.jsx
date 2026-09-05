@@ -5,6 +5,7 @@ import {
   ensureNotificationPermission,
   pushSupported,
   registerForPush,
+  registerVoipForPush,
 } from './push'
 import { isNativeApp, isIOS } from './lib/platform'
 import './notification-setup.css'
@@ -45,6 +46,11 @@ export default function NotificationSetup() {
       const deliberatelyDisabled = localStorage.getItem(PUSH_DISABLED_KEY) === '1'
 
       if (isNativeApp && isIOS()) {
+        // CallKit uses its own PushKit token. Register it regardless of normal
+        // alert-notification permission so incoming calls can use the native
+        // iOS calling UI instead of a delayed notification banner.
+        await registerVoipForPush(userId)
+
         const { PushNotifications } = await import('@capacitor/push-notifications')
         const permission = await PushNotifications.checkPermissions()
 
@@ -87,8 +93,6 @@ export default function NotificationSetup() {
         }
       }
 
-      // Web users who have already granted permission should quietly refresh
-      // their subscription, unless they explicitly disabled Wavo notifications.
       if (
         !deliberatelyDisabled &&
         'Notification' in window &&
