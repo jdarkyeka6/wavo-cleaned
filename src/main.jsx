@@ -15,6 +15,8 @@ import ChatMotionCalls from './ChatMotionCalls.js'
 import ConfigError from './ConfigError.jsx'
 import DropInVoice from './DropInVoice.jsx'
 import NotificationSetup from './NotificationSetup.jsx'
+import PeopleDashboard from './PeopleDashboard.jsx'
+import SmartMessageActions from './SmartMessageActions.jsx'
 import UiEnhancements from './UiEnhancements.jsx'
 import WavePhotoBridge from './WavePhotoBridge.jsx'
 import WavesPageV2 from './WavesPageV2.jsx'
@@ -38,6 +40,8 @@ function WavoApp() {
       <CallContinuityBridge />
       <DropInVoice />
       <WavoTogether />
+      <PeopleDashboard />
+      <SmartMessageActions />
     </>
   )
 }
