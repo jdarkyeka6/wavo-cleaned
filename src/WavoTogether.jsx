@@ -206,7 +206,7 @@ export default function WavoTogether() {
   const activeQueues = snapshot?.queues || []
   const games = snapshot?.games || []
 
-  const weekCalls = (snapshot?.calls || []).filter((call) => call.status === 'ended')
+  const weekCalls = (snapshot?.calls || []).filter((call) => call.status === 'ended').length
   const weekCome = (snapshot?.invites || []).reduce((count, invite) => count + (invite.responses || []).filter((r) => r.user_id === userId && r.response === 'yep').length, 0)
   const weekKnocks = (snapshot?.knocks || []).filter((knock) => knock.sender_id === userId).length
   const weekGames = games.filter((game) => game.status === 'finished').length

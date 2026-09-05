@@ -40,11 +40,16 @@ export default function ChatMotionCalls() {
   const pendingIceRef = useRef([])
   const offerSentRef = useRef(false)
   const startCallRef = useRef(null)
+  const reconnectTimerRef = useRef(null)
 
   useEffect(() => { activeCallRef.current = activeCall }, [activeCall])
   useEffect(() => { incomingCallRef.current = incomingCall }, [incomingCall])
 
   function resetPeerOnly() {
+    if (reconnectTimerRef.current) {
+      window.clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = null
+    }
     if (signalChannelRef.current) {
       supabase.removeChannel(signalChannelRef.current)
       signalChannelRef.current = null
@@ -137,8 +142,28 @@ export default function ChatMotionCalls() {
     }
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'connected') setPhase('active')
-      if (['failed', 'disconnected'].includes(pc.connectionState)) setPhase('reconnecting')
+      if (pc.connectionState === 'connected') {
+        if (reconnectTimerRef.current) {
+          window.clearTimeout(reconnectTimerRef.current)
+          reconnectTimerRef.current = null
+        }
+        setPhase('active')
+      }
+      if (['failed', 'disconnected'].includes(pc.connectionState)) {
+        setPhase('reconnecting')
+        if (activeCallRef.current?.role === 'caller' && !reconnectTimerRef.current) {
+          reconnectTimerRef.current = window.setTimeout(async () => {
+            reconnectTimerRef.current = null
+            if (peerRef.current !== pc || pc.connectionState === 'connected' || pc.signalingState !== 'stable') return
+            try {
+              pc.restartIce?.()
+              await sendOffer(callId, true)
+            } catch (err) {
+              console.warn('[wavo calls] ICE restart failed', err)
+            }
+          }, 1200)
+        }
+      }
       if (pc.connectionState === 'closed') setRemoteReady(false)
     }
 
@@ -153,10 +178,10 @@ export default function ChatMotionCalls() {
     }
   }
 
-  async function sendOffer(callId) {
-    if (offerSentRef.current) return
+  async function sendOffer(callId, iceRestart = false) {
+    if (offerSentRef.current && !iceRestart) return
     const pc = createPeerConnection(callId)
-    const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
+    const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true, iceRestart })
     await pc.setLocalDescription(offer)
     offerSentRef.current = true
     await signalChannelRef.current?.send({
