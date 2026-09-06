@@ -10,7 +10,6 @@ const APNS_KEY_P8 = Deno.env.get("APNS_KEY_P8") ?? "";
 const APNS_KEY_ID = Deno.env.get("APNS_KEY_ID") ?? "";
 const APNS_TEAM_ID = Deno.env.get("APNS_TEAM_ID") ?? "";
 const APNS_TOPIC = Deno.env.get("APNS_TOPIC") ?? "lol.wavo.app";
-const APNS_ENV = (Deno.env.get("APNS_ENV") ?? "auto").toLowerCase();
 const APNS_PRODUCTION_HOST = "https://api.push.apple.com";
 const APNS_SANDBOX_HOST = "https://api.sandbox.push.apple.com";
 
@@ -68,10 +67,9 @@ type ApnsOptions = {
 };
 
 function apnsHosts(): string[] {
-  if (APNS_ENV === "sandbox") return [APNS_SANDBOX_HOST];
-  if (APNS_ENV === "production") return [APNS_PRODUCTION_HOST];
-  // TestFlight and App Store builds use production APNs. Try that first, then
-  // sandbox so local/dev builds still work without needing a secret flip.
+  // Wavo is distributed through TestFlight/App Store, whose tokens are
+  // production APNs tokens. Always try production first. If a developer build
+  // registers a sandbox token, retry sandbox on Apple's environment/token error.
   return [APNS_PRODUCTION_HOST, APNS_SANDBOX_HOST];
 }
 
@@ -94,8 +92,6 @@ async function sendApns(
       "apns-priority": options.priority,
       "content-type": "application/json",
     };
-    // Never let an old ringing event get queued and delivered after the call
-    // has already timed out.
     if (options.pushType === "voip") headers["apns-expiration"] = "0";
 
     const res = await fetch(`${hosts[i]}/3/device/${deviceToken}`, {
@@ -108,9 +104,6 @@ async function sendApns(
 
     if (i < hosts.length - 1) {
       const failureText = await res.clone().text();
-      // Wrong APNs environment is common when switching between Xcode and
-      // TestFlight. Retry the other Apple endpoint before treating the token
-      // as dead.
       if (/BadEnvironmentKeyInToken|BadDeviceToken/.test(failureText)) continue;
     }
     return res;
