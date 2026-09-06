@@ -77,7 +77,7 @@ function launchFeature(id) {
 function inferFeatureFromClick(event) {
   const target = event.target instanceof Element ? event.target : null;
   if (!target) return null;
-  if (target.closest(".personalized-core")) return null;
+  if (target.closest(".personalized-core") || target.closest(".core-editor-layer") || target.closest(".core-onboarding-layer")) return null;
   const button = target.closest("button");
   const text = button?.textContent?.trim().toLowerCase() || "";
   if (button?.closest(".bottom-nav")) {
@@ -95,6 +95,15 @@ function inferFeatureFromClick(event) {
   return null;
 }
 
+function moveItem(items, id, direction) {
+  const index = items.indexOf(id);
+  const nextIndex = index + direction;
+  if (index < 0 || nextIndex < 0 || nextIndex >= items.length) return items;
+  const next = [...items];
+  [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+  return next;
+}
+
 function CoreEditor({ selected, onClose, onSave }) {
   const [draft, setDraft] = useState(selected);
 
@@ -106,17 +115,6 @@ function CoreEditor({ selected, onClose, onSave }) {
     });
   }
 
-  function move(id, direction) {
-    setDraft((current) => {
-      const index = current.indexOf(id);
-      const nextIndex = index + direction;
-      if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return current;
-      const next = [...current];
-      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
-      return next;
-    });
-  }
-
   return (
     <div className="core-editor-layer" role="dialog" aria-modal="true" aria-label="Customize your Wavo Core">
       <section className="core-editor-sheet">
@@ -125,7 +123,7 @@ function CoreEditor({ selected, onClose, onSave }) {
           {draft.map((id, index) => {
             const feature = getCoreFeature(id);
             if (!feature) return null;
-            return <div key={id}><span>{feature.emoji}</span><strong>{feature.label}</strong><div><button onClick={() => move(id, -1)} disabled={index === 0} aria-label={`Move ${feature.label} up`}>↑</button><button onClick={() => move(id, 1)} disabled={index === draft.length - 1} aria-label={`Move ${feature.label} down`}>↓</button></div></div>;
+            return <div key={id}><span>{feature.emoji}</span><strong>{feature.label}</strong><div><button onClick={() => setDraft((current) => moveItem(current, id, -1))} disabled={index === 0} aria-label={`Move ${feature.label} up`}>↑</button><button onClick={() => setDraft((current) => moveItem(current, id, 1))} disabled={index === draft.length - 1} aria-label={`Move ${feature.label} down`}>↓</button></div></div>;
           })}
         </div>
         <div className="core-editor-grid">
@@ -140,12 +138,64 @@ function CoreEditor({ selected, onClose, onSave }) {
   );
 }
 
+function CoreOnboarding({ step, setStep, draft, setDraft, onFinish }) {
+  function toggle(id) {
+    setDraft((current) => {
+      if (current.includes(id)) return current.filter((item) => item !== id);
+      if (current.length >= 6) return current;
+      return [...current, id];
+    });
+  }
+
+  return (
+    <div className="ux-overlay core-onboarding-layer" role="dialog" aria-modal="true" aria-label="Set up your Wavo Core">
+      <section className="ux-sheet onboarding-sheet core-onboarding">
+        <div className="core-onboarding-progress"><i className="active" /><i className={step >= 1 ? "active" : ""} /><i className={step >= 2 ? "active" : ""} /></div>
+
+        {step === 0 && <>
+          <div className="core-onboarding-hero"><div className="wavo-mark">W</div><span className="eyebrow">MAKE WAVO YOURS</span><h2>Same Wavo. Your setup.</h2><p>Choose what deserves the front row. Everything else stays in Wavo, just a little further down.</p></div>
+          <div className="core-promise"><strong>You stay in control.</strong><span>Wavo can notice what you use and suggest it below your Core. It will never move your layout by itself.</span></div>
+          <div className="core-onboarding-actions"><span /><button className="primary-btn" onClick={() => setStep(1)}>Build my Core</button></div>
+        </>}
+
+        {step === 1 && <>
+          <div className="core-pick-head"><div><span className="eyebrow">PICK YOUR CORE</span><h2>What should be one tap away?</h2></div><span>{draft.length}/6 selected</span></div>
+          <div className="core-pick-grid">
+            {CORE_FEATURES.map((feature) => {
+              const active = draft.includes(feature.id);
+              return <button key={feature.id} className={active ? "selected" : ""} onClick={() => toggle(feature.id)} aria-pressed={active}><span>{feature.emoji}</span><div><strong>{feature.label}</strong><small>{feature.hint}</small></div><b>{active ? "✓" : "+"}</b></button>;
+            })}
+          </div>
+          {draft.length < 3 && <div className="core-onboarding-count-warn">Pick at least 3. You can change this whenever you want.</div>}
+          <div className="core-onboarding-actions"><button className="text-btn" onClick={() => setStep(0)}>Back</button><button className="primary-btn" disabled={draft.length < 3} onClick={() => setStep(2)}>Next</button></div>
+        </>}
+
+        {step === 2 && <>
+          <div className="core-pick-head"><div><span className="eyebrow">YOUR ORDER</span><h2>Put Wavo where you want it.</h2></div><span>Top to bottom</span></div>
+          <div className="core-order-list">
+            {draft.map((id, index) => {
+              const feature = getCoreFeature(id);
+              if (!feature) return null;
+              return <div key={id}><span>{feature.emoji}</span><strong>{feature.label}</strong><div><button onClick={() => setDraft((current) => moveItem(current, id, -1))} disabled={index === 0} aria-label={`Move ${feature.label} up`}>↑</button><button onClick={() => setDraft((current) => moveItem(current, id, 1))} disabled={index === draft.length - 1} aria-label={`Move ${feature.label} down`}>↓</button></div></div>;
+            })}
+          </div>
+          <div className="core-promise"><strong>Above the line = yours.</strong><span>Suggestions can appear underneath if Wavo notices something useful. Adding it to Core is always your choice.</span></div>
+          <div className="core-onboarding-actions"><button className="text-btn" onClick={() => setStep(1)}>Back</button><button className="primary-btn" onClick={onFinish}>Finish setup</button></div>
+        </>}
+      </section>
+    </div>
+  );
+}
+
 export default function PersonalizedCore() {
   const [userId, setUserId] = useState(null);
   const [host, setHost] = useState(null);
   const [core, setCore] = useState(DEFAULT_CORE_FEATURES);
   const [usage, setUsage] = useState({});
   const [editing, setEditing] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
+  const [onboardingDraft, setOnboardingDraft] = useState(DEFAULT_CORE_FEATURES);
 
   useEffect(() => {
     let alive = true;
@@ -160,8 +210,16 @@ export default function PersonalizedCore() {
   useEffect(() => {
     if (!userId) return;
     const prefs = getUxPrefs(userId);
-    setCore(coreForUser(userId));
+    const selected = coreForUser(userId);
+    setCore(selected);
+    setOnboardingDraft(selected);
     setUsage(prefs.coreUsage || {});
+    try {
+      localStorage.setItem(`wavo:onboarding:v2:${userId}`, "done");
+      setOnboardingOpen(localStorage.getItem(`wavo:onboarding:v3:${userId}`) !== "done");
+    } catch {
+      setOnboardingOpen(!prefs.coreSetupVersion);
+    }
     const sync = () => {
       const next = getUxPrefs(userId);
       setCore(coreForUser(userId));
@@ -241,15 +299,26 @@ export default function PersonalizedCore() {
     window.dispatchEvent(new CustomEvent("wavo:core-updated", { detail: { userId } }));
   }
 
+  function finishOnboarding() {
+    const normalized = normalizeCoreFeatures(onboardingDraft);
+    if (!userId || normalized.length < 3) return;
+    updateUxPrefs(userId, { coreFeatures: normalized, coreSetupVersion: 1, coreSuggestions: true });
+    setCore(normalized);
+    try { localStorage.setItem(`wavo:onboarding:v3:${userId}`, "done"); } catch { /* preference already persisted */ }
+    setOnboardingOpen(false);
+    setOnboardingStep(0);
+    window.dispatchEvent(new CustomEvent("wavo:core-updated", { detail: { userId } }));
+  }
+
   function addSuggested(id) {
     if (core.includes(id)) return;
     if (core.length >= 6) return setEditing(true);
     save([...core, id]);
   }
 
-  if (!host || !userId) return editing ? <CoreEditor selected={core} onClose={() => setEditing(false)} onSave={save} /> : null;
+  if (!userId) return null;
 
-  const content = (
+  const content = host ? createPortal(
     <section className="personalized-core">
       <div className="personalized-core-head"><div><span className="eyebrow">YOUR CORE</span><h2>Wavo, your way.</h2></div><button onClick={() => setEditing(true)}><SlidersHorizontal size={16} /> Edit</button></div>
       <div className="personalized-core-grid">
@@ -262,8 +331,13 @@ export default function PersonalizedCore() {
       </div>
       {suggestions.length > 0 && <div className="core-suggestions"><div><span className="eyebrow">FOR YOU</span><small>Wavo noticed these, but nothing moves unless you say so.</small></div>{suggestions.map(({ feature }) => <button key={feature.id} onClick={() => addSuggested(feature.id)}><span>{feature.emoji}</span><div><strong>{feature.label}</strong><small>Add to Core</small></div><b>＋</b></button>)}</div>}
       <div className="core-scroll-cue"><span>Keep scrolling for everything else</span><i>↓</i></div>
-    </section>
-  );
+    </section>,
+    host,
+  ) : null;
 
-  return <>{createPortal(content, host)}{editing && <CoreEditor selected={core} onClose={() => setEditing(false)} onSave={save} />}</>;
+  return <>
+    {content}
+    {onboardingOpen && <CoreOnboarding step={onboardingStep} setStep={setOnboardingStep} draft={onboardingDraft} setDraft={setOnboardingDraft} onFinish={finishOnboarding} />}
+    {editing && !onboardingOpen && <CoreEditor selected={core} onClose={() => setEditing(false)} onSave={save} />}
+  </>;
 }
