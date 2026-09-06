@@ -14,7 +14,7 @@ export default function SupportPage() {
   const [messages, setMessages] = useState([welcome]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
-  const threadRef = useRef(null);
+  const bodyRef = useRef(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -37,11 +37,14 @@ export default function SupportPage() {
   }, []);
 
   useEffect(() => {
-    const thread = threadRef.current;
-    if (!thread) return;
-    requestAnimationFrame(() => {
-      thread.scrollTop = thread.scrollHeight;
+    const body = bodyRef.current;
+    if (!body) return;
+
+    const frame = requestAnimationFrame(() => {
+      body.scrollTop = body.scrollHeight;
     });
+
+    return () => cancelAnimationFrame(frame);
   }, [messages, sending]);
 
   const send = async () => {
@@ -49,7 +52,9 @@ export default function SupportPage() {
     if (!question || sending || !session?.access_token) return;
 
     const userMessage = { role: "user", content: question };
-    const priorHistory = messages.slice(-8).map(({ role, content }) => ({ role, content }));
+    const priorHistory = messages
+      .slice(-8)
+      .map(({ role, content }) => ({ role, content }));
 
     setMessages((current) => [...current, userMessage]);
     setText("");
@@ -99,7 +104,7 @@ export default function SupportPage() {
 
   if (!ready) {
     return (
-      <div className="support-shell">
+      <div className="support-shell support-centered">
         <div className="support-loading">Opening Wavo Support…</div>
       </div>
     );
@@ -132,11 +137,11 @@ export default function SupportPage() {
         <div className="support-safe"><ShieldCheck size={16} /> protected</div>
       </header>
 
-      <section className="support-body">
-        <div className="support-thread" ref={threadRef} aria-live="polite">
+      <section className="support-body" ref={bodyRef} aria-live="polite">
+        <div className="support-thread">
           {messages.map((message, index) => (
             <div
-              key={`${message.role}-${index}-${message.content.slice(0, 20)}`}
+              key={`${message.role}-${index}`}
               className={`support-row ${message.role === "user" ? "is-user" : "is-ai"}`}
             >
               <div className="support-avatar">
