@@ -30,6 +30,69 @@ client.from = (table) => {
   return query;
 };
 
+// A caller can create the call row successfully and then fail to subscribe to
+// the private WebRTC signalling channel. ChatMotionCalls gives that attempt
+// about eight seconds before surfacing "Call signalling timed out". Previously
+// the database row stayed `ringing`, so the callee could open Wavo afterwards
+// and see a dead incoming-call popup. Keep the server state in lockstep with
+// that failure path even if the UI component has already torn itself down.
+const CALL_SIGNAL_TOPIC = /^wavo-call:([0-9a-f-]{36})$/i;
+const originalChannel = client.channel.bind(client);
+
+async function cancelFailedOutgoingCall(callId) {
+  try {
+    const { data } = await client.auth.getUser();
+    const user = data?.user;
+    if (!user) return;
+
+    await originalFrom("call_sessions")
+      .update({ status: "cancelled" })
+      .eq("id", callId)
+      .eq("caller_id", user.id)
+      .eq("status", "ringing");
+  } catch (err) {
+    console.warn("[wavo calls] failed to cancel stale signalling call", err);
+  }
+}
+
+client.channel = (topic, options) => {
+  const channel = originalChannel(topic, options);
+  const match = CALL_SIGNAL_TOPIC.exec(String(topic || ""));
+  if (!match) return channel;
+
+  const callId = match[1];
+  const originalSubscribe = channel.subscribe.bind(channel);
+
+  channel.subscribe = (callback, timeout) => {
+    let subscribed = false;
+    let cleanupStarted = false;
+
+    const cancelOnce = () => {
+      if (subscribed || cleanupStarted) return;
+      cleanupStarted = true;
+      void cancelFailedOutgoingCall(callId);
+    };
+
+    // Fire just before ChatMotionCalls' own 8-second signalling timeout so the
+    // callee cannot resurrect the row during the error/teardown race.
+    const cleanupTimer = window.setTimeout(cancelOnce, 7600);
+
+    return originalSubscribe((status, error) => {
+      if (status === "SUBSCRIBED") {
+        subscribed = true;
+        window.clearTimeout(cleanupTimer);
+      } else if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
+        window.clearTimeout(cleanupTimer);
+        cancelOnce();
+      }
+
+      callback?.(status, error);
+    }, timeout);
+  };
+
+  return channel;
+};
+
 export const supabase = client;
 
 // Heartbeat: records "this user was active today" for the founder dashboard.
