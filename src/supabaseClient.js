@@ -95,6 +95,58 @@ client.channel = (topic, options) => {
 
 export const supabase = client;
 
+// Wavo AI support watches only messages sent by the signed-in user. The Edge
+// Function performs the real authorization and all rate limiting, so this
+// client hook is only a trigger and cannot bypass the anti-spam gate.
+let supportAiChannel = null;
+let supportAiUserId = null;
+
+async function connectSupportAi(user) {
+  if (!user?.id || supportAiUserId === user.id) return;
+
+  if (supportAiChannel) {
+    try { await client.removeChannel(supportAiChannel); } catch {}
+    supportAiChannel = null;
+  }
+
+  supportAiUserId = user.id;
+
+  try {
+    const { data: support, error } = await originalFrom("profiles")
+      .select("id")
+      .eq("username", "support")
+      .maybeSingle();
+
+    if (error || !support?.id) return;
+
+    supportAiChannel = originalChannel(`wavo-support-ai:${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `sender_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const message = payload?.new;
+          if (!message || message.receiver_id !== support.id || message.type !== "text") return;
+
+          void client.functions.invoke("support-ai", {
+            body: { messageId: message.id },
+          }).then(({ error: invokeError }) => {
+            if (invokeError) console.warn("[wavo support ai] invoke failed", invokeError);
+          }).catch((invokeError) => {
+            console.warn("[wavo support ai] invoke failed", invokeError);
+          });
+        }
+      )
+      .subscribe();
+  } catch (err) {
+    console.warn("[wavo support ai] setup failed", err);
+  }
+}
+
 // Heartbeat: records "this user was active today" for the founder dashboard.
 // Fires when the app opens with a signed-in session (and after sign-in).
 // The database upsert is idempotent — one row per user per day, so calling
@@ -104,7 +156,17 @@ let lastPing = 0;
 // host, so this would only produce failing background requests.
 if (isConfigured) {
   supabase.auth.onAuthStateChange((_event, session) => {
-    if (!session?.user) return;
+    if (!session?.user) {
+      supportAiUserId = null;
+      if (supportAiChannel) {
+        void client.removeChannel(supportAiChannel);
+        supportAiChannel = null;
+      }
+      return;
+    }
+
+    void connectSupportAi(session.user);
+
     const now = Date.now();
     if (now - lastPing < 60_000) return; // throttle: at most once per minute
     lastPing = now;
