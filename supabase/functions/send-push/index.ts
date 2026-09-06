@@ -10,9 +10,8 @@ const APNS_KEY_P8 = Deno.env.get("APNS_KEY_P8") ?? "";
 const APNS_KEY_ID = Deno.env.get("APNS_KEY_ID") ?? "";
 const APNS_TEAM_ID = Deno.env.get("APNS_TEAM_ID") ?? "";
 const APNS_TOPIC = Deno.env.get("APNS_TOPIC") ?? "lol.wavo.app";
-const APNS_HOST = (Deno.env.get("APNS_ENV") ?? "sandbox") === "production"
-  ? "https://api.push.apple.com"
-  : "https://api.sandbox.push.apple.com";
+const APNS_PRODUCTION_HOST = "https://api.push.apple.com";
+const APNS_SANDBOX_HOST = "https://api.sandbox.push.apple.com";
 
 const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || (() => {
   try {
@@ -67,6 +66,13 @@ type ApnsOptions = {
   priority: "10" | "5";
 };
 
+function apnsHosts(): string[] {
+  // Wavo is distributed through TestFlight/App Store, whose tokens are
+  // production APNs tokens. Always try production first. If a developer build
+  // registers a sandbox token, retry sandbox on Apple's environment/token error.
+  return [APNS_PRODUCTION_HOST, APNS_SANDBOX_HOST];
+}
+
 async function sendApns(
   deviceToken: string,
   body: Record<string, unknown>,
@@ -75,17 +81,35 @@ async function sendApns(
   const jwt = await apnsJwt();
   if (!jwt) return null;
 
-  return fetch(`${APNS_HOST}/3/device/${deviceToken}`, {
-    method: "POST",
-    headers: {
+  const hosts = apnsHosts();
+  let lastResponse: Response | null = null;
+
+  for (let i = 0; i < hosts.length; i++) {
+    const headers: Record<string, string> = {
       authorization: `bearer ${jwt}`,
       "apns-topic": options.topic,
       "apns-push-type": options.pushType,
       "apns-priority": options.priority,
       "content-type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+    };
+    if (options.pushType === "voip") headers["apns-expiration"] = "0";
+
+    const res = await fetch(`${hosts[i]}/3/device/${deviceToken}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+    lastResponse = res;
+    if (res.ok) return res;
+
+    if (i < hosts.length - 1) {
+      const failureText = await res.clone().text();
+      if (/BadEnvironmentKeyInToken|BadDeviceToken/.test(failureText)) continue;
+    }
+    return res;
+  }
+
+  return lastResponse;
 }
 
 async function classifyApnsFailure(
@@ -95,7 +119,7 @@ async function classifyApnsFailure(
   failures: string[],
 ) {
   const text = await res.text();
-  if (res.status === 410 || /BadDeviceToken|Unregistered/.test(text)) {
+  if (res.status === 410 || /Unregistered/.test(text)) {
     dead.push(sub.id);
   }
   failures.push(`${sub.platform} ${res.status}: ${text.slice(0, 120)}`);
@@ -186,8 +210,6 @@ Deno.serve(async (req) => {
     return new Response("Missing dispatch_id", { status: 400 });
   }
 
-  // The DB trigger creates a random one-use dispatch row. Consuming it here
-  // means callers cannot choose a recipient or replay a push.
   const { data: dispatch, error: dispatchError } = await admin
     .from("push_dispatch_queue")
     .delete()
@@ -314,9 +336,6 @@ Deno.serve(async (req) => {
 
       if (sub.platform === "ios") {
         if (!sub.device_token) return;
-
-        // Once this account has a PushKit device, incoming calls use CallKit.
-        // Do not also show the old alert banner for the same call.
         if (callId && hasVoipDevice) return;
 
         const res = await sendApns(
@@ -347,9 +366,7 @@ Deno.serve(async (req) => {
       }
     } catch (err) {
       const status = (err as { statusCode?: number })?.statusCode;
-      if (status === 404 || status === 410) {
-        dead.push(sub.id);
-      }
+      if (status === 404 || status === 410) dead.push(sub.id);
       failures.push(`${sub.platform} ${status ?? ""}: ${(err as Error).message?.slice(0, 120)}`);
     }
   }));
