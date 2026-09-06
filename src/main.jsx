@@ -24,6 +24,7 @@ import PersonalizedCore from './PersonalizedCore.jsx'
 import Phase3Hub from './Phase3Hub.jsx'
 import SmartMessageActions from './SmartMessageActions.jsx'
 import SpotifyPresenceCoordinator from './SpotifyPresenceCoordinator.jsx'
+import SupportPage from './SupportPage.jsx'
 import UiEnhancements from './UiEnhancements.jsx'
 import WavePhotoBridge from './WavePhotoBridge.jsx'
 import WavesPageV2 from './WavesPageV2.jsx'
@@ -67,6 +68,7 @@ createRoot(document.getElementById('root')).render(
         <CallKitCoordinator />
         <Routes>
           <Route path="/waves" element={<WavesPageV2 />} />
+          <Route path="/support" element={<SupportPage />} />
           <Route path="/admin" element={<AdminRoute />} />
           <Route path="*" element={<WavoApp />} />
         </Routes>
