@@ -1,5 +1,6 @@
 name: Combined Wavo TestFlight Release
 
+# Release trigger refreshed for the call-lifecycle fixes.
 on:
   workflow_dispatch:
   push:
