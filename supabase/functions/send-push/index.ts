@@ -68,9 +68,6 @@ type ApnsOptions = {
 };
 
 function apnsHosts(): string[] {
-  // TestFlight/App Store tokens are production APNs tokens. Respect the
-  // configured environment instead of masking the real Apple error by
-  // automatically falling through to the other APNs environment.
   if (APNS_ENV === "sandbox" || APNS_ENV === "development") {
     return [APNS_SANDBOX_HOST];
   }
@@ -287,7 +284,6 @@ Deno.serve(async (req) => {
   }
 
   const typedSubs = subs as PushSub[];
-  const hasVoipDevice = Boolean(callId) && typedSubs.some((sub) => sub.platform === "ios_voip");
   const dead: string[] = [];
   let sent = 0;
   const failures: string[] = [];
@@ -335,8 +331,10 @@ Deno.serve(async (req) => {
 
       if (sub.platform === "ios") {
         if (!sub.device_token) return;
-        if (callId && hasVoipDevice) return;
 
+        // Never suppress the normal APNs alert merely because a PushKit token
+        // exists. If VoIP delivery is misconfigured or rejected, the user still
+        // needs to be told that someone is calling them.
         const res = await sendApns(
           sub.device_token,
           {
