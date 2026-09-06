@@ -10,6 +10,7 @@ const APNS_KEY_P8 = Deno.env.get("APNS_KEY_P8") ?? "";
 const APNS_KEY_ID = Deno.env.get("APNS_KEY_ID") ?? "";
 const APNS_TEAM_ID = Deno.env.get("APNS_TEAM_ID") ?? "";
 const APNS_TOPIC = Deno.env.get("APNS_TOPIC") ?? "lol.wavo.app";
+const APNS_ENV = (Deno.env.get("APNS_ENV") ?? "production").trim().toLowerCase();
 const APNS_PRODUCTION_HOST = "https://api.push.apple.com";
 const APNS_SANDBOX_HOST = "https://api.sandbox.push.apple.com";
 
@@ -67,10 +68,13 @@ type ApnsOptions = {
 };
 
 function apnsHosts(): string[] {
-  // Wavo is distributed through TestFlight/App Store, whose tokens are
-  // production APNs tokens. Always try production first. If a developer build
-  // registers a sandbox token, retry sandbox on Apple's environment/token error.
-  return [APNS_PRODUCTION_HOST, APNS_SANDBOX_HOST];
+  // TestFlight/App Store tokens are production APNs tokens. Respect the
+  // configured environment instead of masking the real Apple error by
+  // automatically falling through to the other APNs environment.
+  if (APNS_ENV === "sandbox" || APNS_ENV === "development") {
+    return [APNS_SANDBOX_HOST];
+  }
+  return [APNS_PRODUCTION_HOST];
 }
 
 async function sendApns(
@@ -101,11 +105,6 @@ async function sendApns(
     });
     lastResponse = res;
     if (res.ok) return res;
-
-    if (i < hosts.length - 1) {
-      const failureText = await res.clone().text();
-      if (/BadEnvironmentKeyInToken|BadDeviceToken/.test(failureText)) continue;
-    }
     return res;
   }
 
