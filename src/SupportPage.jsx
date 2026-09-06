@@ -8,23 +8,13 @@ const welcome = {
   content: "Hi, I’m Wavo Support AI. Ask me about Wavo accounts, features, bugs, notifications, Premium, safety, or troubleshooting. If I’m not sure, I’ll tell you instead of making something up.",
 };
 
-const STORAGE_KEY = "wavo-support-ai-thread-v1";
-
-function loadSavedThread() {
-  try {
-    const parsed = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "null");
-    if (Array.isArray(parsed) && parsed.length) return parsed.slice(-24);
-  } catch {}
-  return [welcome];
-}
-
 export default function SupportPage() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
-  const [messages, setMessages] = useState(loadSavedThread);
+  const [messages, setMessages] = useState([welcome]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
-  const bottomRef = useRef(null);
+  const threadRef = useRef(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -47,10 +37,11 @@ export default function SupportPage() {
   }, []);
 
   useEffect(() => {
-    try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-24)));
-    } catch {}
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const thread = threadRef.current;
+    if (!thread) return;
+    requestAnimationFrame(() => {
+      thread.scrollTop = thread.scrollHeight;
+    });
   }, [messages, sending]);
 
   const send = async () => {
@@ -142,10 +133,10 @@ export default function SupportPage() {
       </header>
 
       <section className="support-body">
-        <div className="support-thread" aria-live="polite">
+        <div className="support-thread" ref={threadRef} aria-live="polite">
           {messages.map((message, index) => (
             <div
-              key={`${message.role}-${index}`}
+              key={`${message.role}-${index}-${message.content.slice(0, 20)}`}
               className={`support-row ${message.role === "user" ? "is-user" : "is-ai"}`}
             >
               <div className="support-avatar">
@@ -165,7 +156,6 @@ export default function SupportPage() {
               </div>
             </div>
           )}
-          <div ref={bottomRef} />
         </div>
       </section>
 
