@@ -8,38 +8,67 @@ const welcome = {
   content: "Hi, I’m Wavo Support AI. Ask me about Wavo accounts, features, bugs, notifications, Premium, safety, or troubleshooting. If I’m not sure, I’ll tell you instead of making something up.",
 };
 
+const STORAGE_KEY = "wavo-support-ai-thread-v1";
+
+function loadSavedThread() {
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "null");
+    if (Array.isArray(parsed) && parsed.length) return parsed.slice(-24);
+  } catch {}
+  return [welcome];
+}
+
 export default function SupportPage() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
-  const [messages, setMessages] = useState([welcome]);
+  const [messages, setMessages] = useState(loadSavedThread);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const bottomRef = useRef(null);
+  const inputRef = useRef(null);
 
   useEffect(() => {
+    let mounted = true;
+
     supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
       setSession(data?.session || null);
       setReady(true);
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, next) => setSession(next));
-    return () => listener?.subscription?.unsubscribe();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, next) => {
+      if (mounted) setSession(next || null);
+    });
+
+    return () => {
+      mounted = false;
+      listener?.subscription?.unsubscribe();
+    };
   }, []);
 
-  useEffect(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), [messages, sending]);
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-24)));
+    } catch {}
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, sending]);
 
-  const send = async (event) => {
-    event?.preventDefault();
+  const send = async () => {
     const question = text.trim();
-    if (!question || sending || !session) return;
+    if (!question || sending || !session?.access_token) return;
 
     const userMessage = { role: "user", content: question };
-    const priorHistory = messages.slice(-8);
+    const priorHistory = messages.slice(-8).map(({ role, content }) => ({ role, content }));
+
     setMessages((current) => [...current, userMessage]);
     setText("");
     setSending(true);
 
     try {
       const { data, error } = await supabase.functions.invoke("support-ai", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: {
           requestId: crypto.randomUUID(),
           question,
@@ -49,20 +78,41 @@ export default function SupportPage() {
 
       if (error) throw error;
       if (!data?.reply) throw new Error(data?.message || "No response returned");
-      setMessages((current) => [...current, { role: "assistant", content: data.reply }]);
+
+      setMessages((current) => [
+        ...current,
+        { role: "assistant", content: String(data.reply) },
+      ]);
     } catch (error) {
       console.error("[wavo support]", error);
-      setMessages((current) => [...current, {
-        role: "assistant",
-        error: true,
-        content: "I couldn’t answer that right now. Try again in a moment, or message the support account in Wavo for human help.",
-      }]);
+      setMessages((current) => [
+        ...current,
+        {
+          role: "assistant",
+          error: true,
+          content: "I couldn’t answer that right now. Try again in a moment. Human support is still available from the normal Wavo support account.",
+        },
+      ]);
     } finally {
       setSending(false);
+      window.setTimeout(() => inputRef.current?.focus(), 0);
     }
   };
 
-  if (!ready) return <div className="support-shell"><div className="support-loading">Opening Wavo Support…</div></div>;
+  const handleKeyDown = (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void send();
+    }
+  };
+
+  if (!ready) {
+    return (
+      <div className="support-shell">
+        <div className="support-loading">Opening Wavo Support…</div>
+      </div>
+    );
+  }
 
   if (!session) {
     return (
@@ -78,7 +128,7 @@ export default function SupportPage() {
   }
 
   return (
-    <main className="support-shell">
+    <main className="support-shell" data-support-page="ai">
       <header className="support-topbar">
         <a href="/" className="support-back" aria-label="Back to Wavo"><ArrowLeft size={20} /></a>
         <div className="support-title-row">
@@ -92,17 +142,27 @@ export default function SupportPage() {
       </header>
 
       <section className="support-body">
-        <div className="support-thread">
+        <div className="support-thread" aria-live="polite">
           {messages.map((message, index) => (
-            <div key={`${message.role}-${index}`} className={`support-row ${message.role === "user" ? "is-user" : "is-ai"}`}>
-              <div className="support-avatar">{message.role === "user" ? <UserRound size={17} /> : <Bot size={17} />}</div>
-              <div className={`support-bubble ${message.error ? "is-error" : ""}`}>{message.content}</div>
+            <div
+              key={`${message.role}-${index}`}
+              className={`support-row ${message.role === "user" ? "is-user" : "is-ai"}`}
+            >
+              <div className="support-avatar">
+                {message.role === "user" ? <UserRound size={17} /> : <Bot size={17} />}
+              </div>
+              <div className={`support-bubble ${message.error ? "is-error" : ""}`}>
+                {message.content}
+              </div>
             </div>
           ))}
+
           {sending && (
             <div className="support-row is-ai">
               <div className="support-avatar"><Bot size={17} /></div>
-              <div className="support-bubble support-thinking"><i></i><i></i><i></i></div>
+              <div className="support-bubble support-thinking" aria-label="Wavo Support AI is thinking">
+                <i></i><i></i><i></i>
+              </div>
             </div>
           )}
           <div ref={bottomRef} />
@@ -110,23 +170,28 @@ export default function SupportPage() {
       </section>
 
       <footer className="support-compose-wrap">
-        <form className="support-compose" onSubmit={send}>
+        <div className="support-compose" role="group" aria-label="Ask Wavo Support">
           <textarea
+            ref={inputRef}
             value={text}
             onChange={(event) => setText(event.target.value.slice(0, 2000))}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                send(event);
-              }
-            }}
+            onKeyDown={handleKeyDown}
             placeholder="Ask Wavo Support…"
             rows={1}
             disabled={sending}
           />
-          <button type="submit" disabled={!text.trim() || sending} aria-label="Send"><Send size={19} /></button>
-        </form>
-        <div className="support-footnote">AI can make mistakes. For account actions or anything sensitive, use the human support account in Wavo.</div>
+          <button
+            type="button"
+            onClick={() => void send()}
+            disabled={!text.trim() || sending}
+            aria-label="Send"
+          >
+            <Send size={19} />
+          </button>
+        </div>
+        <div className="support-footnote">
+          AI can make mistakes. For account actions or anything sensitive, use the human support account in Wavo.
+        </div>
       </footer>
     </main>
   );
