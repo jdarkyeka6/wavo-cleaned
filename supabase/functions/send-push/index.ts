@@ -115,9 +115,24 @@ async function classifyApnsFailure(
   failures: string[],
 ) {
   const text = await res.text();
-  if (res.status === 410 || /Unregistered/.test(text)) {
+  let reason = "";
+  try {
+    reason = String(JSON.parse(text)?.reason || "");
+  } catch {}
+
+  // Apple says these token responses are terminal. Keeping them means Wavo
+  // retries a dead TestFlight/debug token forever, which can make notifications
+  // look permanently broken even after iOS rotates the token.
+  const deadReasons = new Set([
+    "BadDeviceToken",
+    "DeviceTokenNotForTopic",
+    "Unregistered",
+    "ExpiredToken",
+  ]);
+  if (res.status === 410 || deadReasons.has(reason)) {
     dead.push(sub.id);
   }
+
   failures.push(`${sub.platform} ${res.status}: ${text.slice(0, 120)}`);
 }
 
