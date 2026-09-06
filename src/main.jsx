@@ -20,6 +20,7 @@ import GroupVideoCalls from './GroupVideoCalls.jsx'
 import LiveActivityCoordinator from './LiveActivityCoordinator.jsx'
 import NotificationSetup from './NotificationSetup.jsx'
 import PeopleDashboard from './PeopleDashboard.jsx'
+import PersonalizedCore from './PersonalizedCore.jsx'
 import Phase3Hub from './Phase3Hub.jsx'
 import SmartMessageActions from './SmartMessageActions.jsx'
 import SpotifyPresenceCoordinator from './SpotifyPresenceCoordinator.jsx'
@@ -39,6 +40,7 @@ function WavoApp() {
   return (
     <>
       <App />
+      <PersonalizedCore />
       <NotificationSetup />
       <UiEnhancements />
       <ChatMotionCalls />
