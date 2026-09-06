@@ -72,7 +72,7 @@ begin
 end;
 $$;
 
-revoke all on function public.expire_stale_ringing_calls() from public;
+revoke execute on function public.expire_stale_ringing_calls() from public, anon, authenticated;
 
 create extension if not exists pg_cron;
 
