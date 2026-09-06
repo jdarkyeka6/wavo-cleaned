@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { supabase } from './supabaseClient'
-import { updateCallStatus } from './callData'
 import {
   addCallKitActionListener,
   callKitSupported,
@@ -34,6 +33,30 @@ async function clickIncomingAccept(callId) {
 
   console.warn('[wavo callkit] could not hand answered call to WebRTC', callId)
   return false
+}
+
+async function callIsStillAnswerable(callId) {
+  try {
+    const { data, error } = await supabase
+      .from('call_sessions')
+      .select('id,status,created_at,expires_at')
+      .eq('id', callId)
+      .maybeSingle()
+
+    if (error || !data || data.status !== 'ringing') return false
+
+    const createdAt = new Date(data.created_at || 0).getTime()
+    const expiresAt = new Date(data.expires_at || 0).getTime()
+    const hardExpiry = Math.min(
+      Number.isFinite(expiresAt) && expiresAt > 0 ? expiresAt : Number.POSITIVE_INFINITY,
+      Number.isFinite(createdAt) && createdAt > 0 ? createdAt + 45_000 : Number.POSITIVE_INFINITY,
+    )
+
+    return Number.isFinite(hardExpiry) && hardExpiry > Date.now()
+  } catch (err) {
+    console.warn('[wavo callkit] could not validate answered call', err)
+    return false
+  }
 }
 
 async function setTerminalStatus(callId, status) {
@@ -72,6 +95,13 @@ export default function CallKitCoordinator() {
       seen.add(key)
 
       if (kind === 'answer') {
+        // CallKit actions can survive app suspension. Never let a delayed answer
+        // resurrect a call that has already timed out or ended in Postgres.
+        if (!(await callIsStillAnswerable(callId))) {
+          await endNativeCall(callId)
+          return
+        }
+
         // Calls can arrive while the user was last on Waves/Admin, where the
         // WebRTC component is intentionally not mounted. Move into Wavo first;
         // the native pending action survives the reload and is consumed there.
