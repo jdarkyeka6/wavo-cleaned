@@ -63,7 +63,7 @@ type PushSub = {
 
 type ApnsOptions = {
   topic: string;
-  pushType: "alert" | "voip";
+  pushType: "alert" | "voip" | "background";
   priority: "10" | "5";
 };
 
@@ -120,9 +120,6 @@ async function classifyApnsFailure(
     reason = String(JSON.parse(text)?.reason || "");
   } catch {}
 
-  // Apple says these token responses are terminal. Keeping them means Wavo
-  // retries a dead TestFlight/debug token forever, which can make notifications
-  // look permanently broken even after iOS rotates the token.
   const deadReasons = new Set([
     "BadDeviceToken",
     "DeviceTokenNotForTopic",
@@ -150,14 +147,18 @@ async function sendCallEnd(
     });
   }
 
+  // IMPORTANT: terminal call updates must NOT use PushKit/VoIP pushes.
+  // iOS requires each VoIP push to be reported as a new incoming CallKit call,
+  // and terminates apps that receive a VoIP push without doing so. Use the
+  // app's normal APNs token with a silent background notification instead.
   const { data: subs } = await admin
     .from("push_subscriptions")
     .select("id, platform, subscription, device_token")
     .eq("user_id", userId)
-    .eq("platform", "ios_voip");
+    .eq("platform", "ios");
 
   if (!subs?.length) {
-    return new Response(JSON.stringify({ sent: 0, reason: "no voip devices" }), {
+    return new Response(JSON.stringify({ sent: 0, reason: "no ios devices" }), {
       headers: { "Content-Type": "application/json" },
     });
   }
@@ -172,27 +173,27 @@ async function sendCallEnd(
       const res = await sendApns(
         sub.device_token,
         {
-          aps: {},
+          aps: { "content-available": 1 },
           event: "end",
           callUUID: callId,
           status,
         },
         {
-          topic: `${APNS_TOPIC}.voip`,
-          pushType: "voip",
-          priority: "10",
+          topic: APNS_TOPIC,
+          pushType: "background",
+          priority: "5",
         },
       );
 
       if (!res) {
-        failures.push("ios_voip: APNs key not configured");
+        failures.push("ios_background: APNs key not configured");
       } else if (res.ok) {
         sent++;
       } else {
         await classifyApnsFailure(sub, res, dead, failures);
       }
     } catch (err) {
-      failures.push(`ios_voip: ${(err as Error).message?.slice(0, 120)}`);
+      failures.push(`ios_background: ${(err as Error).message?.slice(0, 120)}`);
     }
   }));
 
@@ -347,9 +348,6 @@ Deno.serve(async (req) => {
       if (sub.platform === "ios") {
         if (!sub.device_token) return;
 
-        // Never suppress the normal APNs alert merely because a PushKit token
-        // exists. If VoIP delivery is misconfigured or rejected, the user still
-        // needs to be told that someone is calling them.
         const res = await sendApns(
           sub.device_token,
           {
