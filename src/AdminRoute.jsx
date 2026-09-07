@@ -1,29 +1,90 @@
-import { useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { ShieldCheck } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import Admin from "./Admin";
 
 export default function AdminRoute() {
-  const [state, setState] = useState({ loading: true, profile: null });
+  const [state, setState] = useState({ loading: true, profile: null, error: "" });
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return alive && setState({ loading: false, profile: null });
-      const { data: profile, error } = await supabase
+  const checkAccess = useCallback(async () => {
+    setState({ loading: true, profile: null, error: "" });
+
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      const user = userData?.user;
+
+      if (!user?.id) {
+        setState({ loading: false, profile: null, error: "You are signed out." });
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("id, username, is_admin")
-        .eq("id", session.user.id)
-        .single();
-      if (!alive) return;
-      if (error || profile?.is_admin !== true) setState({ loading: false, profile: null });
-      else setState({ loading: false, profile });
-    })();
-    return () => { alive = false; };
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError) throw profileError;
+      if (!profile) {
+        setState({ loading: false, profile: null, error: "Your Wavo profile could not be found." });
+        return;
+      }
+      if (profile.is_admin !== true) {
+        setState({ loading: false, profile: null, error: "This account does not have Wavo Admin access." });
+        return;
+      }
+
+      setState({ loading: false, profile, error: "" });
+    } catch (error) {
+      console.error("[wavo admin route]", error);
+      setState({
+        loading: false,
+        profile: null,
+        error: error?.message || "Wavo could not verify admin access.",
+      });
+    }
   }, []);
 
-  if (state.loading) return <main className="splash"><div className="wavo-mark">W</div><span>Checking admin access…</span></main>;
-  if (!state.profile) return <Navigate to="/" replace />;
+  useEffect(() => {
+    void checkAccess();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
+        void checkAccess();
+      }
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, [checkAccess]);
+
+  if (state.loading) {
+    return (
+      <main className="admin-route-state">
+        <section className="admin-route-card">
+          <ShieldCheck size={30} />
+          <h1>Checking admin access…</h1>
+          <p>Verifying this account with Wavo.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (!state.profile) {
+    return (
+      <main className="admin-route-state">
+        <section className="admin-route-card">
+          <ShieldCheck size={30} />
+          <h1>Admin didn’t open</h1>
+          <p>{state.error || "Wavo could not verify admin access."}</p>
+          <div className="admin-route-actions">
+            <button type="button" onClick={() => void checkAccess()}>Retry</button>
+            <a href="/">Back to Wavo</a>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return <Admin me={state.profile} onBack={() => { window.location.href = "/"; }} />;
 }
