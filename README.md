@@ -16,7 +16,7 @@ Wavo is designed to be more than a basic messenger. It combines messaging with s
 * Message links
 * Drafts
 * Pins
-* Support accounts
+* AI support at /support
 * Light and dark themes
 * Avatar uploads and cropping
 * Web and iOS support
