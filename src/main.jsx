@@ -23,6 +23,7 @@ import NotificationSetup from './NotificationSetup.jsx'
 import PeopleDashboard from './PeopleDashboard.jsx'
 import PersonalizedCore from './PersonalizedCore.jsx'
 import Phase3Hub from './Phase3Hub.jsx'
+import ProfileSupportEnhancement from './ProfileSupportEnhancement.jsx'
 import SmartMessageActions from './SmartMessageActions.jsx'
 import SpotifyPresenceCoordinator from './SpotifyPresenceCoordinator.jsx'
 import SupportPage from './SupportPage.jsx'
@@ -43,6 +44,7 @@ function WavoApp() {
   return (
     <>
       <App />
+      <ProfileSupportEnhancement />
       <PersonalizedCore />
       <NotificationSetup />
       <UiEnhancements />
