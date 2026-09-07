@@ -28,6 +28,15 @@ export async function consumePendingCallKitAction() {
   }
 }
 
+export async function answerNativeCall(callId) {
+  if (!callKitSupported() || !callId) return
+  try {
+    await WavoCallKit.answerCall({ callId })
+  } catch (err) {
+    console.info('[wavo callkit] native answer failed', err?.message || err)
+  }
+}
+
 export async function endNativeCall(callId) {
   if (!callKitSupported() || !callId) return
   try {
