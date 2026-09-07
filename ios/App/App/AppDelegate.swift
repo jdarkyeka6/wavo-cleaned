@@ -12,6 +12,7 @@ public class WavoCallKitPlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "getState", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "consumePendingAction", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "answerCall", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "endCall", returnType: CAPPluginReturnPromise)
     ]
 
@@ -37,6 +38,15 @@ public class WavoCallKitPlugin: CAPPlugin, CAPBridgedPlugin {
         } else {
             call.resolve(["action": NSNull()])
         }
+    }
+
+    @objc func answerCall(_ call: CAPPluginCall) {
+        guard let callId = call.getString("callId"), !callId.isEmpty else {
+            call.reject("Missing callId")
+            return
+        }
+        appDelegate?.requestAnswerCallFromWeb(callId: callId)
+        call.resolve()
     }
 
     @objc func endCall(_ call: CAPPluginCall) {
@@ -75,6 +85,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, C
     private let callController = CXCallController()
     private var callMetadata: [UUID: [String: Any]] = [:]
     private var answeredCalls = Set<UUID>()
+    private var webRequestedAnswers = Set<UUID>()
     private var webRequestedEnds = Set<UUID>()
 
     private let voipTokenDefaultsKey = "wavo_voip_device_token"
@@ -258,13 +269,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, C
     func providerDidReset(_ provider: CXProvider) {
         callMetadata.removeAll()
         answeredCalls.removeAll()
+        webRequestedAnswers.removeAll()
         webRequestedEnds.removeAll()
         UserDefaults.standard.removeObject(forKey: pendingActionDefaultsKey)
     }
 
     func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
+        let fromWeb = webRequestedAnswers.remove(action.callUUID) != nil
         answeredCalls.insert(action.callUUID)
-        publishAction(name: "answer", uuid: action.callUUID)
+
+        // Answering from Wavo's own overlay must update the system CallKit call,
+        // but it must not loop back into JS and click Accept a second time.
+        if !fromWeb {
+            publishAction(name: "answer", uuid: action.callUUID)
+        }
         action.fulfill()
     }
 
@@ -294,6 +312,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, C
         return action
     }
 
+    func requestAnswerCallFromWeb(callId: String) {
+        guard let uuid = UUID(uuidString: callId) else { return }
+        if answeredCalls.contains(uuid) { return }
+
+        webRequestedAnswers.insert(uuid)
+        let answer = CXAnswerCallAction(call: uuid)
+        let transaction = CXTransaction(action: answer)
+        callController.request(transaction) { [weak self] error in
+            if error != nil {
+                self?.webRequestedAnswers.remove(uuid)
+            }
+        }
+    }
+
     func requestEndCallFromWeb(callId: String) {
         guard let uuid = UUID(uuidString: callId) else { return }
         webRequestedEnds.insert(uuid)
@@ -311,6 +343,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, C
     private func cleanupCall(_ uuid: UUID) {
         callMetadata.removeValue(forKey: uuid)
         answeredCalls.remove(uuid)
+        webRequestedAnswers.remove(uuid)
         webRequestedEnds.remove(uuid)
     }
 }
