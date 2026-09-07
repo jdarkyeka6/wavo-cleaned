@@ -13,7 +13,6 @@ import './premium-cosmetics.css'
 const HOST_ATTR = 'data-wavo-premium-cosmetics-host'
 const THEME_KEY = 'wavo-theme'
 const DEFAULT_THEME = 'dusk'
-
 const NAME_SELECTORS = [
   '.wave-head > div > strong',
   '.friend-row > div > strong',
@@ -25,8 +24,7 @@ const NAME_SELECTORS = [
 
 function premiumIsActive(profile) {
   if (!profile?.is_premium) return false
-  if (!profile.premium_until) return true
-  return new Date(profile.premium_until) > new Date()
+  return !profile.premium_until || new Date(profile.premium_until) > new Date()
 }
 
 function uniqueById(items) {
@@ -36,6 +34,14 @@ function uniqueById(items) {
     seen.add(item.id)
     return true
   })
+}
+
+function directText(node) {
+  return [...node.childNodes]
+    .filter((child) => child.nodeType === Node.TEXT_NODE)
+    .map((child) => child.nodeValue || '')
+    .join('')
+    .trim()
 }
 
 export default function PremiumCosmeticsEnhancement() {
@@ -56,18 +62,9 @@ export default function PremiumCosmeticsEnhancement() {
   const tier = isPremium ? profile?.tier || 'premium' : 'free'
   const { catalogue, stats, claim, requirement, isUsable } = useCosmetics(userId, tier)
 
-  const themeItems = useMemo(
-    () => catalogue.filter((item) => item.kind === 'theme'),
-    [catalogue],
-  )
-  const badgeItems = useMemo(
-    () => catalogue.filter((item) => item.kind === 'badge'),
-    [catalogue],
-  )
-  const nameItems = useMemo(
-    () => catalogue.filter((item) => item.kind === 'name_style'),
-    [catalogue],
-  )
+  const themeItems = useMemo(() => catalogue.filter((item) => item.kind === 'theme'), [catalogue])
+  const badgeItems = useMemo(() => catalogue.filter((item) => item.kind === 'badge'), [catalogue])
+  const nameItems = useMemo(() => catalogue.filter((item) => item.kind === 'name_style'), [catalogue])
 
   const featuredThemes = useMemo(() => {
     if (showAllThemes) return themeItems
@@ -122,7 +119,6 @@ export default function PremiumCosmeticsEnhancement() {
         setHost((current) => (current ? null : current))
         return
       }
-
       let nextHost = profileScreen.querySelector(`[${HOST_ATTR}]`)
       if (!nextHost) {
         nextHost = document.createElement('div')
@@ -136,7 +132,6 @@ export default function PremiumCosmeticsEnhancement() {
       }
       setHost((current) => (current === nextHost ? current : nextHost))
     }
-
     syncHost()
     const observer = new MutationObserver(syncHost)
     observer.observe(document.body, { childList: true, subtree: true })
@@ -144,8 +139,7 @@ export default function PremiumCosmeticsEnhancement() {
   }, [])
 
   useEffect(() => {
-    const root = document.documentElement
-    root.setAttribute('data-theme', theme || DEFAULT_THEME)
+    document.documentElement.setAttribute('data-theme', theme || DEFAULT_THEME)
     localStorage.setItem(THEME_KEY, theme || DEFAULT_THEME)
   }, [theme])
 
@@ -159,8 +153,7 @@ export default function PremiumCosmeticsEnhancement() {
   }, [themeItems, tier])
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const returned = params.get('premium')
+    const returned = new URLSearchParams(window.location.search).get('premium')
     if (!returned || !userId) return
     if (returned === '1') {
       setNotice('Payment returned to Wavo. Premium access is refreshing…')
@@ -183,9 +176,7 @@ export default function PremiumCosmeticsEnhancement() {
       if (req?.kind === 'earned' && req.met) {
         const claimed = await claim(item.id)
         if (!claimed) return
-      } else {
-        return
-      }
+      } else return
     }
 
     const equipped = slot === 'badge' ? profile?.equipped_badge : profile?.equipped_name_style
@@ -195,7 +186,6 @@ export default function PremiumCosmeticsEnhancement() {
       p_slot: slot,
     })
     if (error || data === false) {
-      console.error('[wavo] equip cosmetic', error)
       setNotice(error?.message || 'That cosmetic could not be equipped.')
       return
     }
@@ -228,15 +218,12 @@ export default function PremiumCosmeticsEnhancement() {
       if (!token) throw new Error('You are signed out. Sign in again and retry.')
       const response = await fetch('/api/checkout', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ plan: planId }),
       })
       const raw = await response.text()
       let payload = null
-      try { payload = JSON.parse(raw) } catch { /* platform error page */ }
+      try { payload = JSON.parse(raw) } catch { /* non-JSON host error */ }
       if (payload?.url) {
         window.location.href = payload.url
         return
@@ -258,21 +245,8 @@ export default function PremiumCosmeticsEnhancement() {
       const targets = [...document.querySelectorAll(NAME_SELECTORS.join(','))]
       if (!targets.length) return
 
-      const rawNames = []
-      targets.forEach((node) => {
-        node.querySelector(':scope > .wavo-inline-badge')?.remove()
-        node.classList.remove('user-label-name', 'is-gradient', 'is-animated')
-        node.style.removeProperty('background-image')
-        node.style.removeProperty('background-size')
-        node.style.removeProperty('background-position')
-        node.style.removeProperty('-webkit-background-clip')
-        node.style.removeProperty('background-clip')
-        node.style.removeProperty('color')
-        const raw = node.textContent?.trim()
-        if (raw) rawNames.push(raw)
-      })
-
-      const unknown = [...new Set(rawNames)].filter((name) => !visibleProfileCache.current.has(name))
+      const names = targets.map((node) => directText(node) || node.dataset.wavoRawName || '').filter(Boolean)
+      const unknown = [...new Set(names)].filter((name) => !visibleProfileCache.current.has(name))
       if (unknown.length) {
         const { data } = await supabase
           .from('profiles')
@@ -283,10 +257,22 @@ export default function PremiumCosmeticsEnhancement() {
       if (disposed) return
 
       const byId = Object.fromEntries(catalogue.map((item) => [item.id, item]))
+      document.body.dataset.wavoCosmeticDecorating = '1'
       targets.forEach((node) => {
-        const raw = node.textContent?.trim()
+        const raw = directText(node) || node.dataset.wavoRawName || ''
+        if (!raw) return
+        node.dataset.wavoRawName = raw
         const person = visibleProfileCache.current.get(raw)
+        const signature = person ? `${raw}|${person.equipped_name_style || ''}|${person.equipped_badge || ''}` : `${raw}|none`
+        if (node.dataset.wavoCosmeticSignature === signature) return
+
+        node.querySelector(':scope > .wavo-inline-badge')?.remove()
+        node.classList.remove('user-label-name', 'is-gradient', 'is-animated')
+        node.style.removeProperty('background-image')
+        node.style.removeProperty('color')
+        node.dataset.wavoCosmeticSignature = signature
         if (!person) return
+
         const style = byId[person.equipped_name_style]
         const badge = byId[person.equipped_badge]
         if (style?.payload?.gradient) {
@@ -306,6 +292,7 @@ export default function PremiumCosmeticsEnhancement() {
           node.appendChild(chip)
         }
       })
+      setTimeout(() => delete document.body.dataset.wavoCosmeticDecorating, 0)
     }
 
     const schedule = () => {
@@ -313,7 +300,10 @@ export default function PremiumCosmeticsEnhancement() {
       decorateTimer.current = setTimeout(decorate, 80)
     }
     schedule()
-    const observer = new MutationObserver(schedule)
+    const observer = new MutationObserver(() => {
+      if (document.body.dataset.wavoCosmeticDecorating === '1') return
+      schedule()
+    })
     observer.observe(document.body, { childList: true, subtree: true, characterData: true })
     return () => {
       disposed = true
@@ -340,56 +330,29 @@ export default function PremiumCosmeticsEnhancement() {
         </div>
 
         {notice && <button className="wavo-appearance-notice" type="button" onClick={() => setNotice('')}>{notice}</button>}
-
-        {stats && (
-          <div className="wavo-cosmetic-stats">
-            <span>🔥 {stats.current_streak || 0} day streak</span>
-            <span>{stats.messages_sent || 0} sent</span>
-          </div>
-        )}
+        {stats && <div className="wavo-cosmetic-stats"><span>🔥 {stats.current_streak || 0} day streak</span><span>{stats.messages_sent || 0} sent</span></div>}
 
         <div className="wavo-appearance-section">
-          <div className="wavo-section-title">
-            <div><Sparkles size={15} /><strong>Theme</strong></div>
-            <span>{themeItems.length} available</span>
-          </div>
+          <div className="wavo-section-title"><div><Sparkles size={15} /><strong>Theme</strong></div><span>{themeItems.length} available</span></div>
           <div className="wavo-theme-grid">
             {featuredThemes.map((item) => {
               const req = requirement(item)
               const usable = isUsable(item)
               const claimable = req?.kind === 'earned' && req.met
               return (
-                <button
-                  type="button"
-                  key={item.id}
-                  className={`wavo-theme-option ${theme === item.id ? 'on' : ''} ${!usable && !claimable ? 'locked' : ''}`}
-                  onClick={() => pickTheme(item)}
-                  title={usable ? item.name : req?.detail || item.description || item.name}
-                >
-                  <span className="wavo-theme-swatch" style={swatchStyle(item)} />
-                  <span>{item.name}</span>
+                <button type="button" key={item.id} className={`wavo-theme-option ${theme === item.id ? 'on' : ''} ${!usable && !claimable ? 'locked' : ''}`} onClick={() => pickTheme(item)} title={usable ? item.name : req?.detail || item.description || item.name}>
+                  <span className="wavo-theme-swatch" style={swatchStyle(item)} /><span>{item.name}</span>
                   {!usable && <small>{claimable ? 'Claim' : req?.short || 'Locked'}</small>}
                 </button>
               )
             })}
           </div>
-          {themeItems.length > featuredThemes.length && (
-            <button className="wavo-show-all" type="button" onClick={() => setShowAllThemes(true)}>
-              Show all {themeItems.length} themes <ChevronDown size={15} />
-            </button>
-          )}
-          {showAllThemes && (
-            <button className="wavo-show-all" type="button" onClick={() => setShowAllThemes(false)}>
-              Show fewer themes <ChevronUp size={15} />
-            </button>
-          )}
+          {themeItems.length > featuredThemes.length && <button className="wavo-show-all" type="button" onClick={() => setShowAllThemes(true)}>Show all {themeItems.length} themes <ChevronDown size={15} /></button>}
+          {showAllThemes && <button className="wavo-show-all" type="button" onClick={() => setShowAllThemes(false)}>Show fewer themes <ChevronUp size={15} /></button>}
         </div>
 
         <div className="wavo-appearance-section">
-          <div className="wavo-section-title">
-            <div><Star size={15} /><strong>Your name</strong></div>
-            <span>What other people see</span>
-          </div>
+          <div className="wavo-section-title"><div><Star size={15} /><strong>Your name</strong></div><span>What other people see</span></div>
           <div className="wavo-name-preview"><UserLabel user={profile} /></div>
 
           <span className="wavo-cos-label">Badges</span>
@@ -398,17 +361,9 @@ export default function PremiumCosmeticsEnhancement() {
               const req = requirement(item)
               const usable = isUsable(item)
               const claimable = req?.kind === 'earned' && req.met
-              const on = profile.equipped_badge === item.id
               return (
-                <button
-                  type="button"
-                  key={item.id}
-                  className={`wavo-cos-chip ${on ? 'on' : ''} ${!usable && !claimable ? 'locked' : ''}`}
-                  onClick={() => equip(item, 'badge')}
-                  title={usable ? item.name : req?.detail || item.description || item.name}
-                >
-                  <span style={{ color: item.payload?.color }}>{item.payload?.emoji}</span>
-                  <span>{item.name}</span>
+                <button type="button" key={item.id} className={`wavo-cos-chip ${profile.equipped_badge === item.id ? 'on' : ''} ${!usable && !claimable ? 'locked' : ''}`} onClick={() => equip(item, 'badge')} title={usable ? item.name : req?.detail || item.description || item.name}>
+                  <span style={{ color: item.payload?.color }}>{item.payload?.emoji}</span><span>{item.name}</span>
                   {!usable && <small>{claimable ? 'Claim' : req?.short || 'Locked'}</small>}
                 </button>
               )
@@ -421,17 +376,9 @@ export default function PremiumCosmeticsEnhancement() {
               const req = requirement(item)
               const usable = isUsable(item)
               const claimable = req?.kind === 'earned' && req.met
-              const on = profile.equipped_name_style === item.id
               return (
-                <button
-                  type="button"
-                  key={item.id}
-                  className={`wavo-cos-chip ${on ? 'on' : ''} ${!usable && !claimable ? 'locked' : ''}`}
-                  onClick={() => equip(item, 'name_style')}
-                  title={usable ? item.name : req?.detail || item.description || item.name}
-                >
-                  <span className="wavo-name-swatch" style={swatchStyle(item)} />
-                  <span>{item.name.replace(' name', '')}</span>
+                <button type="button" key={item.id} className={`wavo-cos-chip ${profile.equipped_name_style === item.id ? 'on' : ''} ${!usable && !claimable ? 'locked' : ''}`} onClick={() => equip(item, 'name_style')} title={usable ? item.name : req?.detail || item.description || item.name}>
+                  <span className="wavo-name-swatch" style={swatchStyle(item)} /><span>{item.name.replace(' name', '')}</span>
                   {!usable && <small>{claimable ? 'Claim' : req?.short || 'Locked'}</small>}
                 </button>
               )
@@ -441,21 +388,12 @@ export default function PremiumCosmeticsEnhancement() {
 
         {!isPremium && !isNativeApp && (
           <button className="wavo-premium-cta" type="button" onClick={() => setShowPremium(true)}>
-            <Crown size={18} />
-            <span><strong>Wavo Premium</strong><small>{premiumThemeCount} Premium themes · {premiumNameCount} Premium name styles</small></span>
-            <span>View</span>
+            <Crown size={18} /><span><strong>Wavo Premium</strong><small>{premiumThemeCount} Premium themes · {premiumNameCount} Premium name styles</small></span><span>View</span>
           </button>
         )}
       </section>
 
-      <Premium
-        open={showPremium}
-        onClose={() => setShowPremium(false)}
-        onSubscribe={startCheckout}
-        isPremium={isPremium}
-        busy={checkoutBusy}
-        error={checkoutError}
-      />
+      <Premium open={showPremium} onClose={() => setShowPremium(false)} onSubscribe={startCheckout} isPremium={isPremium} busy={checkoutBusy} error={checkoutError} />
     </>,
     host,
   )
