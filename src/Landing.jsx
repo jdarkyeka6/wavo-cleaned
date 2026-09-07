@@ -40,12 +40,11 @@ function useReducedMotion() {
 
 function ChatDemo() {
   const reduced = useReducedMotion();
-  // step 0..NOISE.length-1 = messages arriving; NOISE.length = the plan lands
   const [step, setStep] = useState(0);
   const bodyRef = useRef(null);
 
   useEffect(() => {
-    if (reduced) return; // no loop; the render derives the settled state
+    if (reduced) return;
     let t;
     const tick = () => {
       setStep((s) => {
@@ -63,7 +62,6 @@ function ChatDemo() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [step]);
 
-  // Reduced motion: skip straight to the point, no animation loop.
   const settled = reduced || step >= NOISE.length;
   const shown = reduced ? NOISE : NOISE.slice(0, step);
 
@@ -194,7 +192,7 @@ export default function Landing({ onGetStarted, onLogin }) {
       <footer className="landing-foot">
         <span>Wavo</span>
         <nav className="landing-foot-links">
-          <a href="/support.html">Support</a>
+          <a href="/support">Support</a>
           <a href="/privacy.html">Privacy</a>
           <a href="/terms.html">Terms</a>
         </nav>
