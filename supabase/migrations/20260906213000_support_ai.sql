@@ -40,7 +40,7 @@ revoke all on table public.support_ai_knowledge from anon, authenticated;
 insert into public.support_ai_knowledge (topic, content) values
 ('account_signin', 'Sign in with the email address and password used at signup, not the username. Saved accounts can be checked from avatar > Settings > Account > Saved accounts.'),
 ('password_reset', 'There is no self-serve password reset in Wavo yet. The user should contact support from the email address on the account.'),
-('username_change', 'Usernames can be changed in Settings > Profile. Usernames are unique.'),
+('username_change', 'Username changes are available in the You tab, inside the Identity card under Username. Enter the new username and tap Change username. Usernames are 3–24 lowercase letters, numbers or underscores, must be unique, and can be changed once every 7 days. The Wavo sign-in username changes at the same time.'),
 ('account_delete', 'Account deletion is in Settings > Account > Danger zone > Delete account. It erases the profile, messages, friends and groups and cannot be undone.'),
 ('blocking_reporting', 'Block from the chat menu. Reports can be made from a message menu or a profile. Reporting and blocking are separate.'),
 ('notifications', 'Notifications require browser or phone permission. If permission was denied, re-enable Wavo in browser site settings or phone notification settings and reload. On iPhone web notifications require Wavo to be added to the Home Screen and opened from there.'),
