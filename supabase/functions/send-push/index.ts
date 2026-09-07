@@ -23,10 +23,7 @@ const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || (() => {
   }
 })();
 
-const admin = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  serviceRole,
-);
+const admin = createClient(Deno.env.get("SUPABASE_URL")!, serviceRole);
 
 if (VAPID_PUBLIC && VAPID_PRIVATE) {
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
@@ -35,10 +32,7 @@ if (VAPID_PUBLIC && VAPID_PRIVATE) {
 let apnsToken: { jwt: string; madeAt: number } | null = null;
 async function apnsJwt(): Promise<string | null> {
   if (!APNS_KEY_P8 || !APNS_KEY_ID || !APNS_TEAM_ID) return null;
-  if (apnsToken && Date.now() - apnsToken.madeAt < 50 * 60 * 1000) {
-    return apnsToken.jwt;
-  }
-
+  if (apnsToken && Date.now() - apnsToken.madeAt < 50 * 60 * 1000) return apnsToken.jwt;
   const pem = APNS_KEY_P8.replace(/\\n/g, "\n");
   const key = await importPKCS8(pem, "ES256");
   const jwt = await new SignJWT({})
@@ -46,19 +40,18 @@ async function apnsJwt(): Promise<string | null> {
     .setIssuer(APNS_TEAM_ID)
     .setIssuedAt()
     .sign(key);
-
   apnsToken = { jwt, madeAt: Date.now() };
   return jwt;
 }
 
-const isUuid = (s: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 
 type PushSub = {
   id: string;
   platform: string;
   subscription: Record<string, unknown> | null;
   device_token: string | null;
+  user_agent: string | null;
 };
 
 type ApnsOptions = {
@@ -68,10 +61,9 @@ type ApnsOptions = {
 };
 
 function apnsHosts(): string[] {
-  if (APNS_ENV === "sandbox" || APNS_ENV === "development") {
-    return [APNS_SANDBOX_HOST];
-  }
-  return [APNS_PRODUCTION_HOST];
+  return APNS_ENV === "sandbox" || APNS_ENV === "development"
+    ? [APNS_SANDBOX_HOST]
+    : [APNS_PRODUCTION_HOST];
 }
 
 async function sendApns(
@@ -81,31 +73,19 @@ async function sendApns(
 ): Promise<Response | null> {
   const jwt = await apnsJwt();
   if (!jwt) return null;
-
-  const hosts = apnsHosts();
-  let lastResponse: Response | null = null;
-
-  for (let i = 0; i < hosts.length; i++) {
-    const headers: Record<string, string> = {
-      authorization: `bearer ${jwt}`,
-      "apns-topic": options.topic,
-      "apns-push-type": options.pushType,
-      "apns-priority": options.priority,
-      "content-type": "application/json",
-    };
-    if (options.pushType === "voip") headers["apns-expiration"] = "0";
-
-    const res = await fetch(`${hosts[i]}/3/device/${deviceToken}`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    });
-    lastResponse = res;
-    if (res.ok) return res;
-    return res;
-  }
-
-  return lastResponse;
+  const headers: Record<string, string> = {
+    authorization: `bearer ${jwt}`,
+    "apns-topic": options.topic,
+    "apns-push-type": options.pushType,
+    "apns-priority": options.priority,
+    "content-type": "application/json",
+  };
+  if (options.pushType === "voip") headers["apns-expiration"] = "0";
+  return fetch(`${apnsHosts()[0]}/3/device/${deviceToken}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
 }
 
 async function classifyApnsFailure(
@@ -119,27 +99,20 @@ async function classifyApnsFailure(
   try {
     reason = String(JSON.parse(text)?.reason || "");
   } catch {}
-
   const deadReasons = new Set([
     "BadDeviceToken",
     "DeviceTokenNotForTopic",
     "Unregistered",
     "ExpiredToken",
   ]);
-  if (res.status === 410 || deadReasons.has(reason)) {
-    dead.push(sub.id);
-  }
-
+  if (res.status === 410 || deadReasons.has(reason)) dead.push(sub.id);
   failures.push(`${sub.platform} ${res.status}: ${text.slice(0, 120)}`);
 }
 
-async function sendCallEnd(
-  event: Record<string, unknown>,
-): Promise<Response> {
+async function sendCallEnd(event: Record<string, unknown>): Promise<Response> {
   const userId = String(event.user_id || "");
   const callId = String(event.call_id || "");
   const status = String(event.status || "ended");
-
   if (!isUuid(userId) || !isUuid(callId)) {
     return new Response(JSON.stringify({ error: "invalid call event" }), {
       status: 400,
@@ -147,13 +120,12 @@ async function sendCallEnd(
     });
   }
 
-  // IMPORTANT: terminal call updates must NOT use PushKit/VoIP pushes.
-  // iOS requires each VoIP push to be reported as a new incoming CallKit call,
-  // and terminates apps that receive a VoIP push without doing so. Use the
-  // app's normal APNs token with a silent background notification instead.
+  // Never use a PushKit VoIP push for an end/decline/missed update. On iOS 13+
+  // every VoIP push must be reported as a new incoming CallKit call; otherwise
+  // the system can terminate the app. Use the normal APNs token silently.
   const { data: subs } = await admin
     .from("push_subscriptions")
-    .select("id, platform, subscription, device_token")
+    .select("id, platform, subscription, device_token, user_agent")
     .eq("user_id", userId)
     .eq("platform", "ios");
 
@@ -166,7 +138,6 @@ async function sendCallEnd(
   const dead: string[] = [];
   const failures: string[] = [];
   let sent = 0;
-
   await Promise.all((subs as PushSub[]).map(async (sub) => {
     if (!sub.device_token) return;
     try {
@@ -178,38 +149,24 @@ async function sendCallEnd(
           callUUID: callId,
           status,
         },
-        {
-          topic: APNS_TOPIC,
-          pushType: "background",
-          priority: "5",
-        },
+        { topic: APNS_TOPIC, pushType: "background", priority: "5" },
       );
-
-      if (!res) {
-        failures.push("ios_background: APNs key not configured");
-      } else if (res.ok) {
-        sent++;
-      } else {
-        await classifyApnsFailure(sub, res, dead, failures);
-      }
+      if (!res) failures.push("ios_background: APNs key not configured");
+      else if (res.ok) sent++;
+      else await classifyApnsFailure(sub, res, dead, failures);
     } catch (err) {
       failures.push(`ios_background: ${(err as Error).message?.slice(0, 120)}`);
     }
   }));
 
-  if (dead.length) {
-    await admin.from("push_subscriptions").delete().in("id", dead);
-  }
-
+  if (dead.length) await admin.from("push_subscriptions").delete().in("id", dead);
   return new Response(JSON.stringify({ sent, pruned: dead.length, failures }), {
     headers: { "Content-Type": "application/json" },
   });
 }
 
 Deno.serve(async (req) => {
-  if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
-  }
+  if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
   let dispatchId: string | undefined;
   try {
@@ -217,10 +174,7 @@ Deno.serve(async (req) => {
   } catch {
     return new Response("Bad JSON", { status: 400 });
   }
-
-  if (!dispatchId || !isUuid(dispatchId)) {
-    return new Response("Missing dispatch_id", { status: 400 });
-  }
+  if (!dispatchId || !isUuid(dispatchId)) return new Response("Missing dispatch_id", { status: 400 });
 
   const { data: dispatch, error: dispatchError } = await admin
     .from("push_dispatch_queue")
@@ -235,11 +189,7 @@ Deno.serve(async (req) => {
       headers: { "Content-Type": "application/json" },
     });
   }
-
-  if (dispatch.call_event?.kind === "call_end") {
-    return sendCallEnd(dispatch.call_event);
-  }
-
+  if (dispatch.call_event?.kind === "call_end") return sendCallEnd(dispatch.call_event);
   if (!dispatch.notification_id) {
     return new Response(JSON.stringify({ error: "dispatch has no payload" }), {
       status: 400,
@@ -290,7 +240,7 @@ Deno.serve(async (req) => {
 
   const { data: subs } = await admin
     .from("push_subscriptions")
-    .select("id, platform, subscription, device_token")
+    .select("id, platform, subscription, device_token, user_agent")
     .eq("user_id", notif.user_id);
 
   if (!subs?.length) {
@@ -303,6 +253,18 @@ Deno.serve(async (req) => {
   const dead: string[] = [];
   let sent = 0;
   const failures: string[] = [];
+
+  // A current iPhone registers both a normal APNs token and a PushKit VoIP
+  // token using the same user agent. For incoming calls, CallKit is the real
+  // call surface. Do not also send the ordinary alert push to that same device,
+  // otherwise users see an extra banner/sound next to the native call UI. Keep
+  // the normal iOS alert as a fallback for devices that do not have a matching
+  // VoIP registration.
+  const voipUserAgents = new Set(
+    typedSubs
+      .filter((sub) => sub.platform === "ios_voip" && sub.device_token)
+      .map((sub) => sub.user_agent || ""),
+  );
 
   await Promise.all(typedSubs.map(async (sub) => {
     try {
@@ -318,7 +280,6 @@ Deno.serve(async (req) => {
 
       if (sub.platform === "ios_voip") {
         if (!callId || !sub.device_token) return;
-
         const res = await sendApns(
           sub.device_token,
           {
@@ -328,25 +289,17 @@ Deno.serve(async (req) => {
             callerName: senderUsername ? `@${senderUsername}` : "Wavo caller",
             hasVideo,
           },
-          {
-            topic: `${APNS_TOPIC}.voip`,
-            pushType: "voip",
-            priority: "10",
-          },
+          { topic: `${APNS_TOPIC}.voip`, pushType: "voip", priority: "10" },
         );
-
-        if (!res) {
-          failures.push("ios_voip: APNs key not configured");
-        } else if (res.ok) {
-          sent++;
-        } else {
-          await classifyApnsFailure(sub, res, dead, failures);
-        }
+        if (!res) failures.push("ios_voip: APNs key not configured");
+        else if (res.ok) sent++;
+        else await classifyApnsFailure(sub, res, dead, failures);
         return;
       }
 
       if (sub.platform === "ios") {
         if (!sub.device_token) return;
+        if (callId && voipUserAgents.has(sub.user_agent || "")) return;
 
         const res = await sendApns(
           sub.device_token,
@@ -359,20 +312,11 @@ Deno.serve(async (req) => {
             url: payload.url,
             sender_id: payload.sender_id,
           },
-          {
-            topic: APNS_TOPIC,
-            pushType: "alert",
-            priority: "10",
-          },
+          { topic: APNS_TOPIC, pushType: "alert", priority: "10" },
         );
-
-        if (!res) {
-          failures.push("ios: APNs key not configured");
-        } else if (res.ok) {
-          sent++;
-        } else {
-          await classifyApnsFailure(sub, res, dead, failures);
-        }
+        if (!res) failures.push("ios: APNs key not configured");
+        else if (res.ok) sent++;
+        else await classifyApnsFailure(sub, res, dead, failures);
       }
     } catch (err) {
       const status = (err as { statusCode?: number })?.statusCode;
@@ -381,12 +325,8 @@ Deno.serve(async (req) => {
     }
   }));
 
-  if (dead.length) {
-    await admin.from("push_subscriptions").delete().in("id", dead);
-  }
-
-  return new Response(
-    JSON.stringify({ sent, pruned: dead.length, failures }),
-    { headers: { "Content-Type": "application/json" } },
-  );
+  if (dead.length) await admin.from("push_subscriptions").delete().in("id", dead);
+  return new Response(JSON.stringify({ sent, pruned: dead.length, failures }), {
+    headers: { "Content-Type": "application/json" },
+  });
 });
