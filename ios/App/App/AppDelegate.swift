@@ -155,6 +155,25 @@ class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, C
         )
     }
 
+    // Terminal call updates arrive on the app's normal APNs token as silent
+    // background notifications. They must not use PushKit because iOS requires
+    // every VoIP push to be reported as a new incoming CallKit call.
+    func application(_ application: UIApplication,
+                     didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        let event = (userInfo["event"] as? String) ?? ""
+        if event == "end",
+           let callId = userInfo["callUUID"] as? String,
+           let uuid = UUID(uuidString: callId) {
+            callProvider?.reportCall(with: uuid, endedAt: Date(), reason: .remoteEnded)
+            cleanupCall(uuid)
+            completionHandler(.newData)
+            return
+        }
+
+        completionHandler(.noData)
+    }
+
     // MARK: - PushKit
 
     func pushRegistry(_ registry: PKPushRegistry,
@@ -191,10 +210,19 @@ class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, C
             return
         }
 
+        // Legacy safety net only. The server no longer sends terminal events as
+        // VoIP pushes, but if an old queued payload arrives we still report it to
+        // CallKit first so iOS doesn't terminate the app for an unreported VoIP push.
         if event == "end" {
-            callProvider?.reportCall(with: uuid, endedAt: Date(), reason: .remoteEnded)
-            cleanupCall(uuid)
-            completion()
+            let update = CXCallUpdate()
+            update.remoteHandle = CXHandle(type: .generic, value: "Wavo")
+            update.localizedCallerName = "Wavo"
+            update.hasVideo = false
+            callProvider?.reportNewIncomingCall(with: uuid, update: update) { [weak self] _ in
+                self?.callProvider?.reportCall(with: uuid, endedAt: Date(), reason: .remoteEnded)
+                self?.cleanupCall(uuid)
+                completion()
+            }
             return
         }
 
