@@ -86,7 +86,7 @@ export default function SupportPage() {
         {
           role: "assistant",
           error: true,
-          content: "I couldn’t answer that right now. Try again in a moment. Human support is still available from the normal Wavo support account.",
+          content: "I couldn’t answer that right now. Try again in a moment.",
         },
       ]);
     } finally {
@@ -185,7 +185,7 @@ export default function SupportPage() {
           </button>
         </div>
         <div className="support-footnote">
-          AI can make mistakes. For account actions or anything sensitive, use the human support account in Wavo.
+          AI can make mistakes. If Wavo Support isn’t certain, it should say so instead of inventing steps.
         </div>
       </footer>
     </main>
