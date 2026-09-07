@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { supabase } from './supabaseClient'
 import {
   addCallKitActionListener,
+  answerNativeCall,
   callKitSupported,
   consumePendingCallKitAction,
   endNativeCall,
@@ -161,7 +162,19 @@ export default function CallKitCoordinator() {
           table: 'call_sessions',
           filter: `callee_id=eq.${user.id}`,
         }, async ({ new: row }) => {
-          if (row?.id && TERMINAL.has(row.status)) {
+          if (!row?.id) return
+
+          // If the user taps Wavo's in-app Accept button while CallKit is also
+          // ringing, ChatMotionCalls changes the row to active. Mirror that into
+          // CallKit so the native incoming-call UI stops ringing and becomes the
+          // active system call. Native-side guards make this a no-op when the
+          // user already answered from the Apple call UI.
+          if (row.status === 'active') {
+            await answerNativeCall(row.id)
+            return
+          }
+
+          if (TERMINAL.has(row.status)) {
             await endNativeCall(row.id)
           }
         })
