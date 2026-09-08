@@ -31,6 +31,14 @@ function uniquePart() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+async function safetyCheckImage(imageUrl) {
+  const { data, error } = await supabase.functions.invoke("moderate-content", {
+    body: { imageUrl },
+  });
+  if (error) throw new Error("Wavo couldn't safety-check this image. Try again.");
+  if (data?.allowed === false) throw new Error("This image can't be shared on Wavo.");
+}
+
 export function MessageContent({ message, mine = false }) {
   if (message?.deleted_at) return <p>Message deleted</p>;
 
@@ -138,7 +146,19 @@ export function ChatComposer({ userId, friend = null, space = null, value, onCha
     if (uploadError) throw uploadError;
 
     const { data: publicData } = supabase.storage.from("chat-files").getPublicUrl(path);
-    if (!publicData?.publicUrl) throw new Error("Couldn't create an attachment URL.");
+    if (!publicData?.publicUrl) {
+      await supabase.storage.from("chat-files").remove([path]).catch(() => {});
+      throw new Error("Couldn't create an attachment URL.");
+    }
+
+    if (type === "image") {
+      try {
+        await safetyCheckImage(publicData.publicUrl);
+      } catch (moderationError) {
+        await supabase.storage.from("chat-files").remove([path]).catch(() => {});
+        throw moderationError;
+      }
+    }
 
     await insertMedia(
       publicData.publicUrl,
@@ -209,12 +229,13 @@ export function ChatComposer({ userId, friend = null, space = null, value, onCha
     setBusy(true);
     setError("");
     try {
+      await safetyCheckImage(url);
       await insertMedia(url, "image");
       setGifOpen(false);
       setGifQuery("");
     } catch (err) {
       console.error("[wavo] gif send", err);
-      setError("Couldn't send that GIF.");
+      setError(err?.message || "Couldn't send that GIF.");
     } finally {
       setBusy(false);
     }
