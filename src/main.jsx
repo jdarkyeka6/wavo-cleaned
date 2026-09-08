@@ -25,6 +25,7 @@ import PeopleDashboard from './PeopleDashboard.jsx'
 import PersonalizedCore from './PersonalizedCore.jsx'
 import Phase3Hub from './Phase3Hub.jsx'
 import PremiumCosmeticsEnhancement from './PremiumCosmeticsEnhancement.jsx'
+import PremiumProEnhancement from './PremiumProEnhancement.jsx'
 import ProfileSupportEnhancement from './ProfileSupportEnhancement.jsx'
 import SmartMessageActions from './SmartMessageActions.jsx'
 import SpotifyPresenceCoordinator from './SpotifyPresenceCoordinator.jsx'
@@ -46,6 +47,7 @@ function WavoApp() {
   return (
     <>
       <App />
+      <PremiumProEnhancement />
       <PremiumCosmeticsEnhancement />
       <ProfileSupportEnhancement />
       <PersonalizedCore />

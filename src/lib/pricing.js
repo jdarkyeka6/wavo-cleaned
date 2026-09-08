@@ -1,72 +1,64 @@
-// src/lib/pricing.js
-//
-// SINGLE SOURCE OF TRUTH for Wavo Premium pricing.
-//
-// The paywall drifted to "$2/mo" in three places because the price was
-// hardcoded as copy in three different strings. Nothing in the UI should
-// ever contain a literal dollar figure again — import from here instead.
-//
-// If a price changes: edit it ONCE, below. The subtitle, the plan card,
-// and the checkout button all follow automatically.
-
-// KEEP IN SYNC with the PLANS table in api/checkout.js, which holds the same
-// amounts in cents and is what Stripe actually charges. The API builds each
-// line item with inline `price_data`, so there are no Stripe price IDs to
-// configure — an earlier version of this file referenced
-// VITE_STRIPE_PRICE_STANDARD / _STUDENT env vars that nothing ever read.
-export const CURRENCY = 'AUD';
+// Single source of truth for Wavo web pricing. Native iOS prices are read from StoreKit.
+export const CURRENCY = 'AUD'
 
 export const PLANS = {
   standard: {
     id: 'standard',
     label: 'Premium',
+    name: 'Wavo Premium',
     price: 4.99,
-    blurb: 'Keeps the lights on.',
+    priceAud: 4.99,
+    priceLabel: '$4.99 AUD / month',
+    blurb: 'Customisation and everyday power tools.',
+    tier: 'premium',
     requiresStudentDeclaration: false,
   },
   student: {
     id: 'student',
     label: 'Student',
+    name: 'Wavo Premium — Student',
     price: 3.49,
-    blurb: 'Same everything, cheaper if you\'re at school.',
-    // Honour system — no verification, just a declaration at checkout.
+    priceAud: 3.49,
+    priceLabel: '$3.49 AUD / month',
+    blurb: 'Same Premium, cheaper if you are at school.',
+    tier: 'premium',
     requiresStudentDeclaration: true,
   },
-};
+  pro: {
+    id: 'pro',
+    label: 'Pro',
+    name: 'Wavo Pro',
+    price: 14.99,
+    priceAud: 14.99,
+    priceLabel: '$14.99 AUD / month',
+    blurb: 'Premium plus AI, transcription and serious Space tools.',
+    tier: 'pro',
+    requiresStudentDeclaration: false,
+  },
+}
 
-export const DEFAULT_PLAN = 'standard';
+export const DEFAULT_PLAN = 'standard'
+export const PRO_PLAN = 'pro'
 
-/** Plan lookup that never returns undefined. */
 export function getPlan(id) {
-  return PLANS[id] ?? PLANS[DEFAULT_PLAN];
+  return PLANS[id] ?? PLANS[DEFAULT_PLAN]
 }
 
-/**
- * Format a price for display: 4.99 -> "$4.99", 2 -> "$2"
- * Trailing ".00" is dropped so round numbers read cleanly.
- */
 export function formatPrice(amount) {
-  return `$${amount.toFixed(2).replace(/\.00$/, '')}`;
+  return `$${Number(amount).toFixed(2).replace(/\.00$/, '')}`
 }
 
-/** "$4.99/mo" */
 export function formatMonthly(amount) {
-  return `${formatPrice(amount)}/mo`;
+  return `${formatPrice(amount)}/mo`
 }
 
-/** "$4.99/mo" for a plan id — the one most components want. */
 export function planPrice(id) {
-  return formatMonthly(getPlan(id).price);
+  return formatMonthly(getPlan(id).price)
 }
 
-/**
- * Copy for the paywall subtitle. Derived, not hardcoded, so it can't
- * contradict the button underneath it.
- */
 export function priceSubtitle(id = DEFAULT_PLAN) {
-  const plan = getPlan(id);
-  return `${formatMonthly(plan.price)}. ${plan.blurb}`;
+  const plan = getPlan(id)
+  return `${formatMonthly(plan.price)}. ${plan.blurb}`
 }
 
-/** Plan ids the checkout API will accept. */
-export const PLAN_IDS = Object.keys(PLANS);
+export const PLAN_IDS = Object.keys(PLANS)

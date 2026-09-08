@@ -1,0 +1,72 @@
+name: Premium 2 Release Check
+on:
+  push:
+    branches:
+      - wavo-premium-2-pro
+  workflow_dispatch: {}
+jobs:
+  verify:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          if [ -d /Applications/Xcode_26.3.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.3.app
+          fi
+          xcodebuild -version
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install
+      - name: Build web app
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_GIPHY_API_KEY: ${{ secrets.VITE_GIPHY_API_KEY }}
+        run: npm run build
+      - name: Verify Premium icon assets
+        run: |
+          for icon in OceanIcon MidnightIcon NeonIcon RoseIcon; do
+            test -f "ios/App/App/Assets.xcassets/${icon}.appiconset/Icon-1024.png" || { echo "::error::Missing ${icon}"; exit 1; }
+            test -f "ios/App/App/Assets.xcassets/${icon}.appiconset/Contents.json" || { echo "::error::Missing ${icon} Contents.json"; exit 1; }
+          done
+      - name: Sync iOS
+        run: npx cap sync ios
+      - name: Install Ruby dependencies
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: ios/App
+      - name: Validate release resources
+        working-directory: ios/App
+        run: |
+          plutil -lint App/PrivacyInfo.xcprivacy
+          bundle exec ruby <<'RUBY'
+          require 'xcodeproj'
+          project = Xcodeproj::Project.open('App.xcodeproj')
+          target = project.targets.find { |candidate| candidate.name == 'App' }
+          abort('App target missing') unless target
+          group = project.main_group.find_subpath('App', false)
+          abort('App group missing') unless group
+          privacy = group.files.find { |file| file.path == 'PrivacyInfo.xcprivacy' } || group.new_file('PrivacyInfo.xcprivacy')
+          target.resources_build_phase.add_file_reference(privacy, true) unless target.resources_build_phase.files_references.include?(privacy)
+          target.build_configurations.each do |config|
+            config.build_settings['ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES'] = 'OceanIcon MidnightIcon NeonIcon RoseIcon'
+            config.build_settings['ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS'] = 'YES'
+          end
+          project.save
+          RUBY
+      - name: Compile iOS simulator
+        run: |
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -sdk iphonesimulator \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
