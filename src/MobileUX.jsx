@@ -141,7 +141,7 @@ export function ChatTools({ open, onClose, target, kind, messages, pinned, nickn
     const reason = window.prompt("Why are you reporting this message?", "Offensive or unsafe content");
     if (!reason?.trim()) return;
     const sender = String(message.sender_id || message.user_id || "");
-    const payload = { reporter_id: me, message_id: message.id, reason: reason.trim() };
+    const payload = { reporter_id: me, reason: reason.trim(), ...(kind === "dm" ? { message_id: message.id } : { group_message_id: message.id }) };
     if (isUuid(sender)) payload.reported_user_id = sender;
     const { error } = await supabase.from("flags").insert(payload);
     setStatus(error ? "Report failed. Try again." : "Message reported to Wavo Safety.");

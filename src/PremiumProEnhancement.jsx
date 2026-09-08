@@ -88,9 +88,12 @@ async function resolveConversation(userId) {
   if (!userId) return null
   const dm = document.querySelector('.chat-screen')
   if (dm) {
-    const username = dm.querySelector('.chat-topbar strong')?.textContent?.trim()
+    const canonical = [...dm.querySelectorAll('.chat-topbar span')]
+      .map((node) => node.textContent?.trim() || '')
+      .find((value) => value.startsWith('@'))
+    const username = (canonical ? canonical.slice(1) : dm.querySelector('.chat-topbar strong')?.textContent?.trim()) || ''
     if (!username) return null
-    const { data: friend } = await supabase.from('profiles').select('id,username').eq('username', username).maybeSingle()
+    const { data: friend } = await supabase.from('profiles').select('id,username').ilike('username', username).limit(1).maybeSingle()
     if (!friend?.id) return null
     return { kind: 'dm', targetId: friend.id, label: friend.username, conversationId: [userId, friend.id].sort().join('_'), root: dm }
   }
@@ -98,9 +101,9 @@ async function resolveConversation(userId) {
   if (spaceCard) {
     const name = document.querySelector('.space-hero h1')?.textContent?.trim()
     if (!name) return null
-    const { data: group } = await supabase.from('groups').select('id,name,creator_id').eq('name', name).limit(1).maybeSingle()
+    const { data: group } = await supabase.from('groups').select('id,name,created_by').eq('name', name).limit(1).maybeSingle()
     if (!group?.id) return null
-    return { kind: 'space', targetId: group.id, label: group.name, conversationId: group.id, creatorId: group.creator_id, root: spaceCard }
+    return { kind: 'space', targetId: group.id, label: group.name, conversationId: group.id, creatorId: group.created_by, root: spaceCard }
   }
   return null
 }
@@ -120,12 +123,17 @@ function ProfileStudio({ userId, profile, tier, settings, setSettings, folders, 
   const paid = rank(tier) >= 2
   const pro = tier === 'pro'
   const native = isNativeIOS()
-  const premiumPrice = priceFor(products, APPLE_PRODUCTS.premium, 'A$4.99/month')
-  const proPrice = priceFor(products, APPLE_PRODUCTS.pro, 'A$14.99/month')
+  const premiumProduct = products.find((item) => item.identifier === APPLE_PRODUCTS.premium)
+  const proProduct = products.find((item) => item.identifier === APPLE_PRODUCTS.pro)
+  const premiumPrice = premiumProduct?.priceString || (native ? 'Loading from App Store…' : 'A$4.99/month')
+  const proPrice = proProduct?.priceString || (native ? 'Loading from App Store…' : 'A$14.99/month')
 
   async function buy(wanted) {
     setBusy(wanted); setNotice('')
     try {
+      if (native && !products.find((item) => item.identifier === APPLE_PRODUCTS[wanted])) {
+        throw new Error('Subscriptions are still loading from the App Store. Try again in a moment.')
+      }
       if (native) await purchaseAppleTier(wanted, userId)
       else await startWebCheckout(wanted === 'pro' ? 'pro' : 'standard')
       await refreshProfile(); setNotice(`${wanted === 'pro' ? 'Wavo Pro' : 'Wavo Premium'} is active.`)
