@@ -60,6 +60,7 @@ export default function PremiumCosmeticsEnhancement() {
   const userId = session?.user?.id || null
   const isPremium = premiumIsActive(profile)
   const tier = isPremium ? profile?.tier || 'premium' : 'free'
+  const isPro = ['pro', 'vip'].includes(String(tier).toLowerCase())
   const { catalogue, stats, claim, requirement, isUsable } = useCosmetics(userId, tier)
 
   const themeItems = useMemo(() => catalogue.filter((item) => item.kind === 'theme'), [catalogue])
@@ -324,9 +325,9 @@ export default function PremiumCosmeticsEnhancement() {
           <span className="wavo-appearance-icon"><Palette size={20} /></span>
           <div>
             <strong>Appearance</strong>
-            <span>{isPremium ? 'Premium active' : 'Themes, badges and your name in Wavo'}</span>
+            <span>{isPro ? 'Pro active' : isPremium ? 'Premium active' : 'Themes, badges and your name in Wavo'}</span>
           </div>
-          {isPremium && <span className="wavo-premium-pill"><Crown size={13} /> Premium</span>}
+          {isPremium && <span className="wavo-premium-pill"><Crown size={13} /> {isPro ? 'Pro' : 'Premium'}</span>}
         </div>
 
         {notice && <button className="wavo-appearance-notice" type="button" onClick={() => setNotice('')}>{notice}</button>}
