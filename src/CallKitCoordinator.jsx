@@ -2,22 +2,41 @@ import { useEffect } from 'react'
 import { supabase } from './supabaseClient'
 import {
   addCallKitActionListener,
+  addVoipTokenListener,
   answerNativeCall,
   callKitSupported,
   consumePendingCallKitAction,
   endNativeCall,
+  getCallKitState,
 } from './callKitBridge'
 
 const TERMINAL = new Set(['declined', 'ended', 'missed', 'cancelled'])
+const NATIVE_INCOMING_STYLE_ID = 'wavo-native-callkit-incoming-style'
 
 function wait(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
+function suppressDuplicateIncomingUi() {
+  // Keep ChatMotionCalls' incoming card mounted so the native-answer bridge can
+  // press its Accept path, but do not show a second ringing UI on top of iOS
+  // CallKit. We only install this after a real PushKit token exists.
+  if (document.getElementById(NATIVE_INCOMING_STYLE_ID)) return
+  const style = document.createElement('style')
+  style.id = NATIVE_INCOMING_STYLE_ID
+  style.textContent = '.wavo-incoming-call{display:none!important}'
+  document.head.appendChild(style)
+}
+
+function restoreIncomingUi() {
+  document.getElementById(NATIVE_INCOMING_STYLE_ID)?.remove()
+}
+
 async function clickIncomingAccept(callId) {
   // ChatMotionCalls owns WebRTC setup. Let it discover the ringing DB row, then
   // press the same Accept path the in-app UI uses so there is still exactly one
-  // media/signalling implementation.
+  // media/signalling implementation. On native iOS the card may be visually
+  // hidden, but it remains mounted specifically for this handoff.
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const button = document.querySelector('.wavo-incoming-call .wavo-call-accept')
     if (button) {
@@ -82,6 +101,7 @@ export default function CallKitCoordinator() {
 
     let cancelled = false
     let callActionHandle = null
+    let voipTokenHandle = null
     let callUpdates = null
     const seen = new Set()
 
@@ -141,6 +161,18 @@ export default function CallKitCoordinator() {
     }
 
     async function setup() {
+      // Only hide Wavo's duplicate incoming-call card once iOS has actually
+      // minted a PushKit token. That preserves the in-app fallback if native
+      // incoming-call delivery is not configured on a device yet.
+      try {
+        const state = await getCallKitState()
+        if (state?.voipToken) suppressDuplicateIncomingUi()
+      } catch {}
+
+      voipTokenHandle = await addVoipTokenListener(({ token }) => {
+        if (token) suppressDuplicateIncomingUi()
+      })
+
       callActionHandle = await addCallKitActionListener(async (action) => {
         await handleAction(action)
         // The native side persists actions so a killed/suspended web view cannot
@@ -164,10 +196,9 @@ export default function CallKitCoordinator() {
         }, async ({ new: row }) => {
           if (!row?.id) return
 
-          // If the user taps Wavo's in-app Accept button while CallKit is also
-          // ringing, ChatMotionCalls changes the row to active. Mirror that into
-          // CallKit so the native incoming-call UI stops ringing and becomes the
-          // active system call. Native-side guards make this a no-op when the
+          // If the in-app fallback Accept button is used, mirror that answer
+          // into CallKit so the native incoming-call UI stops ringing and becomes
+          // the active system call. Native-side guards make this a no-op when the
           // user already answered from the Apple call UI.
           if (row.status === 'active') {
             await answerNativeCall(row.id)
@@ -192,6 +223,8 @@ export default function CallKitCoordinator() {
       cancelled = true
       document.removeEventListener('visibilitychange', onVisible)
       callActionHandle?.remove?.()
+      voipTokenHandle?.remove?.()
+      restoreIncomingUi()
       if (callUpdates) supabase.removeChannel(callUpdates)
     }
   }, [])
