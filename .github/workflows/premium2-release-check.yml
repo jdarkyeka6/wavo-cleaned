@@ -27,6 +27,12 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_GIPHY_API_KEY: ${{ secrets.VITE_GIPHY_API_KEY }}
         run: npm run build
+      - name: Verify Premium icon assets
+        run: |
+          for icon in OceanIcon MidnightIcon NeonIcon RoseIcon; do
+            test -f "ios/App/App/Assets.xcassets/${icon}.appiconset/Icon-1024.png" || { echo "::error::Missing ${icon}"; exit 1; }
+            test -f "ios/App/App/Assets.xcassets/${icon}.appiconset/Contents.json" || { echo "::error::Missing ${icon} Contents.json"; exit 1; }
+          done
       - name: Sync iOS
         run: npx cap sync ios
       - name: Install Ruby dependencies
@@ -49,6 +55,7 @@ jobs:
           privacy = group.files.find { |file| file.path == 'PrivacyInfo.xcprivacy' } || group.new_file('PrivacyInfo.xcprivacy')
           target.resources_build_phase.add_file_reference(privacy, true) unless target.resources_build_phase.files_references.include?(privacy)
           target.build_configurations.each do |config|
+            config.build_settings['ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES'] = 'OceanIcon MidnightIcon NeonIcon RoseIcon'
             config.build_settings['ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS'] = 'YES'
           end
           project.save
