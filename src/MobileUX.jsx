@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, WifiOff, X, Pin, Clock3, Image as ImageIcon, CalendarClock, UserRoundPen, BellOff, Sparkles, ChevronRight } from "lucide-react";
+import { Search, WifiOff, X, Pin, Clock3, Image as ImageIcon, CalendarClock, UserRoundPen, BellOff, Sparkles, ChevronRight, Flag, Ban, Repeat2, Bot, Mic2, SlidersHorizontal } from "lucide-react";
 import { getUxPrefs, updateUxPrefs } from "./offline";
+import { supabase } from "./supabaseClient";
+import { paidTier, proAi } from "./premiumProData";
 
 function norm(v) { return String(v || "").toLowerCase(); }
+function isUuid(v) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v || "")); }
 
 export function OfflineBanner({ online, queued = 0 }) {
   if (online) return null;
@@ -81,16 +84,135 @@ export function QuickAccess({ userId, friends, spaces, pins = [], onFriend, onSp
 }
 
 export function ChatTools({ open, onClose, target, kind, messages, pinned, nickname, onTogglePin, onNickname, onSchedule, muted, onMute }) {
-  const [tab, setTab] = useState("search"); const [q, setQ] = useState(""); const [name, setName] = useState(nickname || ""); const [scheduled, setScheduled] = useState(""); const [when, setWhen] = useState("");
-  useEffect(() => { setName(nickname || ""); setQ(""); setTab("search"); }, [target?.id, nickname]);
+  const [tab, setTab] = useState("search");
+  const [q, setQ] = useState("");
+  const [name, setName] = useState(nickname || "");
+  const [scheduled, setScheduled] = useState("");
+  const [when, setWhen] = useState("");
+  const [recurrence, setRecurrence] = useState("once");
+  const [tier, setTier] = useState("free");
+  const [me, setMe] = useState(null);
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [senderFilter, setSenderFilter] = useState("all");
+  const [timeFilter, setTimeFilter] = useState("all");
+  const [reporting, setReporting] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [status, setStatus] = useState("");
+  const [ask, setAsk] = useState("");
+  const [aiReply, setAiReply] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [transcripts, setTranscripts] = useState({});
+
+  useEffect(() => {
+    setName(nickname || ""); setQ(""); setTab("search"); setStatus(""); setReportReason(""); setReporting(false); setAsk(""); setAiReply("");
+    if (!open) return;
+    supabase.auth.getUser().then(async ({ data }) => {
+      const uid = data?.user?.id || null; setMe(uid);
+      if (!uid) return;
+      const { data: profile } = await supabase.from("profiles").select("is_premium,premium_until,tier").eq("id", uid).maybeSingle();
+      setTier(paidTier(profile));
+    }).catch(() => {});
+  }, [open, target?.id, nickname]);
+
   if (!open || !target) return null;
-  const filtered = (messages || []).filter((m) => norm(m.content).includes(norm(q)));
-  const media = (messages || []).filter((m) => ["image","video","file"].includes(m.type) || m.file_url);
+  const premium = tier === "premium" || tier === "pro";
+  const pro = tier === "pro";
+  const cutoff = timeFilter === "day" ? Date.now() - 86400000 : timeFilter === "week" ? Date.now() - 7 * 86400000 : timeFilter === "month" ? Date.now() - 30 * 86400000 : 0;
+  const filtered = (messages || []).filter((m) => {
+    if (!norm(m.content).includes(norm(q))) return false;
+    if (premium && typeFilter !== "all" && String(m.type || "text") !== typeFilter) return false;
+    if (premium && senderFilter === "mine" && String(m.sender_id || m.user_id) !== String(me)) return false;
+    if (premium && senderFilter === "theirs" && String(m.sender_id || m.user_id) === String(me)) return false;
+    if (premium && cutoff && new Date(m.created_at).getTime() < cutoff) return false;
+    return true;
+  });
+  const media = (messages || []).filter((m) => ["image","video","file","audio"].includes(m.type) || m.file_url);
+
+  async function reportUser() {
+    if (!me || kind !== "dm" || !reportReason.trim()) return;
+    setStatus("Sending report…");
+    const { error } = await supabase.from("flags").insert({ reporter_id: me, reported_user_id: target.id, reason: reportReason.trim() });
+    if (error) { setStatus("Report failed. Try again."); return; }
+    setReporting(false); setReportReason(""); setStatus("Report sent to Wavo Safety.");
+  }
+
+  async function reportMessage(message) {
+    if (!me || !isUuid(message?.id)) return;
+    const reason = window.prompt("Why are you reporting this message?", "Offensive or unsafe content");
+    if (!reason?.trim()) return;
+    const sender = String(message.sender_id || message.user_id || "");
+    const payload = { reporter_id: me, message_id: message.id, reason: reason.trim() };
+    if (isUuid(sender)) payload.reported_user_id = sender;
+    const { error } = await supabase.from("flags").insert(payload);
+    setStatus(error ? "Report failed. Try again." : "Message reported to Wavo Safety.");
+  }
+
+  async function blockUser() {
+    if (!me || kind !== "dm") return;
+    if (!window.confirm(`Block @${target.username}? They will be removed from your friends and won't be able to message you.`)) return;
+    setStatus("Blocking…");
+    const { error } = await supabase.rpc("block_user", { target: target.id });
+    if (error) { setStatus("Block failed. Try again."); return; }
+    setStatus("Blocked.");
+    window.setTimeout(() => { onClose(); window.location.reload(); }, 450);
+  }
+
+  async function scheduleMessage() {
+    if (!scheduled.trim() || !when) return;
+    if (recurrence === "once") {
+      await onSchedule(scheduled, when); setStatus("Message scheduled.");
+    } else {
+      if (!premium || !me || kind !== "dm") return;
+      const chatId = [me, target.id].sort().join("_");
+      const { error } = await supabase.rpc("schedule_message_v2", {
+        p_kind: "dm", p_conversation_id: chatId, p_recipient: target.id, p_content: scheduled.trim(),
+        p_send_at: new Date(when).toISOString(), p_recurrence_rule: recurrence, p_recurrence_every: 1, p_occurrence_limit: null,
+      });
+      if (error) { setStatus(error.message || "Could not schedule recurring message."); return; }
+      setStatus(`Recurring ${recurrence} message scheduled.`);
+    }
+    setScheduled(""); setWhen(""); setRecurrence("once");
+  }
+
+  async function runAi(action) {
+    if (!pro) return;
+    setAiBusy(true); setAiReply("");
+    try {
+      const context = (messages || []).slice(-160).map((m) => `${String(m.sender_id || m.user_id) === String(me) ? "You" : (kind === "dm" ? target.username : "Member")}: ${m.content || `[${m.type || "message"}]`}`).join("\n");
+      const result = await proAi(action, { context, question: ask });
+      setAiReply(result?.reply || "No summary returned.");
+    } catch (err) { setAiReply(err?.message || "Wavo Pro AI could not answer."); }
+    setAiBusy(false);
+  }
+
+  async function transcribe(message) {
+    if (!pro) return;
+    const audioUrl = message.file_url || message.content;
+    if (!audioUrl) return;
+    setTranscripts((x) => ({ ...x, [message.id]: "Transcribing…" }));
+    try {
+      const result = await proAi("transcribe", { audioUrl });
+      setTranscripts((x) => ({ ...x, [message.id]: result?.transcript || "No speech detected." }));
+    } catch (err) { setTranscripts((x) => ({ ...x, [message.id]: err?.message || "Transcription failed." })); }
+  }
+
   return <div className="ux-overlay"><section className="ux-sheet chat-tools-sheet"><div className="sheet-handle"/><div className="tool-head"><div><span className="eyebrow">CHAT TOOLS</span><h2>{kind === "dm" ? target.username : target.name}</h2></div><button onClick={onClose}><X/></button></div>
     <div className="tool-tabs"><button className={tab === "search" ? "active" : ""} onClick={() => setTab("search")}><Search/>Search</button><button className={tab === "media" ? "active" : ""} onClick={() => setTab("media")}><ImageIcon/>Media</button><button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}><Sparkles/>More</button></div>
-    {tab === "search" && <><div className="search-box compact"><Search/><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search this conversation"/></div><div className="tool-results">{filtered.slice(-50).map((m) => <div key={m.id}><span>{m.content}</span><small>{new Date(m.created_at).toLocaleString()}</small></div>)}</div></>}
-    {tab === "media" && <div className="media-grid">{media.length ? media.map((m) => m.type === "image" ? <img key={m.id} src={m.content || m.file_url} alt="Shared"/> : <a key={m.id} href={m.file_url || m.content} target="_blank" rel="noreferrer">{m.file_name || m.type}</a>) : <div className="search-empty"><ImageIcon/><strong>No media yet</strong></div>}</div>}
-    {tab === "settings" && <div className="tool-settings"><button onClick={onTogglePin}><Pin/>{pinned ? "Unpin" : "Pin"} conversation</button>{kind === "space" && <button onClick={onMute}><BellOff/>{muted ? "Unmute" : "Mute"} Space</button>}{kind === "dm" && <><label><UserRoundPen/>Private nickname<input value={name} onChange={(e) => setName(e.target.value)} placeholder={target.username}/><button onClick={() => onNickname(name)}>Save</button></label><label><CalendarClock/>Schedule a message<textarea value={scheduled} onChange={(e) => setScheduled(e.target.value)} placeholder="Message"/><input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)}/><button disabled={!scheduled.trim() || !when} onClick={() => { onSchedule(scheduled, when); setScheduled(""); setWhen(""); }}>Schedule</button></label></>}</div>}
+    {status && <div className="wavo-tool-status">{status}</div>}
+    {tab === "search" && <><div className="search-box compact"><Search/><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search this conversation"/></div>
+      {premium && <div className="premium-search-filters"><SlidersHorizontal size={15}/><select value={senderFilter} onChange={(e) => setSenderFilter(e.target.value)}><option value="all">Everyone</option><option value="mine">Sent by me</option><option value="theirs">Sent by them</option></select><select value={timeFilter} onChange={(e) => setTimeFilter(e.target.value)}><option value="all">Any time</option><option value="day">24 hours</option><option value="week">7 days</option><option value="month">30 days</option></select><select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}><option value="all">Everything</option><option value="text">Text</option><option value="image">Images</option><option value="audio">Voice</option><option value="file">Files</option></select></div>}
+      {!premium && <small className="premium-hint">Premium adds sender, date and media filters.</small>}
+      <div className="tool-results">{filtered.slice(-80).map((m) => <div key={m.id}><span>{m.content || `[${m.type || "message"}]`}</span><small>{new Date(m.created_at).toLocaleString()}</small>{String(m.sender_id || m.user_id) !== String(me) && isUuid(m.id) && <button className="report-message-btn" onClick={() => reportMessage(m)}><Flag size={12}/> Report</button>}</div>)}</div></>}
+    {tab === "media" && <div className="media-grid">{media.length ? media.map((m) => m.type === "image" ? <img key={m.id} src={m.content || m.file_url} alt="Shared"/> : <div key={m.id} className="media-file-card"><a href={m.file_url || m.content} target="_blank" rel="noreferrer">{m.file_name || (m.type === "audio" ? "Voice note" : m.type)}</a>{m.type === "audio" && <>{pro ? <button onClick={() => transcribe(m)}><Mic2 size={14}/> Transcribe</button> : <small>Voice transcription · Pro</small>}{transcripts[m.id] && <p>{transcripts[m.id]}</p>}</>}</div>) : <div className="search-empty"><ImageIcon/><strong>No media yet</strong></div>}</div>}
+    {tab === "settings" && <div className="tool-settings">
+      <button onClick={onTogglePin}><Pin/>{pinned ? "Unpin" : "Pin"} conversation</button>
+      {kind === "space" && <button onClick={onMute}><BellOff/>{muted ? "Unmute" : "Mute"} Space</button>}
+      {kind === "dm" && <><label><UserRoundPen/>Private nickname<input value={name} onChange={(e) => setName(e.target.value)} placeholder={target.username}/><button onClick={() => onNickname(name)}>Save</button></label>
+        <label><CalendarClock/>Schedule a message<textarea value={scheduled} onChange={(e) => setScheduled(e.target.value)} placeholder="Message"/><input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)}/>{premium && <select value={recurrence} onChange={(e) => setRecurrence(e.target.value)}><option value="once">Send once</option><option value="daily">Repeat daily</option><option value="weekly">Repeat weekly</option><option value="monthly">Repeat monthly</option></select>}<button disabled={!scheduled.trim() || !when} onClick={scheduleMessage}>{recurrence === "once" ? "Schedule" : <><Repeat2 size={14}/> Schedule recurring</>}</button>{!premium && <small>Recurring schedules are included with Premium.</small>}</label>
+        <div className="safety-actions"><strong>Safety</strong><button onClick={() => setReporting((x) => !x)}><Flag/>Report user</button>{reporting && <div className="report-box"><textarea value={reportReason} onChange={(e) => setReportReason(e.target.value)} maxLength={500} placeholder="Tell Wavo Safety what happened"/><button disabled={!reportReason.trim()} onClick={reportUser}>Send report</button></div>}<button className="danger" onClick={blockUser}><Ban/>Block @{target.username}</button></div>
+      </>}
+      <div className="pro-ai-tools"><strong><Bot size={16}/> Wavo Pro AI</strong>{pro ? <><button disabled={aiBusy || !messages?.length} onClick={() => runAi("summary")}>{aiBusy ? "Thinking…" : "Summarise this chat"}</button><label>Ask about this conversation<input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="What time did we agree on?"/><button disabled={aiBusy || !ask.trim()} onClick={() => runAi("ask")}>Ask Wavo</button></label>{aiReply && <div className="ai-reply">{aiReply}</div>}</> : <small>Summaries, chat Q&A and voice transcription are included with Wavo Pro.</small>}</div>
+    </div>}
   </section></div>;
 }
 
