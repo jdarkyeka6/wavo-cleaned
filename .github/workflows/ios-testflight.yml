@@ -77,6 +77,10 @@ jobs:
           unless target.resources_build_phase.files_references.include?(ref)
             target.resources_build_phase.add_file_reference(ref, true)
           end
+          target.build_configurations.each do |config|
+            config.build_settings['ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES'] = 'OceanIcon MidnightIcon NeonIcon RoseIcon'
+            config.build_settings['ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS'] = 'YES'
+          end
           project.save
           RUBY
       - name: Build and upload to TestFlight
