@@ -18,14 +18,13 @@ async function verifyAppleTransaction(transaction) {
   if (!transaction?.jwsRepresentation) throw new Error('Apple did not return a verifiable StoreKit transaction yet.')
   const token = await accessToken()
   if (!token) throw new Error('Your Wavo session expired. Sign in again.')
-  const response = await fetch('/api/apple-entitlement', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-    body: JSON.stringify({ jwsRepresentation: transaction.jwsRepresentation }),
+  const { data, error } = await supabase.functions.invoke('apple-entitlement', {
+    body: { jwsRepresentation: transaction.jwsRepresentation },
+    headers: { Authorization: `Bearer ${token}` },
   })
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(payload?.error || 'Apple subscription verification failed.')
-  return payload
+  if (error) throw new Error(data?.message || data?.error || error.message || 'Apple subscription verification failed.')
+  if (!data?.ok) throw new Error(data?.message || data?.error || 'Apple subscription verification failed.')
+  return data
 }
 
 export async function loadStoreProducts() {
@@ -55,10 +54,13 @@ export async function purchaseAppleTier(tier, userId) {
 export async function restoreApplePurchases() {
   if (!isNativeIOS()) throw new Error('Restore Purchases is available in the iOS app.')
   await NativePurchases.restorePurchases()
-  const { purchases } = await NativePurchases.getPurchases({ productType: PURCHASE_TYPE.SUBS, onlyCurrentEntitlements: true })
+  const { purchases } = await NativePurchases.getPurchases({
+    productType: PURCHASE_TYPE.SUBS,
+    onlyCurrentEntitlements: true,
+  })
   const active = (purchases || [])
     .filter((p) => p?.isActive !== false && p?.jwsRepresentation && Object.values(APPLE_PRODUCTS).includes(p.productIdentifier))
-    .sort((a, b) => (a.productIdentifier === APPLE_PRODUCTS.pro ? -1 : 1) - (b.productIdentifier === APPLE_PRODUCTS.pro ? -1 : 1))
+    .sort((a, b) => Number(b.productIdentifier === APPLE_PRODUCTS.pro) - Number(a.productIdentifier === APPLE_PRODUCTS.pro))
   if (!active.length) throw new Error('No active Wavo subscription was found for this Apple ID.')
   let result = null
   for (const purchase of active) result = await verifyAppleTransaction(purchase)
