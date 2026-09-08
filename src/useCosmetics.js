@@ -9,11 +9,14 @@ import { supabase } from "./supabaseClient";
  * requirement against real stats before it writes anything. Nothing here
  * can be lied to from devtools.
  */
-// Tier ranking mirrors the DB: free < premium < vip. A user meets an item's
+// Tier ranking mirrors the DB: free < premium < pro/vip. A user meets an item's
 // requirement when their rank >= the item's required rank.
 // These are pure and live outside the hook so the memoised callbacks below
 // can depend on `tier` directly instead of closing over a stale copy.
-const rank = (t) => (t === "vip" ? 3 : t === "premium" ? 2 : 1);
+const rank = (t) => {
+  const value = String(t || "free").toLowerCase();
+  return value === "pro" || value === "vip" ? 3 : value === "premium" ? 2 : 1;
+};
 
 /** What tier an item needs: explicit min_tier wins, else legacy premium. */
 const neededTier = (item) =>
