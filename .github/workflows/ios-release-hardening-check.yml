@@ -1,0 +1,51 @@
+name: iOS Release Hardening Check
+on:
+  push:
+    branches:
+      - wavo-ios-release-hardening
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          if [ -d /Applications/Xcode_26.3.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.3.app
+          fi
+          xcodebuild -version
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install and build web app
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_GIPHY_API_KEY: ${{ secrets.VITE_GIPHY_API_KEY }}
+        run: |
+          npm install
+          npm run build
+          npx cap sync ios
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: ios/App
+      - name: Wire privacy manifest into test project
+        working-directory: ios/App
+        run: |
+          plutil -lint App/PrivacyInfo.xcprivacy
+          bundle exec ruby <<'RUBY'
+          require 'xcodeproj'
+          project = Xcodeproj::Project.open('App.xcodeproj')
+          target = project.targets.find { |candidate| candidate.name == 'App' }
+          abort('App target missing') unless target
+          group = project.main_group.find_subpath('App', false)
+          abort('App group missing') unless group
+          ref = group.files.find { |file| file.path == 'PrivacyInfo.xcprivacy' } || group.new_file('PrivacyInfo.xcprivacy')
+          target.resources_build_phase.add_file_reference(ref, true) unless target.resources_build_phase.files_references.include?(ref)
+          project.save
+          RUBY
+      - name: Compile iOS simulator build
+        run: xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build

@@ -62,6 +62,23 @@ jobs:
           ruby-version: "3.3"
           bundler-cache: true
           working-directory: ios/App
+      - name: Bundle and validate iOS privacy manifest
+        working-directory: ios/App
+        run: |
+          plutil -lint App/PrivacyInfo.xcprivacy
+          bundle exec ruby <<'RUBY'
+          require 'xcodeproj'
+          project = Xcodeproj::Project.open('App.xcodeproj')
+          target = project.targets.find { |candidate| candidate.name == 'App' }
+          abort('App target missing') unless target
+          group = project.main_group.find_subpath('App', false)
+          abort('App group missing') unless group
+          ref = group.files.find { |file| file.path == 'PrivacyInfo.xcprivacy' } || group.new_file('PrivacyInfo.xcprivacy')
+          unless target.resources_build_phase.files_references.include?(ref)
+            target.resources_build_phase.add_file_reference(ref, true)
+          end
+          project.save
+          RUBY
       - name: Build and upload to TestFlight
         working-directory: ios/App
         env:
