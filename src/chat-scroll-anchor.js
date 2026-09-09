@@ -5,7 +5,6 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
 
   const SELECTOR = '.chat-screen .dm-messages, .chat-screen .space-messages'
   const PIN_THRESHOLD = 120
-  const USER_SCROLL_WINDOW_MS = 700
   const active = new Set()
 
   const distanceFromBottom = (el) =>
@@ -18,16 +17,11 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
     const state = {
       el,
       pinned: true,
-      userScrollUntil: 0,
       frame: 0,
       settleTimers: [],
       mutationObserver: null,
       resizeObserver: null,
       destroyed: false,
-    }
-
-    const markUserScroll = () => {
-      state.userScrollUntil = Date.now() + USER_SCROLL_WINDOW_MS
     }
 
     const scrollToBottom = () => {
@@ -49,37 +43,19 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
       state.settleTimers = [40, 120, 300, 700, 1200].map((delay) => setTimeout(scrollToBottom, delay))
     }
 
+    // User scrolling always wins. The old implementation only treated a touch or
+    // pointer as "user scrolling" for 700 ms, then snapped the list back to the
+    // bottom while the gesture was still moving. That made chats feel locked.
+    // Instead, the current scroll position itself is the source of truth.
     const onScroll = () => {
-      const distance = distanceFromBottom(el)
-      const userIsScrolling = Date.now() < state.userScrollUntil
-
-      if (userIsScrolling) {
-        state.pinned = distance <= PIN_THRESHOLD
-        return
-      }
-
-      if (state.pinned && distance > PIN_THRESHOLD) {
-        scrollToBottom()
-      } else if (distance <= PIN_THRESHOLD) {
-        state.pinned = true
-      }
+      state.pinned = distanceFromBottom(el) <= PIN_THRESHOLD
     }
 
-    el.addEventListener('wheel', markUserScroll, { passive: true })
-    el.addEventListener('touchstart', markUserScroll, { passive: true })
-    el.addEventListener('pointerdown', markUserScroll, { passive: true })
     el.addEventListener('scroll', onScroll, { passive: true })
 
-    state.mutationObserver = new MutationObserver((records) => {
-      const conversationWasReplaced = records.some((record) =>
-        record.type === 'childList' && record.removedNodes.length > 0 && record.addedNodes.length > 0
-      )
-
-      if (conversationWasReplaced) {
-        settleAtBottom()
-        return
-      }
-
+    state.mutationObserver = new MutationObserver(() => {
+      // Only follow new/changed content while the user is already near the
+      // bottom. Never force a scrolled-up user back down.
       if (!state.pinned) return
       scrollToBottom()
       requestAnimationFrame(scrollToBottom)
@@ -103,9 +79,6 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
       state.settleTimers.forEach(clearTimeout)
       state.mutationObserver?.disconnect()
       state.resizeObserver?.disconnect()
-      el.removeEventListener('wheel', markUserScroll)
-      el.removeEventListener('touchstart', markUserScroll)
-      el.removeEventListener('pointerdown', markUserScroll)
       el.removeEventListener('scroll', onScroll)
       delete el.dataset.wavoScrollAnchor
     }
