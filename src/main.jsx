@@ -42,6 +42,7 @@ import { installUiMode } from './lib/layout'
 import './responsive-platform.css'
 import './responsive-platform-edge.css'
 import './chat-keyboard-viewport.css'
+import './chat-viewport-final.css'
 
 installUiMode()
 
