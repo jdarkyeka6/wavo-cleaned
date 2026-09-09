@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import './index.css'
 import './ui-overrides.css'
 import './admin.css'
+import './premium-pro-chat-fix.css'
 import './call-resilience.js'
 import './call-signaling-resilience.js'
 import './chat-call-peer-fix.js'
@@ -40,8 +41,6 @@ import { installUiMode } from './lib/layout'
 import './responsive-platform.css'
 import './responsive-platform-edge.css'
 import './chat-keyboard-viewport.css'
-import './premium-pro-chat-fix.css'
-import './chat-viewport-final.css'
 
 installUiMode()
 
