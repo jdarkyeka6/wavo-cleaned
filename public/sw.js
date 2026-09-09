@@ -75,6 +75,8 @@ self.addEventListener("push", (event) => {
     badge: "/favicon.svg",
     tag: data.tag || "wavo-message",
     renotify: true,
+    silent: false,
+    timestamp: Date.now(),
     data: {
       url: data.url || "/",
       sender_id: data.sender_id || null,
@@ -86,22 +88,32 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || "/";
 
-  event.waitUntil(
-    self.clients
-      .matchAll({ type: "window", includeUncontrolled: true })
-      .then((clientsArr) => {
-        for (const client of clientsArr) {
-          if (client.url.includes(self.location.origin) && "focus" in client) {
-            client.postMessage({ type: "notification-click", url: targetUrl });
-            return client.focus();
-          }
-        }
+  const rawTarget = event.notification.data?.url || "/";
+  const targetUrl = new URL(rawTarget, self.location.origin).href;
 
-        if (self.clients.openWindow) {
-          return self.clients.openWindow(targetUrl);
-        }
-      })
-  );
+  event.waitUntil((async () => {
+    const clientsArr = await self.clients.matchAll({
+      type: "window",
+      includeUncontrolled: true,
+    });
+
+    // Prefer an existing Wavo window, but actually navigate it to the chat the
+    // user clicked. The old behavior only focused the tab, which could leave
+    // the user staring at whatever page they had open before.
+    for (const client of clientsArr) {
+      if (!client.url.startsWith(self.location.origin)) continue;
+
+      try {
+        if ("navigate" in client) await client.navigate(targetUrl);
+      } catch {
+        client.postMessage({ type: "notification-click", url: rawTarget });
+      }
+
+      if ("focus" in client) return client.focus();
+      return;
+    }
+
+    if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
+  })());
 });
