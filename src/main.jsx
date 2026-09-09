@@ -25,6 +25,7 @@ import NotificationSetup from './NotificationSetup.jsx'
 import PeopleDashboard from './PeopleDashboard.jsx'
 import PersonalizedCore from './PersonalizedCore.jsx'
 import Phase3Hub from './Phase3Hub.jsx'
+import PlanComparison from './PlanComparison.jsx'
 import PremiumCosmeticsEnhancement from './PremiumCosmeticsEnhancement.jsx'
 import PremiumProEnhancement from './PremiumProEnhancement.jsx'
 import ProfileSupportEnhancement from './ProfileSupportEnhancement.jsx'
@@ -49,6 +50,7 @@ function WavoApp() {
     <>
       <App />
       <PremiumProEnhancement />
+      <PlanComparison />
       <PremiumCosmeticsEnhancement />
       <ProfileSupportEnhancement />
       <PersonalizedCore />
