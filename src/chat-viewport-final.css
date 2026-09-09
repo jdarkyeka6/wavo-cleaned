@@ -18,14 +18,18 @@ html[data-wavo-ui="mobile-app"] .app-shell:has(.chat-screen) {
 html[data-wavo-ui="desktop-web"] .app-content:has(.chat-screen) {
   width: min(calc(100vw - 28px), 1100px) !important;
   height: 100% !important;
+  min-height: 0 !important;
   max-height: 100% !important;
   margin-inline: auto !important;
+  overflow: hidden !important;
 }
 
 :is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .app-content:has(.chat-screen) {
   width: 100% !important;
   height: 100% !important;
+  min-height: 0 !important;
   max-height: 100% !important;
+  overflow: hidden !important;
 }
 
 .chat-screen {
@@ -54,13 +58,16 @@ html[data-wavo-ui="desktop-web"] .app-content:has(.chat-screen) {
   padding-bottom: 18px !important;
 }
 
+/* Short conversations belong by the composer, not stranded at the top. */
+.chat-screen .dm-messages {
+  display: grid !important;
+  align-content: end !important;
+  gap: 9px !important;
+}
+
 .chat-screen .wpp-chat-host {
-  width: 100% !important;
   min-width: 0 !important;
-  max-width: 100% !important;
   min-height: 0 !important;
-  padding: 0 10px 5px !important;
-  overflow: hidden !important;
 }
 
 .chat-screen .wpp-chat-power {
@@ -103,8 +110,29 @@ html[data-wavo-ui="desktop-web"] .chat-screen .dm-composer {
   padding: 10px 12px 12px !important;
 }
 
+/* Keep the desktop Premium/Pro toolbox in its side rail. */
+@media (min-width: 1300px) and (pointer: fine) {
+  html[data-wavo-ui="desktop-web"] .chat-screen .wpp-chat-host {
+    position: fixed !important;
+    top: 92px !important;
+    right: 16px !important;
+    width: clamp(216px, calc((100vw - 820px) / 2 - 24px), 300px) !important;
+    max-width: 300px !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    z-index: 40 !important;
+  }
+
+  html[data-wavo-ui="desktop-web"] .chat-screen .wpp-chat-power {
+    max-height: calc(100dvh - 116px) !important;
+  }
+}
+
 :is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .wpp-chat-host {
+  width: 100% !important;
+  max-width: 100% !important;
   padding-inline: 6px !important;
+  overflow: hidden !important;
 }
 
 :is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .wpp-chat-power {
