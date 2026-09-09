@@ -5,6 +5,7 @@ import {
   ensureNotificationPermission,
   pushSupported,
   registerForPush,
+  registerServiceWorker,
   registerVoipForPush,
 } from './push'
 import { isNativeApp, isIOS } from './lib/platform'
@@ -13,6 +14,17 @@ import './notification-setup.css'
 const DISMISSED_KEY = 'wavo_notification_prompt_dismissed'
 const PUSH_DISABLED_KEY = 'wavo_push_disabled'
 const PUSH_TOKEN_KEY = 'wavo_push_device_token'
+const LAST_WEB_REFRESH_KEY = 'wavo_web_push_last_refresh'
+const WEB_REFRESH_MS = 6 * 60 * 60 * 1000
+
+function isDesktopWeb() {
+  if (isNativeApp || typeof window === 'undefined') return false
+  return window.matchMedia?.('(pointer: fine)').matches && window.innerWidth >= 700
+}
+
+function safeNotificationUrl(value) {
+  return typeof value === 'string' && value.startsWith('/') ? value : null
+}
 
 export default function NotificationSetup() {
   const [userId, setUserId] = useState(null)
@@ -41,6 +53,19 @@ export default function NotificationSetup() {
     if (!userId || !pushSupported()) return
 
     let cancelled = false
+    let cleanup
+
+    async function refreshWebPush(force = false) {
+      if (isNativeApp || Notification.permission !== 'granted') return
+      if (localStorage.getItem(PUSH_DISABLED_KEY) === '1') return
+
+      const lastRefresh = Number(localStorage.getItem(LAST_WEB_REFRESH_KEY) || 0)
+      if (!force && Date.now() - lastRefresh < WEB_REFRESH_MS) return
+
+      await registerServiceWorker()
+      const subscription = await registerForPush(userId)
+      if (subscription) localStorage.setItem(LAST_WEB_REFRESH_KEY, String(Date.now()))
+    }
 
     async function initialisePush() {
       const deliberatelyDisabled = localStorage.getItem(PUSH_DISABLED_KEY) === '1'
@@ -69,10 +94,8 @@ export default function NotificationSetup() {
         const actionListener = await PushNotifications.addListener(
           'pushNotificationActionPerformed',
           ({ notification }) => {
-            const url = notification?.data?.url
-            if (typeof url === 'string' && url.startsWith('/')) {
-              window.location.assign(url)
-            }
+            const url = safeNotificationUrl(notification?.data?.url)
+            if (url) window.location.assign(url)
           },
         )
 
@@ -93,16 +116,45 @@ export default function NotificationSetup() {
         }
       }
 
-      if (
+      // Desktop web previously only subscribed users who had already granted
+      // browser permission, which meant many desktop users were never actually
+      // offered push. Ask through Wavo's own card first, then let the browser
+      // permission prompt happen only after the user clicks Turn on.
+      await registerServiceWorker()
+
+      if (!deliberatelyDisabled && Notification.permission === 'granted') {
+        await refreshWebPush(true)
+      } else if (
+        Notification.permission === 'default' &&
         !deliberatelyDisabled &&
-        'Notification' in window &&
-        Notification.permission === 'granted'
+        localStorage.getItem(DISMISSED_KEY) !== '1' &&
+        isDesktopWeb() &&
+        !cancelled
       ) {
-        await registerForPush(userId)
+        setVisible(true)
+      }
+
+      const onVisibility = () => {
+        if (document.visibilityState === 'visible') refreshWebPush().catch(() => {})
+      }
+      const onFocus = () => refreshWebPush().catch(() => {})
+      const onServiceWorkerMessage = (event) => {
+        if (event.data?.type !== 'notification-click') return
+        const url = safeNotificationUrl(event.data?.url)
+        if (url) window.location.assign(url)
+      }
+
+      document.addEventListener('visibilitychange', onVisibility)
+      window.addEventListener('focus', onFocus)
+      navigator.serviceWorker?.addEventListener('message', onServiceWorkerMessage)
+
+      return () => {
+        document.removeEventListener('visibilitychange', onVisibility)
+        window.removeEventListener('focus', onFocus)
+        navigator.serviceWorker?.removeEventListener('message', onServiceWorkerMessage)
       }
     }
 
-    let cleanup
     initialisePush().then((fn) => {
       cleanup = fn
     })
@@ -117,6 +169,7 @@ export default function NotificationSetup() {
     if (!userId || busy) return
     setBusy(true)
     try {
+      if (!isNativeApp) await registerServiceWorker()
       const granted = await ensureNotificationPermission()
       if (!granted) {
         setVisible(false)
@@ -125,10 +178,16 @@ export default function NotificationSetup() {
       const token = await registerForPush(userId)
       if (token) {
         if (typeof token === 'string') localStorage.setItem(PUSH_TOKEN_KEY, token)
+        if (!isNativeApp) localStorage.setItem(LAST_WEB_REFRESH_KEY, String(Date.now()))
         localStorage.removeItem(PUSH_DISABLED_KEY)
         localStorage.removeItem(DISMISSED_KEY)
         setVisible(false)
-        setToast({ title: 'Notifications are on', body: 'Wavo can now alert you about new messages.' })
+        setToast({
+          title: 'Notifications are on',
+          body: isDesktopWeb()
+            ? 'Desktop alerts are live, even when Wavo is in another tab.'
+            : 'Wavo can now alert you about new messages.',
+        })
         window.setTimeout(() => setToast(null), 3500)
       }
     } finally {
@@ -159,8 +218,12 @@ export default function NotificationSetup() {
             <Bell size={22} />
           </div>
           <div className="wavo-notification-copy">
-            <strong>Don’t miss the wave</strong>
-            <span>Get notified when someone messages you, even when Wavo is closed.</span>
+            <strong>{isDesktopWeb() ? 'Turn on desktop notifications' : 'Don’t miss the wave'}</strong>
+            <span>
+              {isDesktopWeb()
+                ? 'Get instant message alerts while Wavo is hidden, minimised, or in another tab.'
+                : 'Get notified when someone messages you, even when Wavo is closed.'}
+            </span>
           </div>
           <button
             className="wavo-notification-enable"
