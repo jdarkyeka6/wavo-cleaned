@@ -1,0 +1,117 @@
+/* Final chat viewport contract. Keep this loaded after all responsive chat CSS. */
+html[data-wavo-ui="desktop-web"] body:has(.chat-screen),
+html[data-wavo-ui="mobile-web"] body:has(.chat-screen),
+html[data-wavo-ui="mobile-app"] body:has(.chat-screen) {
+  overflow: hidden !important;
+}
+
+html[data-wavo-ui="desktop-web"] .app-shell:has(.chat-screen),
+html[data-wavo-ui="mobile-web"] .app-shell:has(.chat-screen),
+html[data-wavo-ui="mobile-app"] .app-shell:has(.chat-screen) {
+  height: var(--wavo-viewport-height, 100dvh) !important;
+  min-height: 0 !important;
+  max-height: var(--wavo-viewport-height, 100dvh) !important;
+  padding-bottom: 0 !important;
+  overflow: hidden !important;
+}
+
+html[data-wavo-ui="desktop-web"] .app-content:has(.chat-screen) {
+  width: min(calc(100vw - 28px), 1100px) !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  margin-inline: auto !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .app-content:has(.chat-screen) {
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 100% !important;
+}
+
+.chat-screen {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) auto auto !important;
+  align-content: stretch !important;
+}
+
+.chat-screen .chat-topbar {
+  min-width: 0;
+}
+
+.chat-screen .dm-messages,
+.chat-screen .space-messages {
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: auto !important;
+  padding-bottom: 18px !important;
+}
+
+.chat-screen .wpp-chat-host {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  min-height: 0 !important;
+  padding: 0 10px 5px !important;
+  overflow: hidden !important;
+}
+
+.chat-screen .wpp-chat-power {
+  width: 100% !important;
+  max-width: 100% !important;
+  max-height: min(146px, 21dvh) !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  margin: 0 !important;
+  scrollbar-width: thin;
+  color: #f2f6ff !important;
+}
+
+.chat-screen .wpp-mini-notice {
+  color: #f2f6ff !important;
+  background: rgba(20, 29, 47, .98) !important;
+  border-color: rgba(255, 107, 122, .32) !important;
+}
+
+.chat-screen .wpp-chat-controls select,
+.chat-screen .wpp-chat-controls option {
+  color: #f2f6ff !important;
+  background-color: #121d30 !important;
+}
+
+.chat-screen .dm-composer,
+.chat-screen .composer {
+  position: relative !important;
+  inset: auto !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  flex: none !important;
+}
+
+html[data-wavo-ui="desktop-web"] .chat-screen .dm-composer {
+  padding: 10px 12px 12px !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .wpp-chat-host {
+  padding-inline: 6px !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .wpp-chat-power {
+  max-height: min(122px, 18dvh) !important;
+  border-radius: 12px !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .dm-composer {
+  padding-bottom: calc(10px + var(--wavo-safe-bottom, env(safe-area-inset-bottom))) !important;
+}
