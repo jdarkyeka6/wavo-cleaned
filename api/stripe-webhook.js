@@ -23,14 +23,31 @@ function tierForPlan(active, plan, explicitTier) {
   return "premium";
 }
 
+const INTERNAL_ENTITLEMENTS = new Set(["founder", "admin", "internal"]);
+
 async function setPremium(uid, active, until, plan, explicitTier) {
   if (!uid) return;
+
+  const { data: existing, error: readError } = await admin
+    .from("profiles")
+    .select("entitlement_source")
+    .eq("id", uid)
+    .maybeSingle();
+
+  if (readError) throw readError;
+
+  const source = String(existing?.entitlement_source || "").toLowerCase();
+  if (INTERNAL_ENTITLEMENTS.has(source)) return;
+
   const tier = tierForPlan(active, plan, explicitTier);
-  await admin.from("profiles").update({
+  const { error } = await admin.from("profiles").update({
     is_premium: active,
     premium_until: until ? new Date(until * 1000).toISOString() : null,
     tier,
+    entitlement_source: active ? "stripe" : null,
   }).eq("id", uid);
+
+  if (error) throw error;
   if (!active) await admin.rpc("strip_lapsed_premium");
 }
 
