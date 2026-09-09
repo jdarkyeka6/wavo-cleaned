@@ -49,20 +49,36 @@ html[data-wavo-ui="desktop-web"] .app-content:has(.chat-screen) {
 
 .chat-screen .dm-messages,
 .chat-screen .space-messages {
+  min-width: 0 !important;
   min-height: 0 !important;
+  height: auto !important;
   max-height: none !important;
+  overflow-x: hidden !important;
   overflow-y: auto !important;
-  overscroll-behavior: contain;
+  overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   scroll-behavior: auto !important;
   padding-bottom: 18px !important;
 }
 
-/* Short conversations belong by the composer, not stranded at the top. */
+/*
+ * Never bottom-align a scrollable grid with align-content:end.
+ * When the message stack becomes taller than the scroller, browsers can place
+ * the overflow above the scroll origin, making older messages unreachable.
+ * A flex auto-margin gives the same "short chats sit by the composer" effect
+ * while collapsing to zero as soon as the conversation needs to scroll.
+ */
 .chat-screen .dm-messages {
-  display: grid !important;
-  align-content: end !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  align-content: initial !important;
   gap: 9px !important;
+}
+
+.chat-screen .dm-messages > :first-child {
+  margin-top: auto !important;
 }
 
 .chat-screen .wpp-chat-host {
