@@ -20,6 +20,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
       pinned: true,
       userScrollUntil: 0,
       frame: 0,
+      settleTimers: [],
       mutationObserver: null,
       resizeObserver: null,
       destroyed: false,
@@ -35,8 +36,17 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
       state.frame = requestAnimationFrame(() => {
         state.frame = 0
         if (state.destroyed || !state.pinned) return
-        el.scrollTop = el.scrollHeight
+        el.scrollTo({ top: el.scrollHeight, left: 0, behavior: 'auto' })
       })
+    }
+
+    const settleAtBottom = () => {
+      if (state.destroyed) return
+      state.pinned = true
+      scrollToBottom()
+      requestAnimationFrame(scrollToBottom)
+      state.settleTimers.forEach(clearTimeout)
+      state.settleTimers = [40, 120, 300, 700, 1200].map((delay) => setTimeout(scrollToBottom, delay))
     }
 
     const onScroll = () => {
@@ -48,9 +58,6 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
         return
       }
 
-      // If Wavo/React/layout code unexpectedly throws a chat that was pinned at
-      // the bottom back toward the top, immediately restore the bottom instead
-      // of treating that programmatic jump as user intent.
       if (state.pinned && distance > PIN_THRESHOLD) {
         scrollToBottom()
       } else if (distance <= PIN_THRESHOLD) {
@@ -63,11 +70,18 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
     el.addEventListener('pointerdown', markUserScroll, { passive: true })
     el.addEventListener('scroll', onScroll, { passive: true })
 
-    state.mutationObserver = new MutationObserver(() => {
+    state.mutationObserver = new MutationObserver((records) => {
+      const conversationWasReplaced = records.some((record) =>
+        record.type === 'childList' && record.removedNodes.length > 0 && record.addedNodes.length > 0
+      )
+
+      if (conversationWasReplaced) {
+        settleAtBottom()
+        return
+      }
+
       if (!state.pinned) return
       scrollToBottom()
-      // A second frame catches late text/image/layout measurement after React
-      // inserts a new message.
       requestAnimationFrame(scrollToBottom)
     })
     state.mutationObserver.observe(el, {
@@ -86,6 +100,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
     state.destroy = () => {
       state.destroyed = true
       if (state.frame) cancelAnimationFrame(state.frame)
+      state.settleTimers.forEach(clearTimeout)
       state.mutationObserver?.disconnect()
       state.resizeObserver?.disconnect()
       el.removeEventListener('wheel', markUserScroll)
@@ -96,11 +111,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
     }
 
     active.add(state)
-
-    // Opening a conversation should land on the newest message, not message #1.
-    scrollToBottom()
-    requestAnimationFrame(scrollToBottom)
-    setTimeout(scrollToBottom, 60)
+    settleAtBottom()
   }
 
   function sync() {
