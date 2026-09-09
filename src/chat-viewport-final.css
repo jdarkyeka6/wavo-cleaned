@@ -15,6 +15,22 @@ html[data-wavo-ui="mobile-app"] .app-shell:has(.chat-screen) {
   overflow: hidden !important;
 }
 
+/*
+ * PullToRefresh renders .pull-shell. This wrapper must participate in the
+ * fixed-height chat chain or the app-content/chat height:100% values resolve
+ * against an auto-height parent and the message list grows past the viewport.
+ */
+html[data-wavo-ui="desktop-web"] .app-shell:has(.chat-screen) > .pull-shell,
+html[data-wavo-ui="mobile-web"] .app-shell:has(.chat-screen) > .pull-shell,
+html[data-wavo-ui="mobile-app"] .app-shell:has(.chat-screen) > .pull-shell {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+  display: block !important;
+}
+
 html[data-wavo-ui="desktop-web"] .app-content:has(.chat-screen) {
   width: min(calc(100vw - 28px), 1100px) !important;
   height: 100% !important;
@@ -79,6 +95,13 @@ html[data-wavo-ui="desktop-web"] .app-content:has(.chat-screen) {
 
 .chat-screen .dm-messages > :first-child {
   margin-top: auto !important;
+}
+
+/* Rows must span the scroller so incoming/outgoing bubbles can hug each side. */
+.chat-screen .dm-row {
+  width: 100% !important;
+  max-width: none !important;
+  flex: 0 0 auto !important;
 }
 
 .chat-screen .wpp-chat-host {
