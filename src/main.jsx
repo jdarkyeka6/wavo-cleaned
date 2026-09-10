@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { Analytics } from '@vercel/analytics/react'
 import './index.css'
 import './ui-overrides.css'
 import './admin.css'
@@ -87,9 +88,11 @@ createRoot(document.getElementById('root')).render(
           <Route path="/admin" element={<AdminRoute />} />
           <Route path="*" element={<WavoApp />} />
         </Routes>
+        <Analytics />
       </BrowserRouter>
     ) : (
       <ConfigError />
     )}
+    <Analytics />
   </StrictMode>,
 )
