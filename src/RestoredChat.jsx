@@ -1,9 +1,11 @@
 import { useMemo, useRef, useState } from "react";
 import {
   File as FileIcon,
+  FileText,
   Image as ImageIcon,
+  Images,
   Mic,
-  Paperclip,
+  Plus,
   Search,
   Send,
   Square,
@@ -20,6 +22,7 @@ import {
 import "./restored-chat.css";
 
 const GIPHY_API_KEY = import.meta.env.VITE_GIPHY_API_KEY;
+const TIDETRACTS_URL = import.meta.env.VITE_TIDETRACTS_URL || "https://tidetracts.lol";
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
 function safeFileName(name) {
@@ -29,6 +32,22 @@ function safeFileName(name) {
 function uniquePart() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function parseContract(message) {
+  if (message?.type !== "contract") return null;
+  try {
+    const parsed = JSON.parse(message.content || "{}");
+    if (parsed?.v !== 1 || typeof parsed?.url !== "string") return null;
+    const url = new URL(parsed.url);
+    if (url.protocol !== "https:") return null;
+    return {
+      title: String(parsed.title || "TideTracts contract").slice(0, 160),
+      url: url.toString(),
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function safetyCheckImage(imageUrl) {
@@ -41,6 +60,20 @@ async function safetyCheckImage(imageUrl) {
 
 export function MessageContent({ message, mine = false }) {
   if (message?.deleted_at) return <p>Message deleted</p>;
+
+  const contract = parseContract(message);
+  if (contract) {
+    return (
+      <a className="tidetracts-message" href={contract.url} target="_blank" rel="noreferrer">
+        <span className="tidetracts-message-icon"><FileText size={21} /></span>
+        <span className="tidetracts-message-copy">
+          <small>TideTracts · Contract</small>
+          <strong>{contract.title}</strong>
+          <span>Review & sign →</span>
+        </span>
+      </a>
+    );
+  }
 
   if (message?.type === "audio") {
     return (
@@ -79,10 +112,12 @@ export function MessageContent({ message, mine = false }) {
 }
 
 export function ChatComposer({ userId, friend = null, space = null, value, onChange, onSubmit }) {
+  const mediaInputRef = useRef(null);
   const fileInputRef = useRef(null);
   const voice = useVoiceRecorder();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [gifOpen, setGifOpen] = useState(false);
   const [gifQuery, setGifQuery] = useState("");
   const [gifs, setGifs] = useState([]);
@@ -177,6 +212,7 @@ export function ChatComposer({ userId, friend = null, space = null, value, onCha
       return;
     }
 
+    setToolsOpen(false);
     setBusy(true);
     setError("");
     try {
@@ -219,8 +255,22 @@ export function ChatComposer({ userId, friend = null, space = null, value, onCha
   }
 
   async function openGifPicker() {
+    setToolsOpen(false);
     setGifOpen(true);
     if (!gifs.length) await loadGifs("");
+  }
+
+  function openTideTracts() {
+    if (!friend && !space) {
+      setError("Open a chat before creating a contract.");
+      return;
+    }
+    const url = new URL("/new", TIDETRACTS_URL);
+    url.searchParams.set("wavo_kind", friend ? "dm" : "space");
+    url.searchParams.set("wavo_id", friend?.id || space?.id);
+    url.searchParams.set("wavo_name", friend?.username || space?.name || "Wavo");
+    setToolsOpen(false);
+    window.open(url.toString(), "_blank", "noopener,noreferrer");
   }
 
   async function sendGif(gif) {
@@ -242,6 +292,7 @@ export function ChatComposer({ userId, friend = null, space = null, value, onCha
   }
 
   async function startVoice() {
+    setToolsOpen(false);
     setError("");
     if (!voiceSupported()) {
       setError("Voice recording isn't available on this device.");
@@ -300,6 +351,18 @@ export function ChatComposer({ userId, friend = null, space = null, value, onCha
 
   return (
     <div className="restored-composer-wrap">
+      {toolsOpen && (
+        <section className="composer-plus-menu" aria-label="Add to chat">
+          <div className="composer-plus-head"><strong>Add to chat</strong><button type="button" onClick={() => setToolsOpen(false)} aria-label="Close add menu"><X size={17} /></button></div>
+          <div className="composer-plus-grid">
+            <button type="button" onClick={() => mediaInputRef.current?.click()} disabled={busy}><span className="plus-tile-icon"><Images size={20} /></span><span><strong>Photo or video</strong><small>Share from this device</small></span></button>
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={busy}><span className="plus-tile-icon"><FileIcon size={20} /></span><span><strong>File</strong><small>PDF, document or ZIP</small></span></button>
+            <button type="button" onClick={openGifPicker} disabled={busy}><span className="plus-tile-icon"><ImageIcon size={20} /></span><span><strong>GIF</strong><small>Search GIPHY</small></span></button>
+            <button type="button" className="tidetracts-plus-tile" onClick={openTideTracts} disabled={busy}><span className="plus-tile-icon"><FileText size={20} /></span><span><strong>TideTracts</strong><small>Create a contract to sign</small></span></button>
+          </div>
+        </section>
+      )}
+
       {gifOpen && (
         <section className="gif-picker" aria-label="GIF picker">
           <div className="gif-picker-head">
@@ -321,10 +384,10 @@ export function ChatComposer({ userId, friend = null, space = null, value, onCha
         </section>
       )}
 
-      <form className="composer dm-composer restored-composer" onSubmit={onSubmit}>
-        <input ref={fileInputRef} className="attachment-input" type="file" onChange={chooseFile} accept="image/*,video/*,.pdf,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip" />
-        <button type="button" className="composer-tool" onClick={() => fileInputRef.current?.click()} disabled={busy} aria-label="Attach a photo or file"><Paperclip size={19} /></button>
-        <button type="button" className="composer-tool gif-tool" onClick={openGifPicker} disabled={busy} aria-label="Send a GIF"><ImageIcon size={18} /><span>GIF</span></button>
+      <form className="composer dm-composer restored-composer" onSubmit={(event) => { setToolsOpen(false); onSubmit(event); }}>
+        <input ref={mediaInputRef} className="attachment-input" type="file" onChange={chooseFile} accept="image/*,video/*" />
+        <input ref={fileInputRef} className="attachment-input" type="file" onChange={chooseFile} accept=".pdf,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip" />
+        <button type="button" className={`composer-tool plus-trigger ${toolsOpen ? "open" : ""}`} onClick={() => { setGifOpen(false); setToolsOpen((open) => !open); }} disabled={busy} aria-label="Add to chat"><Plus size={21} /></button>
         <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={`Message ${targetName}`} />
         {value?.trim() ? (
           <button className="composer-send" type="submit" disabled={busy} aria-label="Send message"><Send size={18} /></button>
