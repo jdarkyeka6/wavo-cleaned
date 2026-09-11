@@ -4,8 +4,11 @@ import { createClient } from "@supabase/supabase-js";
 const PLANS = {
   standard: { label: "Wavo Premium", amount: 499, tier: "premium" },
   student: { label: "Wavo Premium — Student", amount: 349, tier: "premium" },
+  plus: { label: "Wavo Plus", amount: 999, tier: "plus", priceId: "price_1UESMPLytdJimLtBn6gVW7Qy" },
   pro: { label: "Wavo Pro", amount: 1499, tier: "pro" },
 };
+
+const TIER_RANK = { free: 0, premium: 1, plus: 2, pro: 3, vip: 3 };
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
@@ -47,8 +50,9 @@ export default async function handler(req, res) {
 
     const stillActive = profile.is_premium && (!profile.premium_until || new Date(profile.premium_until) > new Date());
     const currentTier = String(profile.tier || "free").toLowerCase();
-    if (stillActive && (currentTier === selected.tier || currentTier === "pro" || currentTier === "vip")) {
-      return res.status(400).json({ error: currentTier === "pro" || currentTier === "vip" ? "You're already on Wavo Pro." : "You're already on Wavo Premium." });
+    if (stillActive && (TIER_RANK[currentTier] ?? 0) >= (TIER_RANK[selected.tier] ?? 0)) {
+      const label = currentTier === "pro" || currentTier === "vip" ? "Wavo Pro" : currentTier === "plus" ? "Wavo Plus" : "Wavo Premium";
+      return res.status(400).json({ error: `You're already on ${label}.` });
     }
 
     let customerId = profile.stripe_customer_id;
@@ -62,18 +66,22 @@ export default async function handler(req, res) {
     }
 
     const origin = req.headers.origin || (req.headers.host ? `https://${req.headers.host}` : "https://www.wavo.lol");
+    const lineItem = selected.priceId
+      ? { quantity: 1, price: selected.priceId }
+      : {
+          quantity: 1,
+          price_data: {
+            currency: "aud",
+            unit_amount: selected.amount,
+            recurring: { interval: "month" },
+            product_data: { name: selected.label },
+          },
+        };
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
-      line_items: [{
-        quantity: 1,
-        price_data: {
-          currency: "aud",
-          unit_amount: selected.amount,
-          recurring: { interval: "month" },
-          product_data: { name: selected.label },
-        },
-      }],
+      line_items: [lineItem],
       success_url: `${origin}/?premium=1&tier=${selected.tier}`,
       cancel_url: `${origin}/?premium=0`,
       client_reference_id: user.id,
