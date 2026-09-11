@@ -45,6 +45,14 @@ jobs:
           test -f docs/APP_REVIEW_BUILD_38.md || { echo "::error::Build 38 App Review notes are missing"; exit 1; }
           test -f supabase/functions/delete-account/index.ts || { echo "::error::delete-account Edge Function source is missing"; exit 1; }
           echo "App Review account, privacy and legal requirements are present in the release source."
+      - name: Validate free-only native business model
+        run: |
+          set -euo pipefail
+          grep -q "canUsePaidFeatures" src/main.jsx || { echo "::error::Native paid-feature mount guard is missing"; exit 1; }
+          grep -q "if (!canUsePaidFeatures()) return 'free'" src/premiumProData.js || { echo "::error::Native paid-tier guard is missing"; exit 1; }
+          grep -q "submitted iOS app is free-only" docs/APP_REVIEW_BUILD_38.md || { echo "::error::Review notes do not describe the free-only iOS business model"; exit 1; }
+          grep -q "submitted iOS app is free-only" public/terms.html || { echo "::error::Terms do not describe the free-only iOS business model"; exit 1; }
+          echo "Native App Store build is guarded as free-only."
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
