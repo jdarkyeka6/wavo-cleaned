@@ -23,6 +23,7 @@ import ConfigError from './ConfigError.jsx'
 import DropInVoice from './DropInVoice.jsx'
 import GroupVideoCalls from './GroupVideoCalls.jsx'
 import LiveActivityCoordinator from './LiveActivityCoordinator.jsx'
+import NativeReviewHardening from './NativeReviewHardening.jsx'
 import NotificationSetup from './NotificationSetup.jsx'
 import PeopleDashboard from './PeopleDashboard.jsx'
 import PersonalizedCore from './PersonalizedCore.jsx'
@@ -53,6 +54,7 @@ function WavoApp() {
     <>
       <App />
       <PremiumProEnhancement />
+      <NativeReviewHardening />
       <PlanComparison />
       <PremiumCosmeticsEnhancement />
       <ProfileSupportEnhancement />
