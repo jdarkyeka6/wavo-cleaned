@@ -20,7 +20,17 @@ function tierForPlan(active, plan, explicitTier) {
   const requested = String(explicitTier || "").toLowerCase();
   const p = String(plan || "").toLowerCase();
   if (requested === "pro" || p === "pro" || p.startsWith("pro") || p.startsWith("vip")) return "pro";
+  // Plus deliberately inherits the Premium feature tier. Its extra AI entitlement
+  // is identified by entitlement_source so the rest of the existing Premium UI
+  // keeps working without accidentally granting Pro-only Space controls.
   return "premium";
+}
+
+function entitlementSource(active, plan, explicitTier) {
+  if (!active) return null;
+  const requested = String(explicitTier || "").toLowerCase();
+  const p = String(plan || "").toLowerCase();
+  return requested === "plus" || p === "plus" ? "stripe_plus" : "stripe";
 }
 
 const INTERNAL_ENTITLEMENTS = new Set(["founder", "admin", "internal"]);
@@ -44,7 +54,7 @@ async function setPremium(uid, active, until, plan, explicitTier) {
     is_premium: active,
     premium_until: until ? new Date(until * 1000).toISOString() : null,
     tier,
-    entitlement_source: active ? "stripe" : null,
+    entitlement_source: entitlementSource(active, plan, explicitTier),
   }).eq("id", uid);
 
   if (error) throw error;
