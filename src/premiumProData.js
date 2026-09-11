@@ -1,6 +1,10 @@
 import { supabase } from './supabaseClient'
+import { canUsePaidFeatures } from './lib/platform'
 
 export function paidTier(profile) {
+  // The current native app is intentionally free-only. Web Premium/Pro
+  // entitlements are not unlocked inside the App Store build.
+  if (!canUsePaidFeatures()) return 'free'
   const active = Boolean(profile?.is_premium) && (!profile?.premium_until || new Date(profile.premium_until) > new Date())
   if (!active) return 'free'
   const tier = String(profile?.tier || 'premium').toLowerCase()
