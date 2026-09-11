@@ -27,12 +27,13 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_GIPHY_API_KEY: ${{ secrets.VITE_GIPHY_API_KEY }}
         run: npm run build
-      - name: Verify Premium icon assets
+      - name: Verify final App Store icon
         run: |
-          for icon in OceanIcon MidnightIcon NeonIcon RoseIcon; do
-            test -f "ios/App/App/Assets.xcassets/${icon}.appiconset/Icon-1024.png" || { echo "::error::Missing ${icon}"; exit 1; }
-            test -f "ios/App/App/Assets.xcassets/${icon}.appiconset/Contents.json" || { echo "::error::Missing ${icon} Contents.json"; exit 1; }
-          done
+          icon="ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png"
+          test -f "$icon" || { echo "::error::Missing final AppIcon"; exit 1; }
+          width=$(sips -g pixelWidth "$icon" | awk '/pixelWidth/ {print $2}')
+          height=$(sips -g pixelHeight "$icon" | awk '/pixelHeight/ {print $2}')
+          test "$width" = "1024" && test "$height" = "1024" || { echo "::error::AppIcon must be 1024x1024"; exit 1; }
       - name: Sync iOS
         run: npx cap sync ios
       - name: Install Ruby dependencies
@@ -55,8 +56,8 @@ jobs:
           privacy = group.files.find { |file| file.path == 'PrivacyInfo.xcprivacy' } || group.new_file('PrivacyInfo.xcprivacy')
           target.resources_build_phase.add_file_reference(privacy, true) unless target.resources_build_phase.files_references.include?(privacy)
           target.build_configurations.each do |config|
-            config.build_settings['ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES'] = 'OceanIcon MidnightIcon NeonIcon RoseIcon'
-            config.build_settings['ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS'] = 'YES'
+            config.build_settings.delete('ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES')
+            config.build_settings['ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS'] = 'NO'
           end
           project.save
           RUBY
