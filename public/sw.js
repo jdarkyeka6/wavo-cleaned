@@ -1,6 +1,6 @@
 // Wavo service worker: app shell + push notifications.
-const CACHE_NAME = "wavo-shell-v3";
-const SHELL = ["/", "/index.html", "/favicon.svg"];
+const CACHE_NAME = "wavo-shell-v4";
+const SHELL = ["/", "/index.html", "/favicon.svg?v=20260911-centered"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -71,8 +71,8 @@ self.addEventListener("push", (event) => {
   const title = data.title || "Wavo";
   const options = {
     body: data.body || "",
-    icon: "/favicon.svg",
-    badge: "/favicon.svg",
+    icon: "/favicon.svg?v=20260911-centered",
+    badge: "/favicon.svg?v=20260911-centered",
     tag: data.tag || "wavo-message",
     renotify: true,
     silent: false,
