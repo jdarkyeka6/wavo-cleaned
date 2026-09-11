@@ -21,26 +21,26 @@ jobs:
             ls -d /Applications/Xcode*.app || true
           fi
           xcodebuild -version
-      - name: Validate final App Store icons
+      - name: Validate final App Store icon
         run: |
           set -euo pipefail
-          icons=(
-            "ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png"
-            "ios/App/App/Assets.xcassets/OceanIcon.appiconset/Icon-1024.png"
-            "ios/App/App/Assets.xcassets/MidnightIcon.appiconset/Icon-1024.png"
-            "ios/App/App/Assets.xcassets/NeonIcon.appiconset/Icon-1024.png"
-            "ios/App/App/Assets.xcassets/RoseIcon.appiconset/Icon-1024.png"
-          )
-          for icon in "${icons[@]}"; do
-            test -f "$icon" || { echo "::error::Missing app icon: $icon"; exit 1; }
-            width=$(sips -g pixelWidth "$icon" | awk '/pixelWidth/ {print $2}')
-            height=$(sips -g pixelHeight "$icon" | awk '/pixelHeight/ {print $2}')
-            if [ "$width" != "1024" ] || [ "$height" != "1024" ]; then
-              echo "::error::App icon must be 1024x1024: $icon is ${width}x${height}"
-              exit 1
-            fi
-          done
-          echo "Primary and alternate app icons are present and 1024x1024."
+          icon="ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png"
+          test -f "$icon" || { echo "::error::Missing final app icon: $icon"; exit 1; }
+          width=$(sips -g pixelWidth "$icon" | awk '/pixelWidth/ {print $2}')
+          height=$(sips -g pixelHeight "$icon" | awk '/pixelHeight/ {print $2}')
+          if [ "$width" != "1024" ] || [ "$height" != "1024" ]; then
+            echo "::error::App icon must be 1024x1024: $icon is ${width}x${height}"
+            exit 1
+          fi
+          echo "Final primary App Store icon is present and 1024x1024."
+      - name: Validate App Review account controls
+        run: |
+          set -euo pipefail
+          grep -q "AccountDeletion" src/main.jsx || { echo "::error::Account deletion UI is not mounted"; exit 1; }
+          grep -q "functions.invoke('delete-account'" src/AccountDeletion.jsx || { echo "::error::Account deletion UI is not wired to the server deletion flow"; exit 1; }
+          grep -q "Delete your account" public/privacy.html || { echo "::error::Privacy policy does not document account deletion"; exit 1; }
+          test -f supabase/functions/delete-account/index.ts || { echo "::error::delete-account Edge Function source is missing"; exit 1; }
+          echo "App Review account deletion requirements are present in the release source."
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -98,8 +98,8 @@ jobs:
             target.resources_build_phase.add_file_reference(ref, true)
           end
           target.build_configurations.each do |config|
-            config.build_settings['ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES'] = 'OceanIcon MidnightIcon NeonIcon RoseIcon'
-            config.build_settings['ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS'] = 'YES'
+            config.build_settings.delete('ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES')
+            config.build_settings['ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS'] = 'NO'
           end
           project.save
           RUBY
