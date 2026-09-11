@@ -29,6 +29,7 @@ import PeopleDashboard from './PeopleDashboard.jsx'
 import PersonalizedCore from './PersonalizedCore.jsx'
 import Phase3Hub from './Phase3Hub.jsx'
 import PlanComparison from './PlanComparison.jsx'
+import PlusPlanEnhancement from './PlusPlanEnhancement.jsx'
 import PremiumCosmeticsEnhancement from './PremiumCosmeticsEnhancement.jsx'
 import PremiumProEnhancement from './PremiumProEnhancement.jsx'
 import ProfileSupportEnhancement from './ProfileSupportEnhancement.jsx'
@@ -56,6 +57,7 @@ function WavoApp() {
     <>
       <App />
       {paidFeaturesEnabled && <PremiumProEnhancement />}
+      {paidFeaturesEnabled && <PlusPlanEnhancement />}
       <NativeReviewHardening />
       {paidFeaturesEnabled && <PlanComparison />}
       {paidFeaturesEnabled && <PremiumCosmeticsEnhancement />}
