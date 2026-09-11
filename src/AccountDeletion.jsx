@@ -34,7 +34,7 @@ export default function AccountDeletion() {
       const profileHero = document.querySelector('.profile-hero')
       const profileScreen = profileHero?.closest('.screen')
       if (!profileScreen) {
-        setHost((current) => (current ? null : current))
+        setHost(null)
         return
       }
 
@@ -59,7 +59,7 @@ export default function AccountDeletion() {
   useEffect(() => {
     if (!open) return undefined
     const onKeyDown = (event) => {
-      if (event.key === 'Escape' && !busy) setOpen(false)
+      if (event.key === 'Escape' && !busy) close()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -70,6 +70,12 @@ export default function AccountDeletion() {
     setOpen(false)
     setConfirmation('')
     setError('')
+  }
+
+  function openDeletion() {
+    setConfirmation('')
+    setError('')
+    setOpen(true)
   }
 
   async function deleteAccount() {
@@ -92,81 +98,85 @@ export default function AccountDeletion() {
       window.location.replace('/')
     } catch (err) {
       console.error('[wavo] account deletion failed', err)
-      setError("We couldn't delete your account. Nothing else was changed. Please try again.")
+      setError("We couldn't complete account deletion. Please try again. If it keeps failing, contact Wavo Support.")
       setBusy(false)
     }
   }
 
   if (!host) return null
 
-  return createPortal(
-    <>
-      <section className="wavo-account-card" aria-label="Account settings">
-        <div className="wavo-account-copy">
-          <span className="wavo-account-icon"><Trash2 size={20} /></span>
-          <div>
-            <strong>Account</strong>
-            <span>Manage or permanently delete your Wavo account.</span>
-          </div>
+  const accountCard = (
+    <section className="wavo-account-card" aria-label="Account settings">
+      <div className="wavo-account-copy">
+        <span className="wavo-account-icon"><Trash2 size={20} /></span>
+        <div>
+          <strong>Account</strong>
+          <span>Manage or permanently delete your Wavo account.</span>
         </div>
-        <button type="button" className="wavo-delete-account-button" onClick={() => setOpen(true)}>
-          Delete account
-        </button>
+      </div>
+      <button type="button" className="wavo-delete-account-button" onClick={openDeletion}>
+        Delete account
+      </button>
+    </section>
+  )
+
+  const deletionModal = open ? (
+    <div className="wavo-delete-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
+      <section className="wavo-delete-modal" role="dialog" aria-modal="true" aria-labelledby="wavo-delete-title">
+        <div className="wavo-delete-header">
+          <span className="wavo-delete-warning"><AlertTriangle size={22} /></span>
+          <div>
+            <span className="wavo-delete-eyebrow">PERMANENT ACCOUNT DELETION</span>
+            <h2 id="wavo-delete-title">Delete your Wavo account?</h2>
+          </div>
+          <button type="button" className="wavo-delete-close" onClick={close} disabled={busy} aria-label="Close"><X size={20} /></button>
+        </div>
+
+        <p className="wavo-delete-lead">This cannot be undone. Your Wavo account and associated user data will be permanently deleted.</p>
+        <ul className="wavo-delete-list">
+          <li>Your profile and account will be removed.</li>
+          <li>Your Wavo messages, posts, Waves, friendships and account-linked activity will be removed.</li>
+          <li>Files you uploaded to Wavo under this account will be removed.</li>
+          <li>You will be signed out when deletion finishes.</li>
+        </ul>
+
+        <label className="wavo-delete-confirm-label" htmlFor="wavo-delete-confirm">
+          Type <strong>DELETE</strong> to confirm
+        </label>
+        <input
+          id="wavo-delete-confirm"
+          className="wavo-delete-confirm-input"
+          value={confirmation}
+          onChange={(event) => setConfirmation(event.target.value.toUpperCase())}
+          autoCapitalize="characters"
+          autoCorrect="off"
+          spellCheck="false"
+          disabled={busy}
+          placeholder="DELETE"
+          autoFocus
+        />
+
+        {error && <div className="wavo-delete-error" role="alert">{error}</div>}
+
+        <div className="wavo-delete-actions">
+          <button type="button" className="wavo-delete-cancel" onClick={close} disabled={busy}>Cancel</button>
+          <button
+            type="button"
+            className="wavo-delete-confirm-button"
+            onClick={deleteAccount}
+            disabled={confirmation !== 'DELETE' || busy}
+          >
+            {busy ? 'Deleting account…' : 'Permanently delete account'}
+          </button>
+        </div>
       </section>
+    </div>
+  ) : null
 
-      {open && createPortal(
-        <div className="wavo-delete-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
-          <section className="wavo-delete-modal" role="dialog" aria-modal="true" aria-labelledby="wavo-delete-title">
-            <div className="wavo-delete-header">
-              <span className="wavo-delete-warning"><AlertTriangle size={22} /></span>
-              <div>
-                <span className="wavo-delete-eyebrow">PERMANENT ACCOUNT DELETION</span>
-                <h2 id="wavo-delete-title">Delete your Wavo account?</h2>
-              </div>
-              <button type="button" className="wavo-delete-close" onClick={close} disabled={busy} aria-label="Close"><X size={20} /></button>
-            </div>
-
-            <p className="wavo-delete-lead">This cannot be undone. Your Wavo account and associated user data will be permanently deleted.</p>
-            <ul className="wavo-delete-list">
-              <li>Your profile and account will be removed.</li>
-              <li>Your Wavo messages, posts, Waves, friendships and account-linked activity will be removed.</li>
-              <li>Files you uploaded to Wavo under this account will be removed.</li>
-              <li>You will be signed out when deletion finishes.</li>
-            </ul>
-
-            <label className="wavo-delete-confirm-label" htmlFor="wavo-delete-confirm">
-              Type <strong>DELETE</strong> to confirm
-            </label>
-            <input
-              id="wavo-delete-confirm"
-              className="wavo-delete-confirm-input"
-              value={confirmation}
-              onChange={(event) => setConfirmation(event.target.value.toUpperCase())}
-              autoCapitalize="characters"
-              autoCorrect="off"
-              spellCheck="false"
-              disabled={busy}
-              placeholder="DELETE"
-            />
-
-            {error && <div className="wavo-delete-error" role="alert">{error}</div>}
-
-            <div className="wavo-delete-actions">
-              <button type="button" className="wavo-delete-cancel" onClick={close} disabled={busy}>Cancel</button>
-              <button
-                type="button"
-                className="wavo-delete-confirm-button"
-                onClick={deleteAccount}
-                disabled={confirmation !== 'DELETE' || busy}
-              >
-                {busy ? 'Deleting account…' : 'Permanently delete account'}
-              </button>
-            </div>
-          </section>
-        </div>,
-        document.body,
-      )}
-    </>,
-    host,
+  return (
+    <>
+      {createPortal(accountCard, host)}
+      {deletionModal && createPortal(deletionModal, document.body)}
+    </>
   )
 }
