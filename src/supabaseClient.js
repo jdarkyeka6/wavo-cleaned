@@ -6,6 +6,49 @@ const client = createClient(
   SUPABASE_ANON_KEY || "placeholder"
 );
 
+function normaliseTestAccountCredentials(credentials = {}) {
+  const rawUsername = String(credentials?.options?.data?.username || "").trim();
+  const match = /^test:(.+)$/i.exec(rawUsername);
+  if (!match) return credentials;
+
+  const cleanUsername = match[1].trim();
+  if (!cleanUsername) return credentials;
+
+  return {
+    ...credentials,
+    email: `${cleanUsername.toLowerCase()}@wavo.app`,
+    options: {
+      ...credentials.options,
+      data: {
+        ...(credentials.options?.data || {}),
+        username: cleanUsername,
+        is_internal: true,
+      },
+    },
+  };
+}
+
+function normaliseTestLoginCredentials(credentials = {}) {
+  const email = String(credentials?.email || "").trim();
+  const match = /^test:(.+)@wavo\.app$/i.exec(email);
+  if (!match) return credentials;
+
+  const cleanUsername = match[1].trim();
+  if (!cleanUsername) return credentials;
+
+  return {
+    ...credentials,
+    email: `${cleanUsername.toLowerCase()}@wavo.app`,
+  };
+}
+
+const originalSignUp = client.auth.signUp.bind(client.auth);
+client.auth.signUp = (credentials) => originalSignUp(normaliseTestAccountCredentials(credentials));
+
+const originalSignInWithPassword = client.auth.signInWithPassword.bind(client.auth);
+client.auth.signInWithPassword = (credentials) =>
+  originalSignInWithPassword(normaliseTestLoginCredentials(credentials));
+
 const originalFrom = client.from.bind(client);
 client.from = (table) => {
   const query = originalFrom(table);
