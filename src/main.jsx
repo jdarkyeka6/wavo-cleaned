@@ -23,6 +23,7 @@ import ConfigError from './ConfigError.jsx'
 import DropInVoice from './DropInVoice.jsx'
 import GroupVideoCalls from './GroupVideoCalls.jsx'
 import LiveActivityCoordinator from './LiveActivityCoordinator.jsx'
+import NativeContentSafety from './NativeContentSafety.jsx'
 import NativeReviewHardening from './NativeReviewHardening.jsx'
 import NotificationSetup from './NotificationSetup.jsx'
 import PeopleDashboard from './PeopleDashboard.jsx'
@@ -59,6 +60,7 @@ function WavoApp() {
       {paidFeaturesEnabled && <PremiumProEnhancement />}
       {paidFeaturesEnabled && <PlusPlanEnhancement />}
       <NativeReviewHardening />
+      <NativeContentSafety />
       {paidFeaturesEnabled && <PlanComparison />}
       {paidFeaturesEnabled && <PremiumCosmeticsEnhancement />}
       <ProfileSupportEnhancement />
