@@ -1,0 +1,257 @@
+.wavo-account-deletion-host {
+  margin: 14px 0;
+}
+
+.wavo-account-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid rgba(255, 95, 87, 0.28);
+  border-radius: 18px;
+  background: rgba(255, 95, 87, 0.06);
+}
+
+.wavo-account-copy {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+
+.wavo-account-copy > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.wavo-account-copy strong {
+  font-size: 15px;
+}
+
+.wavo-account-copy span:not(.wavo-account-icon) {
+  color: var(--text-dim, #a9adb8);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.wavo-account-icon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(255, 95, 87, 0.12);
+  color: #ff6961;
+}
+
+.wavo-delete-account-button {
+  min-height: 44px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 95, 87, 0.42);
+  border-radius: 12px;
+  padding: 0 14px;
+  background: rgba(255, 95, 87, 0.11);
+  color: #ff7b74;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.wavo-delete-account-button:active {
+  transform: translateY(1px);
+}
+
+.wavo-delete-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: grid;
+  place-items: center;
+  padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  background: rgba(4, 6, 10, 0.76);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  overflow-y: auto;
+}
+
+.wavo-delete-modal {
+  width: min(100%, 560px);
+  max-height: min(760px, calc(100dvh - 36px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  padding: 22px;
+  background: var(--panel, #171a21);
+  color: var(--text, #f4f5f8);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
+}
+
+.wavo-delete-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+}
+
+.wavo-delete-warning {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: rgba(255, 95, 87, 0.14);
+  color: #ff736b;
+}
+
+.wavo-delete-eyebrow {
+  display: block;
+  margin-bottom: 4px;
+  color: #ff817a;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+}
+
+.wavo-delete-header h2 {
+  margin: 0;
+  font-size: clamp(21px, 3vw, 27px);
+  line-height: 1.15;
+}
+
+.wavo-delete-close {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  color: inherit;
+  cursor: pointer;
+}
+
+.wavo-delete-lead {
+  margin: 18px 0 12px;
+  color: var(--text, #f4f5f8);
+  line-height: 1.55;
+}
+
+.wavo-delete-list {
+  margin: 0 0 20px;
+  padding-left: 22px;
+  color: var(--text-dim, #b0b4be);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.wavo-delete-list li + li {
+  margin-top: 6px;
+}
+
+.wavo-delete-confirm-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.wavo-delete-confirm-input {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 13px;
+  padding: 0 14px;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font: inherit;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  outline: none;
+}
+
+.wavo-delete-confirm-input:focus {
+  border-color: rgba(255, 105, 97, 0.72);
+  box-shadow: 0 0 0 3px rgba(255, 105, 97, 0.12);
+}
+
+.wavo-delete-error {
+  margin-top: 12px;
+  border: 1px solid rgba(255, 95, 87, 0.32);
+  border-radius: 12px;
+  padding: 11px 12px;
+  background: rgba(255, 95, 87, 0.08);
+  color: #ff8a84;
+  font-size: 13px;
+}
+
+.wavo-delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.wavo-delete-cancel,
+.wavo-delete-confirm-button {
+  min-height: 44px;
+  border-radius: 12px;
+  padding: 0 15px;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.wavo-delete-cancel {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+}
+
+.wavo-delete-confirm-button {
+  border: 1px solid rgba(255, 95, 87, 0.52);
+  background: #d94b45;
+  color: white;
+}
+
+.wavo-delete-confirm-button:disabled,
+.wavo-delete-cancel:disabled,
+.wavo-delete-close:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+@media (max-width: 620px) {
+  .wavo-account-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .wavo-delete-account-button {
+    width: 100%;
+  }
+
+  .wavo-delete-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .wavo-delete-modal {
+    width: 100%;
+    max-height: min(88dvh, 780px);
+    border-radius: 24px 24px 0 0;
+    padding: 20px max(18px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  }
+
+  .wavo-delete-actions {
+    flex-direction: column-reverse;
+  }
+
+  .wavo-delete-cancel,
+  .wavo-delete-confirm-button {
+    width: 100%;
+  }
+}

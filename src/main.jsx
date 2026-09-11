@@ -11,6 +11,7 @@ import './chat-call-peer-fix.js'
 import './chat-keyboard-viewport.js'
 import './chat-scroll-anchor.js'
 import './place-markers.js'
+import AccountDeletion from './AccountDeletion.jsx'
 import App from './App.jsx'
 import AdminRoute from './AdminRoute.jsx'
 import CallContinuityBridge from './CallContinuityBridge.jsx'
@@ -55,6 +56,7 @@ function WavoApp() {
       <PlanComparison />
       <PremiumCosmeticsEnhancement />
       <ProfileSupportEnhancement />
+      <AccountDeletion />
       <PersonalizedCore />
       <NotificationSetup />
       <UiEnhancements />
