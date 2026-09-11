@@ -80,6 +80,52 @@ jobs:
           echo "Bundle contains the Supabase URL."
       - name: Sync web build into iOS
         run: npx cap sync ios
+      - name: iPad simulator smoke test
+        run: |
+          set -euo pipefail
+
+          echo "Available iPad simulators:"
+          xcrun simctl list devices available | grep "iPad" || true
+
+          IPAD_UDID=$(xcrun simctl list devices available | grep "iPad" | grep -Eo '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}' | head -n 1)
+          if [ -z "$IPAD_UDID" ]; then
+            echo "::error::No available iPad simulator was found on the macOS runner."
+            exit 1
+          fi
+
+          echo "Using iPad simulator $IPAD_UDID"
+          xcrun simctl boot "$IPAD_UDID" 2>/dev/null || true
+          xcrun simctl bootstatus "$IPAD_UDID" -b
+
+          DERIVED_DATA="$RUNNER_TEMP/wavo-ipad-derived"
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "id=$IPAD_UDID" \
+            -derivedDataPath "$DERIVED_DATA" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+          APP_PATH="$DERIVED_DATA/Build/Products/Debug-iphonesimulator/App.app"
+          test -d "$APP_PATH" || { echo "::error::Simulator app was not produced at $APP_PATH"; exit 1; }
+
+          xcrun simctl install "$IPAD_UDID" "$APP_PATH"
+          xcrun simctl launch "$IPAD_UDID" lol.wavo.app
+          sleep 8
+
+          mkdir -p artifacts
+          xcrun simctl io "$IPAD_UDID" screenshot artifacts/wavo-ipad-launch.png
+          echo "Wavo built, installed and launched on an iPad simulator."
+      - name: Upload iPad smoke-test screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wavo-ipad-smoke-test
+          path: artifacts/wavo-ipad-launch.png
+          if-no-files-found: warn
+          retention-days: 14
       - name: Set up Ruby and Fastlane
         uses: ruby/setup-ruby@v1
         with:
