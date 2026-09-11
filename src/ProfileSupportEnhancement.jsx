@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronRight, LifeBuoy, ShieldCheck } from 'lucide-react'
+import { ChevronRight, FileText, LifeBuoy, ShieldCheck } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import './profile-support.css'
@@ -88,6 +88,26 @@ export default function ProfileSupportEnhancement() {
           Open Support
           <ChevronRight size={18} />
         </button>
+      </section>
+
+      <section className="wavo-profile-support-card" aria-label="Legal and privacy">
+        <div className="wavo-profile-support-copy">
+          <span className="wavo-profile-support-icon"><FileText size={20} /></span>
+          <div>
+            <strong>Legal & privacy</strong>
+            <span>Read Wavo's Privacy Policy and Terms from inside the app.</span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" className="wavo-profile-support-button" onClick={() => window.location.assign('/privacy.html')}>
+            Privacy Policy
+            <ChevronRight size={18} />
+          </button>
+          <button type="button" className="wavo-profile-support-button" onClick={() => window.location.assign('/terms.html')}>
+            Terms
+            <ChevronRight size={18} />
+          </button>
+        </div>
       </section>
 
       {isAdmin && (
