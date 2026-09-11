@@ -39,8 +39,12 @@ jobs:
           grep -q "AccountDeletion" src/main.jsx || { echo "::error::Account deletion UI is not mounted"; exit 1; }
           grep -q "functions.invoke('delete-account'" src/AccountDeletion.jsx || { echo "::error::Account deletion UI is not wired to the server deletion flow"; exit 1; }
           grep -q "Delete your account" public/privacy.html || { echo "::error::Privacy policy does not document account deletion"; exit 1; }
+          grep -q "Privacy Policy" src/ProfileSupportEnhancement.jsx || { echo "::error::Signed-in app has no direct Privacy Policy control"; exit 1; }
+          grep -q "terms.html" src/ProfileSupportEnhancement.jsx || { echo "::error::Signed-in app has no direct Terms control"; exit 1; }
+          grep -q "at least equivalent" public/privacy.html || { echo "::error::Privacy policy is missing service-provider protection language"; exit 1; }
+          test -f docs/APP_REVIEW_BUILD_38.md || { echo "::error::Build 38 App Review notes are missing"; exit 1; }
           test -f supabase/functions/delete-account/index.ts || { echo "::error::delete-account Edge Function source is missing"; exit 1; }
-          echo "App Review account deletion requirements are present in the release source."
+          echo "App Review account, privacy and legal requirements are present in the release source."
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
