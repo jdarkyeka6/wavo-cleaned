@@ -41,7 +41,7 @@ export default async function handler(req, res) {
 
     const { data: profile, error: profErr } = await admin
       .from("profiles")
-      .select("id,username,is_premium,premium_until,stripe_customer_id,banned,tier")
+      .select("id,username,is_premium,premium_until,stripe_customer_id,banned,tier,entitlement_source")
       .eq("id", user.id)
       .single();
     if (profErr) return res.status(500).json({ error: "Profile lookup failed: " + profErr.message });
@@ -49,7 +49,8 @@ export default async function handler(req, res) {
     if (profile.banned) return res.status(403).json({ error: "Your account can't buy a paid plan right now." });
 
     const stillActive = profile.is_premium && (!profile.premium_until || new Date(profile.premium_until) > new Date());
-    const currentTier = String(profile.tier || "free").toLowerCase();
+    const rawTier = String(profile.tier || "free").toLowerCase();
+    const currentTier = stillActive && String(profile.entitlement_source || "").toLowerCase() === "stripe_plus" ? "plus" : rawTier;
     if (stillActive && (TIER_RANK[currentTier] ?? 0) >= (TIER_RANK[selected.tier] ?? 0)) {
       const label = currentTier === "pro" || currentTier === "vip" ? "Wavo Pro" : currentTier === "plus" ? "Wavo Plus" : "Wavo Premium";
       return res.status(400).json({ error: `You're already on ${label}.` });
