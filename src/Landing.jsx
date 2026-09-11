@@ -117,7 +117,12 @@ export default function Landing({ onGetStarted, onLogin }) {
     <main className="landing">
       <nav className="landing-nav">
         <div className="landing-brand">
-          <span className="logo-mark sm">W</span>
+          <img
+            src="/favicon.svg?v=20260911-centered"
+            alt=""
+            aria-hidden="true"
+            style={{ width: 34, height: 34, flex: "0 0 34px" }}
+          />
           <span>Wavo</span>
         </div>
         <div className="landing-nav-actions">
