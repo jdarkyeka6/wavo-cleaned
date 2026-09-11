@@ -24,6 +24,17 @@ export const PLANS = {
     tier: 'premium',
     requiresStudentDeclaration: true,
   },
+  plus: {
+    id: 'plus',
+    label: 'Plus',
+    name: 'Wavo Plus',
+    price: 9.99,
+    priceAud: 9.99,
+    priceLabel: '$9.99 AUD / month',
+    blurb: 'Everything in Premium plus AI chat summaries, Ask Wavo and voice-note transcription.',
+    tier: 'plus',
+    requiresStudentDeclaration: false,
+  },
   pro: {
     id: 'pro',
     label: 'Pro',
@@ -31,13 +42,14 @@ export const PLANS = {
     price: 14.99,
     priceAud: 14.99,
     priceLabel: '$14.99 AUD / month',
-    blurb: 'Premium plus AI, transcription and serious Space tools.',
+    blurb: 'Everything in Plus plus serious Space tools.',
     tier: 'pro',
     requiresStudentDeclaration: false,
   },
 }
 
 export const DEFAULT_PLAN = 'standard'
+export const PLUS_PLAN = 'plus'
 export const PRO_PLAN = 'pro'
 
 export function getPlan(id) {
