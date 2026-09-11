@@ -42,21 +42,23 @@ import WavesPageV2 from './WavesPageV2.jsx'
 import WavoTogether from './WavoTogether.jsx'
 import { isConfigured } from './lib/config'
 import { installUiMode } from './lib/layout'
+import { canUsePaidFeatures } from './lib/platform'
 import './responsive-platform.css'
 import './responsive-platform-edge.css'
 import './chat-keyboard-viewport.css'
 import './chat-viewport-final.css'
 
 installUiMode()
+const paidFeaturesEnabled = canUsePaidFeatures()
 
 function WavoApp() {
   return (
     <>
       <App />
-      <PremiumProEnhancement />
+      {paidFeaturesEnabled && <PremiumProEnhancement />}
       <NativeReviewHardening />
-      <PlanComparison />
-      <PremiumCosmeticsEnhancement />
+      {paidFeaturesEnabled && <PlanComparison />}
+      {paidFeaturesEnabled && <PremiumCosmeticsEnhancement />}
       <ProfileSupportEnhancement />
       <AccountDeletion />
       <PersonalizedCore />
