@@ -103,8 +103,35 @@ platform :ios do
         "Distribution certificate limit reached. Revoking oldest distribution certificate " \
         "#{oldest.display_name || oldest.name || oldest.id} (#{oldest.certificate_type}, expires #{oldest.expiration_date || 'unknown'}), then retrying."
       )
+
+      revoked_id = oldest.id
       oldest.delete!
-      sleep 3
+
+      # Apple can take noticeably longer than the DELETE request to release the
+      # Distribution-certificate slot. Do not revoke a second certificate just
+      # because the portal is eventually consistent. Poll until the specific
+      # certificate disappears, then give Apple a short extra settling window.
+      revocation_visible = false
+      12.times do |attempt|
+        sleep 5
+        remaining = Spaceship::ConnectAPI::Certificate.all.select do |candidate|
+          allowed_types.include?(candidate.certificate_type)
+        end
+        unless remaining.any? { |candidate| candidate.id == revoked_id }
+          revocation_visible = true
+          UI.success("Apple now reports the revoked Distribution certificate as gone.")
+          break
+        end
+        UI.message("Waiting for Apple certificate revocation to propagate (#{(attempt + 1) * 5}s / 60s)…")
+      end
+
+      if revocation_visible
+        sleep 5
+      else
+        UI.important("The revoked certificate is still visible after 60 seconds. Waiting 30 more seconds before one final creation attempt; no additional certificates will be revoked.")
+        sleep 30
+      end
+
       cert(**cert_args)
     end
 
