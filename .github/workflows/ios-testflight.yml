@@ -21,6 +21,26 @@ jobs:
             ls -d /Applications/Xcode*.app || true
           fi
           xcodebuild -version
+      - name: Validate final App Store icons
+        run: |
+          set -euo pipefail
+          icons=(
+            "ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png"
+            "ios/App/App/Assets.xcassets/OceanIcon.appiconset/Icon-1024.png"
+            "ios/App/App/Assets.xcassets/MidnightIcon.appiconset/Icon-1024.png"
+            "ios/App/App/Assets.xcassets/NeonIcon.appiconset/Icon-1024.png"
+            "ios/App/App/Assets.xcassets/RoseIcon.appiconset/Icon-1024.png"
+          )
+          for icon in "${icons[@]}"; do
+            test -f "$icon" || { echo "::error::Missing app icon: $icon"; exit 1; }
+            width=$(sips -g pixelWidth "$icon" | awk '/pixelWidth/ {print $2}')
+            height=$(sips -g pixelHeight "$icon" | awk '/pixelHeight/ {print $2}')
+            if [ "$width" != "1024" ] || [ "$height" != "1024" ]; then
+              echo "::error::App icon must be 1024x1024: $icon is ${width}x${height}"
+              exit 1
+            fi
+          done
+          echo "Primary and alternate app icons are present and 1024x1024."
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
