@@ -21,6 +21,17 @@ jobs:
             ls -d /Applications/Xcode*.app || true
           fi
           xcodebuild -version
+      - name: Rebuild exact Wavo App Store icon
+        run: |
+          set -euo pipefail
+          icon_dir="ios/App/App/Assets.xcassets/AppIcon.appiconset"
+          source_b64="$icon_dir/WavoIconSource.b64"
+          source_png="$RUNNER_TEMP/wavo-icon-source.png"
+          icon="$icon_dir/AppIcon-512@2x.png"
+          test -f "$source_b64" || { echo "::error::Missing exact Wavo icon source"; exit 1; }
+          base64 -D < "$source_b64" > "$source_png"
+          sips -z 1024 1024 "$source_png" --out "$icon" >/dev/null
+          echo "Rebuilt AppIcon from the exact user-supplied Wavo artwork."
       - name: Validate final App Store icon
         run: |
           set -euo pipefail
@@ -28,11 +39,16 @@ jobs:
           test -f "$icon" || { echo "::error::Missing final app icon: $icon"; exit 1; }
           width=$(sips -g pixelWidth "$icon" | awk '/pixelWidth/ {print $2}')
           height=$(sips -g pixelHeight "$icon" | awk '/pixelHeight/ {print $2}')
+          alpha=$(sips -g hasAlpha "$icon" | awk '/hasAlpha/ {print $2}')
           if [ "$width" != "1024" ] || [ "$height" != "1024" ]; then
             echo "::error::App icon must be 1024x1024: $icon is ${width}x${height}"
             exit 1
           fi
-          echo "Final primary App Store icon is present and 1024x1024."
+          if [ "$alpha" = "yes" ]; then
+            echo "::error::App Store icon must not contain alpha transparency"
+            exit 1
+          fi
+          echo "Final primary App Store icon is present, opaque and 1024x1024."
       - name: Validate App Review account controls
         run: |
           set -euo pipefail
@@ -91,38 +107,23 @@ jobs:
       - name: iPad simulator smoke test
         run: |
           set -euo pipefail
-
           echo "Available iPad simulators:"
           xcrun simctl list devices available | grep "iPad" || true
-
           IPAD_UDID=$(xcrun simctl list devices available | grep "iPad" | grep -Eo '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}' | head -n 1)
           if [ -z "$IPAD_UDID" ]; then
             echo "::error::No available iPad simulator was found on the macOS runner."
             exit 1
           fi
-
           echo "Using iPad simulator $IPAD_UDID"
           xcrun simctl boot "$IPAD_UDID" 2>/dev/null || true
           xcrun simctl bootstatus "$IPAD_UDID" -b
-
           DERIVED_DATA="$RUNNER_TEMP/wavo-ipad-derived"
-          xcodebuild \
-            -project ios/App/App.xcodeproj \
-            -scheme App \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination "id=$IPAD_UDID" \
-            -derivedDataPath "$DERIVED_DATA" \
-            CODE_SIGNING_ALLOWED=NO \
-            build
-
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination "id=$IPAD_UDID" -derivedDataPath "$DERIVED_DATA" CODE_SIGNING_ALLOWED=NO build
           APP_PATH="$DERIVED_DATA/Build/Products/Debug-iphonesimulator/App.app"
           test -d "$APP_PATH" || { echo "::error::Simulator app was not produced at $APP_PATH"; exit 1; }
-
           xcrun simctl install "$IPAD_UDID" "$APP_PATH"
           xcrun simctl launch "$IPAD_UDID" lol.wavo.app
           sleep 8
-
           mkdir -p artifacts
           xcrun simctl io "$IPAD_UDID" screenshot artifacts/wavo-ipad-launch.png
           echo "Wavo built, installed and launched on an iPad simulator."
