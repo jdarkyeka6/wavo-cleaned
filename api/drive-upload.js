@@ -33,6 +33,32 @@ function effectiveTier(profile) {
   return "premium";
 }
 
+function resumableUploadOrigin(req) {
+  const rawOrigin = String(req.headers.origin || "").trim();
+  const requestHost = String(req.headers.host || "").trim().toLowerCase();
+
+  if (rawOrigin === "https://wavo.lol" || rawOrigin === "https://www.wavo.lol") {
+    return rawOrigin;
+  }
+
+  // Preview deployments need the same Origin on the Drive session-start request
+  // and the browser PUT. Only accept the exact Vercel host serving this request.
+  try {
+    const parsed = new URL(rawOrigin);
+    if (
+      parsed.protocol === "https:"
+      && requestHost.endsWith(".vercel.app")
+      && parsed.host.toLowerCase() === requestHost
+    ) {
+      return parsed.origin;
+    }
+  } catch {
+    // Fall through to the production origin.
+  }
+
+  return "https://wavo.lol";
+}
+
 async function googleAccessToken() {
   const clientId = process.env.GOOGLE_DRIVE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_DRIVE_CLIENT_SECRET;
@@ -180,12 +206,14 @@ export default async function handler(req, res) {
       },
     };
 
+    const uploadOrigin = resumableUploadOrigin(req);
     const response = await fetch(
       "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true",
       {
         method: "POST",
         headers: {
           Authorization: `Bearer ${googleToken}`,
+          Origin: uploadOrigin,
           "Content-Type": "application/json; charset=UTF-8",
           "X-Upload-Content-Type": mimeType,
           "X-Upload-Content-Length": String(size),
