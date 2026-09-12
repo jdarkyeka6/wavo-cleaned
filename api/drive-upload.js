@@ -37,9 +37,8 @@ async function googleAccessToken() {
   const clientId = process.env.GOOGLE_DRIVE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_DRIVE_CLIENT_SECRET;
   const refreshToken = process.env.GOOGLE_DRIVE_REFRESH_TOKEN;
-  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
-  if (!clientId || !clientSecret || !refreshToken || !folderId) return null;
+  if (!clientId || !clientSecret || !refreshToken) return null;
 
   const response = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -70,6 +69,39 @@ async function driveJson(url, token, options = {}) {
   });
   const payload = await response.json().catch(() => ({}));
   return { response, payload };
+}
+
+async function ensureWavoFolder(token) {
+  const query = encodeURIComponent(
+    "mimeType = 'application/vnd.google-apps.folder' and name = 'Wavo Storage' and trashed = false and appProperties has { key='wavoManaged' and value='true' }",
+  );
+  const fields = encodeURIComponent("files(id,name,createdTime)");
+  const { response: searchResponse, payload: search } = await driveJson(
+    `https://www.googleapis.com/drive/v3/files?q=${query}&spaces=drive&pageSize=1&orderBy=createdTime&fields=${fields}`,
+    token,
+  );
+  if (!searchResponse.ok) {
+    throw new Error(search?.error?.message || "Could not find Wavo's Drive folder.");
+  }
+  if (search?.files?.[0]?.id) return search.files[0].id;
+
+  const { response: createResponse, payload: created } = await driveJson(
+    "https://www.googleapis.com/drive/v3/files?fields=id",
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Wavo Storage",
+        mimeType: "application/vnd.google-apps.folder",
+        appProperties: { wavoManaged: "true" },
+      }),
+    },
+  );
+  if (!createResponse.ok || !created?.id) {
+    throw new Error(created?.error?.message || "Could not create Wavo's Drive folder.");
+  }
+  return created.id;
 }
 
 export default async function handler(req, res) {
@@ -113,8 +145,6 @@ export default async function handler(req, res) {
     });
   }
 
-  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-
   if (action === "start") {
     const fileName = cleanName(req.body?.fileName);
     const mimeType = String(req.body?.mimeType || "application/octet-stream").slice(0, 200);
@@ -130,6 +160,14 @@ export default async function handler(req, res) {
         maxBytes,
         error: `Your ${tier === "free" ? "Free" : tier[0].toUpperCase() + tier.slice(1)} plan can send files up to ${Math.round(maxBytes / MB)} MB.`,
       });
+    }
+
+    let folderId;
+    try {
+      folderId = await ensureWavoFolder(googleToken);
+    } catch (error) {
+      console.error("[drive-upload] folder setup failed", error);
+      return json(res, 502, { error: "Wavo could not prepare Google Drive storage." });
     }
 
     const metadata = {
@@ -171,14 +209,14 @@ export default async function handler(req, res) {
     if (!fileId) return json(res, 400, { error: "Missing uploaded file ID." });
 
     const fields = encodeURIComponent(
-      "id,name,mimeType,size,webContentLink,webViewLink,appProperties,parents,permissions(id,type,role)",
+      "id,name,mimeType,size,webContentLink,webViewLink,appProperties,permissions(id,type,role)",
     );
     const { response: metaResponse, payload: meta } = await driveJson(
       `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=${fields}&supportsAllDrives=true`,
       googleToken,
     );
 
-    if (!metaResponse.ok || meta?.appProperties?.wavoUserId !== user.id || !meta?.parents?.includes(folderId)) {
+    if (!metaResponse.ok || meta?.appProperties?.wavoUserId !== user.id) {
       return json(res, 403, { error: "That uploaded file does not belong to this Wavo account." });
     }
 
