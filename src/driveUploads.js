@@ -65,12 +65,12 @@ function updateUploadUi({ fileName, detail, progress = null, state = "active" })
   }
 }
 
-async function driveRequest(body) {
+async function authedRequest(path, body) {
   const { data } = await supabase.auth.getSession();
   const token = data?.session?.access_token;
   if (!token) throw new Error("You're not signed in.");
 
-  const response = await fetch("/api/drive-upload", {
+  const response = await fetch(path, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -88,6 +88,14 @@ async function driveRequest(body) {
     throw error;
   }
   return payload;
+}
+
+async function driveRequest(body) {
+  return authedRequest("/api/drive-upload", body);
+}
+
+async function resolveDriveFile(fileName, size) {
+  return authedRequest("/api/drive-resolve", { fileName, size });
 }
 
 function putResumableFile(uploadUrl, file, onProgress) {
@@ -108,7 +116,10 @@ function putResumableFile(uploadUrl, file, onProgress) {
         payload = {};
       }
 
-      if (xhr.status >= 200 && xhr.status < 300 && payload?.id) {
+      // Google can legitimately return a successful 200/201 with an empty or
+      // unreadable response body in some embedded browsers. A 2xx means the
+      // bytes reached Drive; Wavo can recover the created file ID server-side.
+      if (xhr.status >= 200 && xhr.status < 300) {
         resolve(payload);
         return;
       }
@@ -134,8 +145,6 @@ function putResumableFile(uploadUrl, file, onProgress) {
       reject(error);
     };
 
-    // Do not set Content-Range for a one-request resumable upload. Google has
-    // already been told the MIME type and size when the upload session starts.
     xhr.send(file);
   });
 }
@@ -176,8 +185,15 @@ export async function uploadDriveAttachment(file) {
       progress: 100,
     });
 
+    let fileId = uploaded?.id;
+    if (!fileId) {
+      const recovered = await resolveDriveFile(file.name, file.size);
+      fileId = recovered?.fileId;
+    }
+    if (!fileId) throw new Error("The file uploaded, but Wavo couldn't identify it in Drive.");
+
     try {
-      const stored = await driveRequest({ action: "finish", fileId: uploaded.id });
+      const stored = await driveRequest({ action: "finish", fileId });
       updateUploadUi({
         fileName: file.name,
         detail: "Upload complete",
@@ -186,9 +202,7 @@ export async function uploadDriveAttachment(file) {
       });
       return stored;
     } catch (error) {
-      // The file exists in Drive but was not attached to a message. Ask the
-      // server to clean it up when possible so failed sends do not leak storage.
-      await driveRequest({ action: "delete", fileId: uploaded.id }).catch(() => {});
+      await driveRequest({ action: "delete", fileId }).catch(() => {});
       throw error;
     }
   } catch (error) {
