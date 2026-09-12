@@ -6,6 +6,30 @@ function chunks<T>(items: T[], size: number) {
   return result;
 }
 
+async function googleAccessToken() {
+  const clientId = Deno.env.get("GOOGLE_DRIVE_CLIENT_ID");
+  const clientSecret = Deno.env.get("GOOGLE_DRIVE_CLIENT_SECRET");
+  const refreshToken = Deno.env.get("GOOGLE_DRIVE_REFRESH_TOKEN");
+  if (!clientId || !clientSecret || !refreshToken) return null;
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || !body?.access_token) {
+    console.error("[wavo] Drive token refresh failed", response.status, body?.error);
+    return null;
+  }
+  return String(body.access_token);
+}
+
 export default {
   fetch: withSupabase({ auth: "user" }, async (req, ctx) => {
     if (req.method !== "POST") {
@@ -32,6 +56,53 @@ export default {
     }
 
     const admin = ctx.supabaseAdmin;
+
+    // Google Drive attachments live outside Supabase, so remove those real
+    // objects before the profile row cascades away their metadata. A retry is
+    // safe because Drive returns 404 for files that were already deleted.
+    const { data: driveFiles, error: driveFilesError } = await admin
+      .from("drive_files")
+      .select("drive_file_id")
+      .eq("user_id", userId);
+
+    if (driveFilesError) {
+      console.error("[wavo] Drive file enumeration failed", driveFilesError);
+      return Response.json(
+        { error: "Account deletion could not be completed" },
+        { status: 500 },
+      );
+    }
+
+    if ((driveFiles || []).length > 0) {
+      const driveToken = await googleAccessToken();
+      if (!driveToken) {
+        console.error("[wavo] Drive cleanup credentials are not configured");
+        return Response.json(
+          { error: "Account deletion could not be completed" },
+          { status: 500 },
+        );
+      }
+
+      for (const row of driveFiles || []) {
+        const fileId = String(row?.drive_file_id || "");
+        if (!fileId) continue;
+        const response = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?supportsAllDrives=true`,
+          {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${driveToken}` },
+          },
+        );
+        if (!response.ok && response.status !== 404) {
+          const detail = await response.text().catch(() => "");
+          console.error("[wavo] Drive cleanup failed", response.status, detail.slice(0, 500));
+          return Response.json(
+            { error: "Account deletion could not be completed" },
+            { status: 500 },
+          );
+        }
+      }
+    }
 
     // Supabase Auth refuses a hard delete while a user still owns Storage
     // objects. Get exact owned paths with a service-role-only RPC, then remove

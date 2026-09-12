@@ -14,6 +14,11 @@ import {
 import { supabase } from "./supabaseClient";
 import VoiceNote from "./VoiceNote";
 import {
+  DRIVE_HARD_MAX_BYTES,
+  deleteDriveAttachment,
+  uploadDriveAttachment,
+} from "./driveUploads";
+import {
   MAX_MS,
   formatDuration,
   useVoiceRecorder,
@@ -23,7 +28,7 @@ import "./restored-chat.css";
 
 const GIPHY_API_KEY = import.meta.env.VITE_GIPHY_API_KEY;
 const TIDETRACTS_URL = import.meta.env.VITE_TIDETRACTS_URL || "https://tidetracts.lol";
-const MAX_FILE_BYTES = 25 * 1024 * 1024;
+const MAX_SUPABASE_FILE_BYTES = 25 * 1024 * 1024;
 
 function safeFileName(name) {
   return String(name || "attachment").replace(/[^\w.-]/g, "_");
@@ -170,6 +175,26 @@ export function ChatComposer({ userId, friend = null, space = null, value, onCha
       throw new Error("Attachments need an internet connection.");
     }
 
+    if (type === "file") {
+      try {
+        const stored = await uploadDriveAttachment(blob);
+        try {
+          await insertMedia(stored.url, "file", fileName, durationMs);
+        } catch (insertError) {
+          await deleteDriveAttachment(stored.fileId).catch(() => {});
+          throw insertError;
+        }
+        return;
+      } catch (driveError) {
+        // Keep today's <=25 MB path working until the one-time Google OAuth
+        // credentials are connected in production. Larger files never fall
+        // back because Supabase Storage is not the backing store for them.
+        if (driveError?.code !== "DRIVE_NOT_CONFIGURED" || blob.size > MAX_SUPABASE_FILE_BYTES) {
+          throw driveError;
+        }
+      }
+    }
+
     const folder = friend ? chatId : `group_${space.id}`;
     const path = `${folder}/${uniquePart()}-${safeFileName(fileName)}`;
     const { error: uploadError } = await supabase.storage
@@ -207,8 +232,14 @@ export function ChatComposer({ userId, friend = null, space = null, value, onCha
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (file.size > MAX_FILE_BYTES) {
-      setError("That file is over 25 MB.");
+
+    const type = file.type.startsWith("image/") ? "image" : "file";
+    if (type === "image" && file.size > MAX_SUPABASE_FILE_BYTES) {
+      setError("Images are currently limited to 25 MB.");
+      return;
+    }
+    if (type === "file" && file.size > DRIVE_HARD_MAX_BYTES) {
+      setError("Wavo files top out at 500 MB.");
       return;
     }
 
@@ -216,7 +247,7 @@ export function ChatComposer({ userId, friend = null, space = null, value, onCha
     setBusy(true);
     setError("");
     try {
-      await uploadBlob(file, file.name, file.type.startsWith("image/") ? "image" : "file");
+      await uploadBlob(file, file.name, type);
     } catch (err) {
       console.error("[wavo] attachment", err);
       setError(err?.message || "Couldn't send that attachment.");
@@ -356,7 +387,7 @@ export function ChatComposer({ userId, friend = null, space = null, value, onCha
           <div className="composer-plus-head"><strong>Add to chat</strong><button type="button" onClick={() => setToolsOpen(false)} aria-label="Close add menu"><X size={17} /></button></div>
           <div className="composer-plus-grid">
             <button type="button" onClick={() => mediaInputRef.current?.click()} disabled={busy}><span className="plus-tile-icon"><Images size={20} /></span><span><strong>Photo or video</strong><small>Share from this device</small></span></button>
-            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={busy}><span className="plus-tile-icon"><FileIcon size={20} /></span><span><strong>File</strong><small>PDF, document or ZIP</small></span></button>
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={busy}><span className="plus-tile-icon"><FileIcon size={20} /></span><span><strong>File</strong><small>Up to 500 MB on Pro</small></span></button>
             <button type="button" onClick={openGifPicker} disabled={busy}><span className="plus-tile-icon"><ImageIcon size={20} /></span><span><strong>GIF</strong><small>Search GIPHY</small></span></button>
             <button type="button" className="tidetracts-plus-tile" onClick={openTideTracts} disabled={busy}><span className="plus-tile-icon"><FileText size={20} /></span><span><strong>TideTracts</strong><small>Create a contract to sign</small></span></button>
           </div>
