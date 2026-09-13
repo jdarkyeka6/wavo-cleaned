@@ -58,17 +58,34 @@ jobs:
           grep -q "Privacy Policy" src/ProfileSupportEnhancement.jsx || { echo "::error::Signed-in app has no direct Privacy Policy control"; exit 1; }
           grep -q "terms.html" src/ProfileSupportEnhancement.jsx || { echo "::error::Signed-in app has no direct Terms control"; exit 1; }
           grep -q "at least equivalent" public/privacy.html || { echo "::error::Privacy policy is missing service-provider protection language"; exit 1; }
-          test -f docs/APP_REVIEW_BUILD_38.md || { echo "::error::Build 38 App Review notes are missing"; exit 1; }
+          grep -q "contact@builtbyjake.site" src/SupportPage.jsx || { echo "::error::Public Support page has no contact email"; exit 1; }
+          test -f docs/APP_REVIEW_BUILD_38.md || { echo "::error::App Review notes are missing"; exit 1; }
           test -f supabase/functions/delete-account/index.ts || { echo "::error::delete-account Edge Function source is missing"; exit 1; }
-          echo "App Review account, privacy and legal requirements are present in the release source."
-      - name: Validate free-only native business model
+          echo "App Review account, support, privacy and legal requirements are present in the release source."
+      - name: Validate native IAP and AI consent model
         run: |
           set -euo pipefail
-          grep -q "canUsePaidFeatures" src/main.jsx || { echo "::error::Native paid-feature mount guard is missing"; exit 1; }
-          grep -q "if (!canUsePaidFeatures()) return 'free'" src/premiumProData.js || { echo "::error::Native paid-tier guard is missing"; exit 1; }
-          grep -q "submitted iOS app is free-only" docs/APP_REVIEW_BUILD_38.md || { echo "::error::Review notes do not describe the free-only iOS business model"; exit 1; }
-          grep -q "is free-only:" public/terms.html || { echo "::error::Terms do not describe the free-only iOS business model"; exit 1; }
-          echo "Native App Store build is guarded as free-only."
+          grep -q "premium: 'lol.wavo.premium.monthly'" src/storePurchases.js || { echo "::error::Premium Apple product is missing"; exit 1; }
+          grep -q "plus: 'lol.wavo.plus.monthly'" src/storePurchases.js || { echo "::error::Plus Apple product is missing"; exit 1; }
+          grep -q "pro: 'lol.wavo.pro.monthly'" src/storePurchases.js || { echo "::error::Pro Apple product is missing"; exit 1; }
+          grep -q "Use Apple In-App Purchase" src/storePurchases.js || { echo "::error::Native web-checkout guard is missing"; exit 1; }
+          grep -q "NativeStoreKitBridge" src/main.jsx || { echo "::error::Native StoreKit reconciliation/disclosure is not mounted"; exit 1; }
+          grep -q "Restore Purchases" src/PremiumProEnhancement.jsx || { echo "::error::Restore Purchases UI is missing"; exit 1; }
+          grep -q "Manage Subscription" src/PremiumProEnhancement.jsx || { echo "::error::Manage Subscription UI is missing"; exit 1; }
+          grep -q "Apple In-App Purchase" docs/APP_REVIEW_BUILD_38.md || { echo "::error::Review notes do not describe Apple IAP"; exit 1; }
+          if grep -qi "free-only" public/terms.html docs/APP_REVIEW_BUILD_38.md; then
+            echo "::error::Stale free-only App Store wording remains"
+            exit 1
+          fi
+          grep -q "OpenAI" src/SupportPage.jsx || { echo "::error::AI provider disclosure is missing from Support"; exit 1; }
+          grep -q "grantThirdPartyAiConsent" src/SupportPage.jsx || { echo "::error::Explicit Support AI consent is missing"; exit 1; }
+          grep -q "ensureThirdPartyAiConsent" src/premiumProData.js || { echo "::error::Paid AI features are not consent-gated"; exit 1; }
+          if grep -q "api.openai.com" supabase/functions/moderate-content/index.ts; then
+            echo "::error::Automatic message moderation still sends ordinary content to OpenAI"
+            exit 1
+          fi
+          grep -q "disables Google Analytics inside the native iOS app" public/privacy.html || { echo "::error::Native analytics disclosure is missing"; exit 1; }
+          echo "Native IAP, AI consent and privacy model checks passed."
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
