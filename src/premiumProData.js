@@ -5,9 +5,6 @@ export function paidTier(profile) {
   const active = Boolean(profile?.is_premium) && (!profile?.premium_until || new Date(profile.premium_until) > new Date())
   if (!active) return 'free'
   const tier = String(profile?.tier || 'premium').toLowerCase()
-  // Plus contains the Premium base feature set. Plus-specific AI features are
-  // layered on separately by PlusPlanEnhancement.
-  if (tier === 'plus') return 'premium'
   return tier === 'vip' ? 'pro' : tier
 }
 
