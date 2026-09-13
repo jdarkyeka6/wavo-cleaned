@@ -28,7 +28,15 @@ Apple product identifiers:
 
 The iOS app does not send users to Stripe or Wavo web checkout. Web purchases are handled separately on the Wavo website. An active paid entitlement can be used by the signed-in Wavo account across supported platforms when the corresponding digital plan is available in the iOS app.
 
-The subscription screen includes StoreKit pricing, monthly-renewal disclosure, Restore Purchases, Manage Subscription, Terms of Service and Privacy Policy links.
+The subscription screen includes StoreKit pricing, monthly-renewal disclosure, Restore Purchases, Manage Subscription, Terms of Use and Privacy Policy links.
+
+Paid feature levels shown in the submitted app are:
+
+- **Premium:** Profile Studio and chat themes, message effects and animated reactions, chat folders and advanced search, recurring messages and streak protection, and Wavo Labs.
+- **Plus:** everything in Premium, plus AI chat summaries, Ask Wavo and voice-note transcription.
+- **Pro:** everything in Plus, plus Space analytics, advanced Space roles and scheduled Space announcements.
+
+The app shows the exact current tier and does not present a lower included tier as a separate current subscription.
 
 ## AI disclosure and consent
 Wavo Support AI and optional paid Wavo AI features use OpenAI. Before content is sent to a Wavo AI feature, Wavo identifies OpenAI as the third-party AI provider, warns the user not to send sensitive information and requires explicit consent.
