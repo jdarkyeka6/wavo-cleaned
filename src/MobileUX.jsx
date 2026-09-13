@@ -115,8 +115,8 @@ export function ChatTools({ open, onClose, target, kind, messages, pinned, nickn
   }, [open, target?.id, nickname]);
 
   if (!open || !target) return null;
-  const premium = tier === "premium" || tier === "pro";
-  const pro = tier === "pro";
+  const premium = ["premium", "plus", "pro"].includes(tier);
+  const ai = ["plus", "pro"].includes(tier);
   const cutoff = timeFilter === "day" ? Date.now() - 86400000 : timeFilter === "week" ? Date.now() - 7 * 86400000 : timeFilter === "month" ? Date.now() - 30 * 86400000 : 0;
   const filtered = (messages || []).filter((m) => {
     if (!norm(m.content).includes(norm(q))) return false;
@@ -175,18 +175,18 @@ export function ChatTools({ open, onClose, target, kind, messages, pinned, nickn
   }
 
   async function runAi(action) {
-    if (!pro) return;
+    if (!ai) return;
     setAiBusy(true); setAiReply("");
     try {
       const context = (messages || []).slice(-160).map((m) => `${String(m.sender_id || m.user_id) === String(me) ? "You" : (kind === "dm" ? target.username : "Member")}: ${m.content || `[${m.type || "message"}]`}`).join("\n");
       const result = await proAi(action, { context, question: ask });
       setAiReply(result?.reply || "No summary returned.");
-    } catch (err) { setAiReply(err?.message || "Wavo Pro AI could not answer."); }
+    } catch (err) { setAiReply(err?.message || "Wavo AI could not answer."); }
     setAiBusy(false);
   }
 
   async function transcribe(message) {
-    if (!pro) return;
+    if (!ai) return;
     const audioUrl = message.file_url || message.content;
     if (!audioUrl) return;
     setTranscripts((x) => ({ ...x, [message.id]: "Transcribing…" }));
@@ -203,7 +203,7 @@ export function ChatTools({ open, onClose, target, kind, messages, pinned, nickn
       {premium && <div className="premium-search-filters"><SlidersHorizontal size={15}/><select value={senderFilter} onChange={(e) => setSenderFilter(e.target.value)}><option value="all">Everyone</option><option value="mine">Sent by me</option><option value="theirs">Sent by them</option></select><select value={timeFilter} onChange={(e) => setTimeFilter(e.target.value)}><option value="all">Any time</option><option value="day">24 hours</option><option value="week">7 days</option><option value="month">30 days</option></select><select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}><option value="all">Everything</option><option value="text">Text</option><option value="image">Images</option><option value="audio">Voice</option><option value="file">Files</option></select></div>}
       {!premium && <small className="premium-hint">Premium adds sender, date and media filters.</small>}
       <div className="tool-results">{filtered.slice(-80).map((m) => <div key={m.id}><span>{m.content || `[${m.type || "message"}]`}</span><small>{new Date(m.created_at).toLocaleString()}</small>{String(m.sender_id || m.user_id) !== String(me) && isUuid(m.id) && <button className="report-message-btn" onClick={() => reportMessage(m)}><Flag size={12}/> Report</button>}</div>)}</div></>}
-    {tab === "media" && <div className="media-grid">{media.length ? media.map((m) => m.type === "image" ? <img key={m.id} src={m.content || m.file_url} alt="Shared"/> : <div key={m.id} className="media-file-card"><a href={m.file_url || m.content} target="_blank" rel="noreferrer">{m.file_name || (m.type === "audio" ? "Voice note" : m.type)}</a>{m.type === "audio" && <>{pro ? <button onClick={() => transcribe(m)}><Mic2 size={14}/> Transcribe</button> : <small>Voice transcription · Pro</small>}{transcripts[m.id] && <p>{transcripts[m.id]}</p>}</>}</div>) : <div className="search-empty"><ImageIcon/><strong>No media yet</strong></div>}</div>}
+    {tab === "media" && <div className="media-grid">{media.length ? media.map((m) => m.type === "image" ? <img key={m.id} src={m.content || m.file_url} alt="Shared"/> : <div key={m.id} className="media-file-card"><a href={m.file_url || m.content} target="_blank" rel="noreferrer">{m.file_name || (m.type === "audio" ? "Voice note" : m.type)}</a>{m.type === "audio" && <>{ai ? <button onClick={() => transcribe(m)}><Mic2 size={14}/> Transcribe</button> : <small>Voice transcription · Plus or Pro</small>}{transcripts[m.id] && <p>{transcripts[m.id]}</p>}</>}</div>) : <div className="search-empty"><ImageIcon/><strong>No media yet</strong></div>}</div>}
     {tab === "settings" && <div className="tool-settings">
       <button onClick={onTogglePin}><Pin/>{pinned ? "Unpin" : "Pin"} conversation</button>
       {kind === "space" && <button onClick={onMute}><BellOff/>{muted ? "Unmute" : "Mute"} Space</button>}
@@ -211,7 +211,7 @@ export function ChatTools({ open, onClose, target, kind, messages, pinned, nickn
         <label><CalendarClock/>Schedule a message<textarea value={scheduled} onChange={(e) => setScheduled(e.target.value)} placeholder="Message"/><input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)}/>{premium && <select value={recurrence} onChange={(e) => setRecurrence(e.target.value)}><option value="once">Send once</option><option value="daily">Repeat daily</option><option value="weekly">Repeat weekly</option><option value="monthly">Repeat monthly</option></select>}<button disabled={!scheduled.trim() || !when} onClick={scheduleMessage}>{recurrence === "once" ? "Schedule" : <><Repeat2 size={14}/> Schedule recurring</>}</button>{!premium && <small>Recurring schedules are included with Premium.</small>}</label>
         <div className="safety-actions"><strong>Safety</strong><button onClick={() => setReporting((x) => !x)}><Flag/>Report user</button>{reporting && <div className="report-box"><textarea value={reportReason} onChange={(e) => setReportReason(e.target.value)} maxLength={500} placeholder="Tell Wavo Safety what happened"/><button disabled={!reportReason.trim()} onClick={reportUser}>Send report</button></div>}<button className="danger" onClick={blockUser}><Ban/>Block @{target.username}</button></div>
       </>}
-      <div className="pro-ai-tools"><strong><Bot size={16}/> Wavo Pro AI</strong>{pro ? <><button disabled={aiBusy || !messages?.length} onClick={() => runAi("summary")}>{aiBusy ? "Thinking…" : "Summarise this chat"}</button><label>Ask about this conversation<input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="What time did we agree on?"/><button disabled={aiBusy || !ask.trim()} onClick={() => runAi("ask")}>Ask Wavo</button></label>{aiReply && <div className="ai-reply">{aiReply}</div>}</> : <small>Summaries, chat Q&A and voice transcription are included with Wavo Pro.</small>}</div>
+      <div className="pro-ai-tools"><strong><Bot size={16}/> Wavo AI</strong>{ai ? <><button disabled={aiBusy || !messages?.length} onClick={() => runAi("summary")}>{aiBusy ? "Thinking…" : "Summarise this chat"}</button><label>Ask about this conversation<input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="What time did we agree on?"/><button disabled={aiBusy || !ask.trim()} onClick={() => runAi("ask")}>Ask Wavo</button></label>{aiReply && <div className="ai-reply">{aiReply}</div>}</> : <small>Summaries, chat Q&A and voice transcription are included with Wavo Plus and Pro.</small>}</div>
     </div>}
   </section></div>;
 }
