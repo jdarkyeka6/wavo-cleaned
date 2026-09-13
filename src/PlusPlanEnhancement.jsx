@@ -13,11 +13,12 @@ function active(profile) {
   return Boolean(profile?.is_premium) && (!profile?.premium_until || new Date(profile.premium_until) > new Date())
 }
 
-function isPlus(profile) {
-  if (!active(profile)) return false
-  const tier = String(profile?.tier || '').toLowerCase()
+function effectiveTier(profile) {
+  if (!active(profile)) return 'free'
+  const tier = String(profile?.tier || 'premium').toLowerCase()
   const source = String(profile?.entitlement_source || '').toLowerCase()
-  return tier === 'plus' || source === 'stripe_plus'
+  if (source === 'stripe_plus' && !['pro', 'vip'].includes(tier)) return 'plus'
+  return tier === 'vip' ? 'pro' : tier
 }
 
 function resolveCurrentChat() {
@@ -51,7 +52,10 @@ export default function PlusPlanEnhancement() {
   const [products, setProducts] = useState([])
 
   const userId = session?.user?.id || null
-  const plus = isPlus(profile)
+  const tier = effectiveTier(profile)
+  const plus = tier === 'plus'
+  const pro = tier === 'pro'
+  const aiEntitled = plus || pro
   const native = isNativeIOS()
   const plusProduct = products.find((item) => item.identifier === APPLE_PRODUCTS.plus)
   const plusPrice = native
@@ -107,20 +111,17 @@ export default function PlusPlanEnhancement() {
         setAiHost(host)
       } else setAiHost(null)
 
-      document.documentElement.dataset.wavoPlusActive = plus ? 'true' : 'false'
       const proCard = [...document.querySelectorAll('.wpp-plan')].find((card) => card.querySelector('.wpp-plan-title strong')?.textContent?.trim().toLowerCase() === 'pro')
-      if (proCard) proCard.classList.add('wavo-best-value')
-      const heroTitle = document.querySelector('.wpp-hero h2')
-      if (heroTitle && plus) heroTitle.textContent = 'Wavo Plus'
+      if (proCard) proCard.classList.add('wavo-most-features')
     }
     sync()
     const observer = new MutationObserver(sync)
     observer.observe(document.body, { childList: true, subtree: true })
-    return () => { observer.disconnect(); delete document.documentElement.dataset.wavoPlusActive }
-  }, [plus])
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
-    if (!plus || !userId || !aiHost) { setMessages([]); return }
+    if (!aiEntitled || !userId || !aiHost) { setMessages([]); return }
     let cancelled = false
     async function load() {
       const chat = resolveCurrentChat()
@@ -141,7 +142,7 @@ export default function PlusPlanEnhancement() {
     load()
     const timer = setInterval(load, 5000)
     return () => { cancelled = true; clearInterval(timer) }
-  }, [plus, userId, aiHost])
+  }, [aiEntitled, userId, aiHost])
 
   const context = useMemo(() => messages.map((m) => `${String(m.sender_id || m.user_id) === String(userId) ? 'You' : 'Member'}: ${m.content || `[${m.type || 'message'}]`}`).join('\n'), [messages, userId])
   const audio = useMemo(() => messages.filter((m) => m.type === 'audio' && (m.file_url || m.content)).slice(-4).reverse(), [messages])
@@ -153,6 +154,7 @@ export default function PlusPlanEnhancement() {
   }
 
   async function buyPlus() {
+    if (pro) return
     setBusy('buy'); setNotice('')
     try {
       if (native) {
@@ -168,16 +170,17 @@ export default function PlusPlanEnhancement() {
   }
 
   async function runAi(action) {
-    if (!plus || !context.trim()) return
+    if (!aiEntitled || !context.trim()) return
     setBusy(action); setAnswer('')
     try {
       const result = await proAi(action, { context, question })
       setAnswer(result?.reply || 'No answer returned.')
-    } catch (error) { setAnswer(error?.message || 'Wavo Plus AI could not answer.') }
+    } catch (error) { setAnswer(error?.message || 'Wavo AI could not answer.') }
     setBusy('')
   }
 
   async function transcribe(message) {
+    if (!aiEntitled) return
     const audioUrl = message.file_url || message.content
     if (!audioUrl) return
     setTranscripts((old) => ({ ...old, [message.id]: 'Transcribing…' }))
@@ -192,20 +195,22 @@ export default function PlusPlanEnhancement() {
   return <>
     {planHost && createPortal(
       <article className={`wpp-plan wavo-plus-card ${plus ? 'current' : ''}`}>
-        <span className="wavo-plan-badge recommended">Most Recommended</span>
+        <span className="wavo-plan-badge recommended">Recommended</span>
         <div className="wpp-plan-title"><span><Sparkles size={18}/></span><div><strong>Plus</strong><small>{plusPrice}</small></div>{plus && <em>Current</em>}</div>
         <div className="wpp-feature-list">
           {['Everything in Premium', 'AI chat summaries + Ask Wavo', 'Voice-note transcription'].map((feature) => <span key={feature}><Check size={14}/>{feature}</span>)}
         </div>
-        {!plus && <button type="button" disabled={busy === 'buy'} onClick={buyPlus}>{busy === 'buy' ? (native ? 'Purchasing…' : 'Opening…') : 'Get Plus'}</button>}
+        {pro
+          ? <div className="wpp-plan-included">Included with Pro</div>
+          : !plus && <button type="button" disabled={busy === 'buy'} onClick={buyPlus}>{busy === 'buy' ? (native ? 'Purchasing…' : 'Opening…') : tier === 'premium' ? 'Upgrade to Plus' : 'Get Plus'}</button>}
         {notice && <small className="wavo-plus-notice">{notice}</small>}
       </article>,
       planHost,
     )}
 
-    {plus && aiHost && createPortal(
+    {aiEntitled && aiHost && createPortal(
       <section className="wavo-plus-ai-panel">
-        <div className="wavo-plus-ai-title"><Bot size={16}/><strong>Wavo Plus AI</strong><span>PLUS</span></div>
+        <div className="wavo-plus-ai-title"><Bot size={16}/><strong>Wavo AI</strong><span>{pro ? 'PRO' : 'PLUS'}</span></div>
         <div className="wavo-plus-ai-actions">
           <button disabled={busy || !messages.length} onClick={() => runAi('summary')}>{busy === 'summary' ? 'Thinking…' : 'Summarise this chat'}</button>
           <div><input value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Ask about this conversation"/><button disabled={busy || !question.trim()} onClick={() => runAi('ask')}>Ask Wavo</button></div>
