@@ -46,7 +46,7 @@ Deno.serve(async (req: Request) => {
   const active = Boolean(profile?.is_premium) && (!profile?.premium_until || new Date(profile.premium_until).getTime() > Date.now());
   const tier = active ? String(profile?.tier || "premium").toLowerCase() : "free";
   const source = active ? String(profile?.entitlement_source || "").toLowerCase() : "";
-  const aiEntitled = ["pro","vip"].includes(tier) || source === "stripe_plus";
+  const aiEntitled = ["plus","pro","vip"].includes(tier) || source === "stripe_plus";
   if (!aiEntitled) return json({ error: "plus_required", message: "Wavo Plus or Pro is required for this feature." }, 403);
 
   let body: any;
