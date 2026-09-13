@@ -14,7 +14,23 @@ const APPLE_TIER_RANK = {
   [APPLE_PRODUCTS.pro]: 3,
 }
 
+const STORE_PRODUCT_IDS = Object.values(APPLE_PRODUCTS)
+const STOREKIT_SUPPORT_TIMEOUT_MS = 5000
+const STOREKIT_PRODUCTS_TIMEOUT_MS = 8000
+let storeProductCache = null
+let storeProductPromise = null
+
 export const isNativeIOS = () => Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios'
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+function withTimeout(promise, timeoutMs, message) {
+  let timer
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs)
+  })
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+}
 
 async function accessToken() {
   const { data } = await supabase.auth.getSession()
@@ -34,15 +50,55 @@ async function verifyAppleTransaction(transaction) {
   return data
 }
 
-export async function loadStoreProducts() {
+async function fetchStoreProductsOnce() {
+  const billing = await withTimeout(
+    NativePurchases.isBillingSupported(),
+    STOREKIT_SUPPORT_TIMEOUT_MS,
+    'The App Store did not respond while checking purchases.',
+  )
+  if (!billing?.isBillingSupported) throw new Error('App Store purchases are not available on this device.')
+
+  const result = await withTimeout(
+    NativePurchases.getProducts({
+      productIdentifiers: STORE_PRODUCT_IDS,
+      productType: PURCHASE_TYPE.SUBS,
+    }),
+    STOREKIT_PRODUCTS_TIMEOUT_MS,
+    'The App Store took too long to load Wavo subscriptions.',
+  )
+  const products = Array.isArray(result?.products) ? result.products : []
+  const missing = STORE_PRODUCT_IDS.filter((id) => !products.some((product) => product?.identifier === id))
+  if (missing.length) throw new Error('The App Store has not returned all Wavo subscriptions yet. Try again in a moment.')
+  return products
+}
+
+export async function loadStoreProducts({ force = false, retries = 3 } = {}) {
   if (!isNativeIOS()) return []
-  const { isBillingSupported } = await NativePurchases.isBillingSupported()
-  if (!isBillingSupported) return []
-  const { products } = await NativePurchases.getProducts({
-    productIdentifiers: Object.values(APPLE_PRODUCTS),
-    productType: PURCHASE_TYPE.SUBS,
-  })
-  return products || []
+  if (force) storeProductCache = null
+  if (storeProductCache?.length) return storeProductCache
+  if (storeProductPromise && !force) return storeProductPromise
+
+  const request = (async () => {
+    let lastError = null
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+      try {
+        const products = await fetchStoreProductsOnce()
+        storeProductCache = products
+        return products
+      } catch (error) {
+        lastError = error
+        if (attempt < retries) await delay(Math.min(3000, 750 * (attempt + 1)))
+      }
+    }
+    throw lastError || new Error('Wavo could not load subscriptions from the App Store.')
+  })()
+
+  storeProductPromise = request
+  try {
+    return await request
+  } finally {
+    if (storeProductPromise === request) storeProductPromise = null
+  }
 }
 
 export async function purchaseAppleTier(tier, userId) {
@@ -64,7 +120,7 @@ async function currentApplePurchases() {
     onlyCurrentEntitlements: true,
   })
   return (purchases || [])
-    .filter((purchase) => purchase?.isActive !== false && purchase?.jwsRepresentation && Object.values(APPLE_PRODUCTS).includes(purchase.productIdentifier))
+    .filter((purchase) => purchase?.isActive !== false && purchase?.jwsRepresentation && STORE_PRODUCT_IDS.includes(purchase.productIdentifier))
     .sort((a, b) => (APPLE_TIER_RANK[b.productIdentifier] || 0) - (APPLE_TIER_RANK[a.productIdentifier] || 0))
 }
 
