@@ -27,7 +27,10 @@ jobs:
           icon_dir="ios/App/App/Assets.xcassets/AppIcon.appiconset"
           source_b64="$icon_dir/WavoIconSource.b64"
           source_png="$RUNNER_TEMP/wavo-icon-source.png"
-          icon="$icon_dir/AppIcon-512@2x.png"
+          icon="$icon_dir/AppIcon.appiconset/AppIcon-512@2x.png"
+          if [ ! -f "$icon" ]; then
+            icon="$icon_dir/AppIcon-512@2x.png"
+          fi
           test -f "$source_b64" || { echo "::error::Missing exact Wavo icon source"; exit 1; }
           base64 -D < "$source_b64" > "$source_png"
           sips -z 1024 1024 "$source_png" --out "$icon" >/dev/null
@@ -80,12 +83,18 @@ jobs:
           grep -q "OpenAI" src/SupportPage.jsx || { echo "::error::AI provider disclosure is missing from Support"; exit 1; }
           grep -q "grantThirdPartyAiConsent" src/SupportPage.jsx || { echo "::error::Explicit Support AI consent is missing"; exit 1; }
           grep -q "ensureThirdPartyAiConsent" src/premiumProData.js || { echo "::error::Paid AI features are not consent-gated"; exit 1; }
+          grep -Fq '["plus","pro","vip"].includes(tier)' supabase/functions/wavo-pro-ai/index.ts || { echo "::error::Native Plus is not entitled to Wavo AI"; exit 1; }
+          grep -Fq "source === 'stripe_plus'" src/premiumProData.js || { echo "::error::Legacy Stripe Plus entitlement mapping is missing"; exit 1; }
+          grep -Fq 'const aiEntitled = plus || pro' src/PlusPlanEnhancement.jsx || { echo "::error::Plus/Pro AI UI entitlement is missing"; exit 1; }
+          grep -Fq 'Included with Plus' src/PremiumProEnhancement.jsx || { echo "::error::Paid plan current/included state regression"; exit 1; }
+          grep -Fq 'platform: getPlatform()' src/SupportPage.jsx || { echo "::error::Support AI is not receiving the client platform"; exit 1; }
+          grep -Fq 'Do not mention website prices' supabase/functions/support-ai/index.ts || { echo "::error::Native Support AI purchase-steering guard is missing"; exit 1; }
           if grep -q "api.openai.com" supabase/functions/moderate-content/index.ts; then
             echo "::error::Automatic message moderation still sends ordinary content to OpenAI"
             exit 1
           fi
           grep -q "disables Google Analytics inside the native iOS app" public/privacy.html || { echo "::error::Native analytics disclosure is missing"; exit 1; }
-          echo "Native IAP, AI consent and privacy model checks passed."
+          echo "Native IAP, Plus/Pro entitlements, Support AI steering, AI consent and privacy checks passed."
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
