@@ -37,9 +37,16 @@ const ICONS = [
 ]
 const PREMIUM_REACTIONS = [['🌊', 'splash'], ['✨', 'sparkle'], ['🔥', 'flame'], ['💀', 'pop'], ['💗', 'heartbeat']]
 
-function rank(tier) { return tier === 'pro' ? 3 : tier === 'premium' ? 2 : 1 }
+function rank(tier) {
+  const value = String(tier || 'free').toLowerCase()
+  return value === 'pro' || value === 'vip' ? 3 : value === 'premium' || value === 'plus' ? 2 : 1
+}
 function ownMessage(message, userId) { return String(message?.sender_id || message?.user_id || '') === String(userId || '') }
-function priceFor(products, id, fallback) { return products.find((p) => p.identifier === id)?.priceString || fallback }
+function monthlyPrice(products, id, webFallback, native) {
+  const price = products.find((item) => item.identifier === id)?.priceString
+  if (native) return price ? `${price}/month` : 'Loading from App Store…'
+  return webFallback
+}
 
 function useDomHosts() {
   const [hosts, setHosts] = useState({ profile: null, inbox: null, chat: null })
@@ -108,11 +115,11 @@ async function resolveConversation(userId) {
   return null
 }
 
-function PlanCard({ name, price, current, accent, features, onBuy, busy, button }) {
+function PlanCard({ name, price, current, included, accent, features, onBuy, busy, button }) {
   return <article className={`wpp-plan ${accent ? 'pro' : ''} ${current ? 'current' : ''}`}>
     <div className="wpp-plan-title"><span>{accent ? <Zap size={18}/> : <Gem size={18}/>}</span><div><strong>{name}</strong><small>{price}</small></div>{current && <em>Current</em>}</div>
     <div className="wpp-feature-list">{features.map((feature) => <span key={feature}><Check size={14}/>{feature}</span>)}</div>
-    {!current && <button type="button" disabled={busy} onClick={onBuy}>{busy ? 'Opening…' : button}</button>}
+    {!current && (included ? <div className="wpp-plan-included">{included}</div> : <button type="button" disabled={busy} onClick={onBuy}>{busy ? 'Opening…' : button}</button>)}
   </article>
 }
 
@@ -121,12 +128,12 @@ function ProfileStudio({ userId, profile, tier, settings, setSettings, folders, 
   const [notice, setNotice] = useState('')
   const [newFolder, setNewFolder] = useState('')
   const paid = rank(tier) >= 2
+  const plus = tier === 'plus'
   const pro = tier === 'pro'
   const native = isNativeIOS()
-  const premiumProduct = products.find((item) => item.identifier === APPLE_PRODUCTS.premium)
-  const proProduct = products.find((item) => item.identifier === APPLE_PRODUCTS.pro)
-  const premiumPrice = premiumProduct?.priceString || (native ? 'Loading from App Store…' : 'A$4.99/month')
-  const proPrice = proProduct?.priceString || (native ? 'Loading from App Store…' : 'A$14.99/month')
+  const premiumPrice = monthlyPrice(products, APPLE_PRODUCTS.premium, 'A$4.99/month', native)
+  const proPrice = monthlyPrice(products, APPLE_PRODUCTS.pro, 'A$14.99/month', native)
+  const planName = pro ? 'Wavo Pro' : plus ? 'Wavo Plus' : tier === 'premium' ? 'Wavo Premium' : 'Make Wavo yours'
 
   async function buy(wanted) {
     setBusy(wanted); setNotice('')
@@ -189,18 +196,18 @@ function ProfileStudio({ userId, profile, tier, settings, setSettings, folders, 
   }
 
   return <section className="wpp-hub">
-    <header className="wpp-hero"><div className="wpp-gem"><Crown/></div><div><span>WAVO PAID</span><h2>{pro ? 'Wavo Pro' : paid ? 'Wavo Premium' : 'Make Wavo yours'}</h2><p>Customise everything, move faster, and unlock serious power tools.</p></div></header>
+    <header className="wpp-hero"><div className="wpp-gem"><Crown/></div><div><span>WAVO PAID</span><h2>{planName}</h2><p>Customise everything, move faster, and unlock serious power tools.</p></div></header>
     {notice && <button className="wpp-notice" type="button" onClick={() => setNotice('')}>{notice}</button>}
 
     <div className="wpp-plans">
-      <PlanCard name="Premium" price={premiumPrice} current={tier === 'premium'} busy={busy === 'premium'} onBuy={() => buy('premium')} button="Get Premium" features={['Profile Studio + chat themes', 'Message effects + animated reactions', 'Folders + advanced search', 'Recurring messages + streak protection', 'Wavo Labs']} />
-      <PlanCard name="Pro" price={proPrice} current={pro} accent busy={busy === 'pro'} onBuy={() => buy('pro')} button={tier === 'premium' ? 'Upgrade to Pro' : 'Get Pro'} features={['Everything in Premium', 'AI chat summaries + Ask Wavo', 'Voice-note transcription', 'Space analytics + roles', 'Scheduled Space announcements']} />
+      <PlanCard name="Premium" price={premiumPrice} current={tier === 'premium'} included={plus ? 'Included with Plus' : pro ? 'Included with Pro' : ''} busy={busy === 'premium'} onBuy={() => buy('premium')} button="Get Premium" features={['Profile Studio + chat themes', 'Message effects + animated reactions', 'Folders + advanced search', 'Recurring messages + streak protection', 'Wavo Labs']} />
+      <PlanCard name="Pro" price={proPrice} current={pro} accent busy={busy === 'pro'} onBuy={() => buy('pro')} button={paid ? 'Upgrade to Pro' : 'Get Pro'} features={['Everything in Premium', 'AI chat summaries + Ask Wavo', 'Voice-note transcription', 'Space analytics + roles', 'Scheduled Space announcements']} />
     </div>
 
     {native && <div className="wpp-purchase-links"><button disabled={busy === 'restore'} onClick={restore}><RotateCcw size={14}/> Restore Purchases</button>{paid && <button onClick={() => manageAppleSubscription()}><Layers3 size={14}/> Manage Subscription</button>}</div>}
 
     {paid && <>
-      <div className="wpp-section-head"><div><Palette/><strong>Profile Studio</strong></div><small>Premium</small></div>
+      <div className="wpp-section-head"><div><Palette/><strong>Profile Studio</strong></div><small>Premium+</small></div>
       <div className="wpp-control-grid">
         <label>Animated banner<select value={settings?.profile_banner || 'ocean'} onChange={(e) => patch({ profile_banner: e.target.value })}>{BANNERS.map((x) => <option key={x}>{x}</option>)}</select></label>
         <label>Avatar frame<select value={settings?.avatar_frame || 'none'} onChange={(e) => patch({ avatar_frame: e.target.value })}>{FRAMES.map((x) => <option key={x}>{x}</option>)}</select></label>
@@ -256,6 +263,7 @@ function ChatPower({ userId, tier, settings, folders, setFolders }) {
   const [notice, setNotice] = useState('')
   const bypass = useRef(new WeakSet())
   const paid = rank(tier) >= 2
+  const plus = tier === 'plus'
   const pro = tier === 'pro'
 
   const resolve = useCallback(async () => {
@@ -370,7 +378,7 @@ function ChatPower({ userId, tier, settings, folders, setFolders }) {
   }
 
   return <section className="wpp-chat-power">
-    <div className="wpp-chat-title"><Sparkles size={15}/><strong>{paid ? 'Premium tools' : 'Make this chat yours'}</strong><span>{pro ? 'PRO' : paid ? 'PREMIUM' : 'FREE'}</span></div>
+    <div className="wpp-chat-title"><Sparkles size={15}/><strong>{paid ? 'Paid tools' : 'Make this chat yours'}</strong><span>{pro ? 'PRO' : plus ? 'PLUS' : paid ? 'PREMIUM' : 'FREE'}</span></div>
     {notice && <button className="wpp-mini-notice" onClick={() => setNotice('')}>{notice}</button>}
     {paid ? <>
       <div className="wpp-chat-controls"><label>Theme<select value={pref?.theme || settings?.default_chat_theme || 'dusk'} onChange={(e) => savePref({ theme: e.target.value })}>{THEMES.map((x) => <option key={x}>{x}</option>)}</select></label><label>Bubbles<select value={pref?.bubble_style || settings?.bubble_style || 'classic'} onChange={(e) => savePref({ bubble_style: e.target.value })}>{BUBBLES.map((x) => <option key={x}>{x}</option>)}</select></label></div>
