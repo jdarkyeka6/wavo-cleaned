@@ -109,7 +109,7 @@ export function ChatTools({ open, onClose, target, kind, messages, pinned, nickn
     supabase.auth.getUser().then(async ({ data }) => {
       const uid = data?.user?.id || null; setMe(uid);
       if (!uid) return;
-      const { data: profile } = await supabase.from("profiles").select("is_premium,premium_until,tier").eq("id", uid).maybeSingle();
+      const { data: profile } = await supabase.from("profiles").select("is_premium,premium_until,tier,entitlement_source").eq("id", uid).maybeSingle();
       setTier(paidTier(profile));
     }).catch(() => {});
   }, [open, target?.id, nickname]);
