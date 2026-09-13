@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { supabase } from './supabaseClient'
 import { isNativeIOS, reconcileApplePurchases } from './storePurchases'
 
 const HOST_ATTR = 'data-wavo-native-storekit-disclosure'
@@ -10,12 +11,30 @@ export default function NativeStoreKitBridge() {
 
   useEffect(() => {
     if (!native) return undefined
+    let active = true
 
-    // Keep Wavo's server-side expiry in sync with the current StoreKit
-    // entitlement whenever the native app is opened.
-    reconcileApplePurchases().catch((error) => {
-      console.warn('[wavo] Apple entitlement reconciliation skipped', error)
+    const reconcile = async (session) => {
+      if (!active || !session?.user?.id) return
+      try {
+        await reconcileApplePurchases()
+      } catch (error) {
+        console.warn('[wavo] Apple entitlement reconciliation skipped', error)
+      }
+    }
+
+    supabase.auth.getSession().then(({ data }) => reconcile(data?.session || null))
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      void reconcile(session || null)
     })
+
+    return () => {
+      active = false
+      listener?.subscription?.unsubscribe()
+    }
+  }, [native])
+
+  useEffect(() => {
+    if (!native) return undefined
 
     const sync = () => {
       const hub = document.querySelector('.wpp-hub')
