@@ -36,6 +36,7 @@ import PremiumProEnhancement from './PremiumProEnhancement.jsx'
 import ProfileSupportEnhancement from './ProfileSupportEnhancement.jsx'
 import SmartMessageActions from './SmartMessageActions.jsx'
 import SpotifyPresenceCoordinator from './SpotifyPresenceCoordinator.jsx'
+import SubscriptionManagement from './SubscriptionManagement.jsx'
 import SupportPage from './SupportPage.jsx'
 import UiEnhancements from './UiEnhancements.jsx'
 import UsernameSettings from './UsernameSettings.jsx'
@@ -63,6 +64,7 @@ function WavoApp() {
       <NativeContentSafety />
       {paidFeaturesEnabled && <PlanComparison />}
       {paidFeaturesEnabled && <PremiumCosmeticsEnhancement />}
+      {paidFeaturesEnabled && <SubscriptionManagement />}
       <ProfileSupportEnhancement />
       <AccountDeletion />
       <PersonalizedCore />
