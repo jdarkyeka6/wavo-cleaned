@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Bot, Plus, Send, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { grantThirdPartyAiConsent, hasThirdPartyAiConsent } from "./lib/aiConsent";
+import { getPlatform } from "./lib/platform";
 import "./support-page.css";
 
 const MAX_TABS = 8;
@@ -213,6 +214,7 @@ export default function SupportPage() {
           requestId: randomId(),
           question,
           history: priorHistory,
+          platform: getPlatform(),
         },
       });
 
