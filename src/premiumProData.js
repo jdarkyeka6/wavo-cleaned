@@ -1,13 +1,13 @@
 import { supabase } from './supabaseClient'
-import { canUsePaidFeatures } from './lib/platform'
+import { ensureThirdPartyAiConsent } from './lib/aiConsent'
 
 export function paidTier(profile) {
-  // The current native app is intentionally free-only. Web Premium/Pro
-  // entitlements are not unlocked inside the App Store build.
-  if (!canUsePaidFeatures()) return 'free'
   const active = Boolean(profile?.is_premium) && (!profile?.premium_until || new Date(profile.premium_until) > new Date())
   if (!active) return 'free'
   const tier = String(profile?.tier || 'premium').toLowerCase()
+  // Plus contains the Premium base feature set. Plus-specific AI features are
+  // layered on separately by PlusPlanEnhancement.
+  if (tier === 'plus') return 'premium'
   return tier === 'vip' ? 'pro' : tier
 }
 
@@ -120,6 +120,7 @@ export async function moderateContent(text, imageUrl = '') {
 }
 
 export async function proAi(action, body = {}) {
+  if (!ensureThirdPartyAiConsent()) throw new Error('AI processing was cancelled.')
   const { data, error } = await supabase.functions.invoke('wavo-pro-ai', { body: { action, ...body } })
   if (error) throw error
   if (data?.error) throw new Error(data.message || data.error)

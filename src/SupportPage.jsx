@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Bot, Plus, Send, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { supabase } from "./supabaseClient";
+import { grantThirdPartyAiConsent, hasThirdPartyAiConsent } from "./lib/aiConsent";
 import "./support-page.css";
 
 const MAX_TABS = 8;
@@ -64,6 +65,7 @@ export default function SupportPage() {
   const [text, setText] = useState("");
   const [sendingTabId, setSendingTabId] = useState(null);
   const [wipeArmed, setWipeArmed] = useState(false);
+  const [aiConsent, setAiConsent] = useState(() => hasThirdPartyAiConsent());
   const bodyRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -185,7 +187,7 @@ export default function SupportPage() {
   const send = async () => {
     const question = text.trim();
     const targetTab = activeTab;
-    if (!question || !targetTab || sendingTabId || !session?.access_token) return;
+    if (!aiConsent || !question || !targetTab || sendingTabId || !session?.access_token) return;
 
     const tabId = targetTab.id;
     const userMessage = { role: "user", content: question };
@@ -266,8 +268,35 @@ export default function SupportPage() {
         <div className="support-login-card">
           <div className="support-mark"><Bot size={28} /></div>
           <h1>Wavo Support</h1>
-          <p>Sign in to use AI support. This keeps the support system protected from spam and lets Wavo apply fair usage limits.</p>
+          <p>Need help? Email <a href="mailto:contact@builtbyjake.site">contact@builtbyjake.site</a>.</p>
+          <p>Sign in to use Wavo Support AI. Signing in helps protect the service from spam and apply fair usage limits.</p>
+          <p><a href="/privacy.html">Privacy Policy</a> · <a href="/terms.html">Terms</a></p>
           <a className="support-primary" href="/">Back to Wavo</a>
+        </div>
+      </div>
+    );
+  }
+
+  if (!aiConsent) {
+    return (
+      <div className="support-shell support-centered">
+        <div className="support-login-card">
+          <div className="support-mark"><ShieldCheck size={28} /></div>
+          <h1>Before using Wavo Support AI</h1>
+          <p>Wavo Support AI uses <strong>OpenAI</strong> to process the support message you send and recent Support conversation context so it can generate a reply.</p>
+          <p>Do not include passwords, payment details, addresses, phone numbers, or other sensitive personal information.</p>
+          <p>Nothing is sent to OpenAI from Support AI until you choose Continue.</p>
+          <button
+            type="button"
+            className="support-primary"
+            onClick={() => {
+              if (grantThirdPartyAiConsent()) setAiConsent(true);
+            }}
+          >
+            Continue
+          </button>
+          <a className="support-primary" href="/">Cancel</a>
+          <p><a href="/privacy.html">Privacy Policy</a></p>
         </div>
       </div>
     );
@@ -374,7 +403,7 @@ export default function SupportPage() {
           </button>
         </div>
         <div className="support-footnote">
-          Support tabs are saved on this device. AI can make mistakes, so uncertain answers should say so instead of inventing steps.
+          Support tabs are saved on this device. Messages you send to Support AI are processed by OpenAI after your consent. AI can make mistakes.
         </div>
       </footer>
     </main>

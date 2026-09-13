@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Bot, Check, Mic2, Sparkles } from 'lucide-react'
 import { supabase } from './supabaseClient'
 import { proAi } from './premiumProData'
-import { startWebCheckout } from './storePurchases'
+import { APPLE_PRODUCTS, isNativeIOS, loadStoreProducts, purchaseAppleTier, startWebCheckout } from './storePurchases'
 import './plus-plan.css'
 
 const PLAN_HOST = 'data-wavo-plus-plan-host'
@@ -14,7 +14,10 @@ function active(profile) {
 }
 
 function isPlus(profile) {
-  return active(profile) && String(profile?.entitlement_source || '').toLowerCase() === 'stripe_plus'
+  if (!active(profile)) return false
+  const tier = String(profile?.tier || '').toLowerCase()
+  const source = String(profile?.entitlement_source || '').toLowerCase()
+  return tier === 'plus' || source === 'stripe_plus'
 }
 
 function resolveCurrentChat() {
@@ -45,9 +48,15 @@ export default function PlusPlanEnhancement() {
   const [answer, setAnswer] = useState('')
   const [messages, setMessages] = useState([])
   const [transcripts, setTranscripts] = useState({})
+  const [products, setProducts] = useState([])
 
   const userId = session?.user?.id || null
   const plus = isPlus(profile)
+  const native = isNativeIOS()
+  const plusProduct = products.find((item) => item.identifier === APPLE_PRODUCTS.plus)
+  const plusPrice = native
+    ? (plusProduct?.priceString ? `${plusProduct.priceString}/month` : 'Loading from App Store…')
+    : 'A$9.99/month'
 
   useEffect(() => {
     let alive = true
@@ -55,6 +64,11 @@ export default function PlusPlanEnhancement() {
     const { data } = supabase.auth.onAuthStateChange((_event, next) => { if (alive) setSession(next || null) })
     return () => { alive = false; data.subscription.unsubscribe() }
   }, [])
+
+  useEffect(() => {
+    if (!native) return
+    loadStoreProducts().then(setProducts).catch(() => setProducts([]))
+  }, [native])
 
   useEffect(() => {
     if (!userId) { setProfile(null); return }
@@ -132,10 +146,24 @@ export default function PlusPlanEnhancement() {
   const context = useMemo(() => messages.map((m) => `${String(m.sender_id || m.user_id) === String(userId) ? 'You' : 'Member'}: ${m.content || `[${m.type || 'message'}]`}`).join('\n'), [messages, userId])
   const audio = useMemo(() => messages.filter((m) => m.type === 'audio' && (m.file_url || m.content)).slice(-4).reverse(), [messages])
 
+  async function refreshProfile() {
+    if (!userId) return
+    const { data } = await supabase.from('profiles').select('id,is_premium,premium_until,tier,entitlement_source').eq('id', userId).maybeSingle()
+    setProfile(data || null)
+  }
+
   async function buyPlus() {
     setBusy('buy'); setNotice('')
-    try { await startWebCheckout('plus') }
-    catch (error) { setNotice(error?.message || 'Could not open Plus checkout.') }
+    try {
+      if (native) {
+        if (!plusProduct) throw new Error('Plus is still loading from the App Store. Try again in a moment.')
+        await purchaseAppleTier('plus', userId)
+      } else {
+        await startWebCheckout('plus')
+      }
+      await refreshProfile()
+      setNotice('Wavo Plus is active.')
+    } catch (error) { setNotice(error?.message || 'Could not start Plus purchase.') }
     setBusy('')
   }
 
@@ -165,11 +193,11 @@ export default function PlusPlanEnhancement() {
     {planHost && createPortal(
       <article className={`wpp-plan wavo-plus-card ${plus ? 'current' : ''}`}>
         <span className="wavo-plan-badge recommended">Most Recommended</span>
-        <div className="wpp-plan-title"><span><Sparkles size={18}/></span><div><strong>Plus</strong><small>A$9.99/month</small></div>{plus && <em>Current</em>}</div>
+        <div className="wpp-plan-title"><span><Sparkles size={18}/></span><div><strong>Plus</strong><small>{plusPrice}</small></div>{plus && <em>Current</em>}</div>
         <div className="wpp-feature-list">
           {['Everything in Premium', 'AI chat summaries + Ask Wavo', 'Voice-note transcription'].map((feature) => <span key={feature}><Check size={14}/>{feature}</span>)}
         </div>
-        {!plus && <button type="button" disabled={busy === 'buy'} onClick={buyPlus}>{busy === 'buy' ? 'Opening…' : 'Get Plus'}</button>}
+        {!plus && <button type="button" disabled={busy === 'buy'} onClick={buyPlus}>{busy === 'buy' ? (native ? 'Purchasing…' : 'Opening…') : 'Get Plus'}</button>}
         {notice && <small className="wavo-plus-notice">{notice}</small>}
       </article>,
       planHost,
