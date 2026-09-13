@@ -47,7 +47,7 @@ import WavesPageV2 from './WavesPageV2.jsx'
 import WavoTogether from './WavoTogether.jsx'
 import { isConfigured } from './lib/config'
 import { installUiMode } from './lib/layout'
-import { canUsePaidFeatures } from './lib/platform'
+import { canUsePaidFeatures, isNativeApp } from './lib/platform'
 import './responsive-platform.css'
 import './responsive-platform-edge.css'
 import './chat-keyboard-viewport.css'
@@ -96,7 +96,7 @@ createRoot(document.getElementById('root')).render(
       <BrowserRouter>
         <WavePhotoBridge />
         <CallKitCoordinator />
-        <EmployeeWorkTracking />
+        {!isNativeApp && <EmployeeWorkTracking />}
         <Routes>
           <Route path="/waves" element={<WavesPageV2 />} />
           <Route path="/support" element={<SupportPage />} />
