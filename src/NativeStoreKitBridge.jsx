@@ -62,13 +62,16 @@ export default function NativeStoreKitBridge() {
   if (!native || !host) return null
 
   return createPortal(
-    <div style={{ margin: '12px 0 18px', padding: '12px 14px', borderRadius: 14, background: 'rgba(255,255,255,.04)', fontSize: 12, lineHeight: 1.5 }}>
+    <div className="wavo-iap-disclosure">
       <strong>Monthly auto-renewable subscriptions</strong>
-      <p style={{ margin: '6px 0' }}>
-        Premium, Plus and Pro renew each month unless cancelled. Your Apple ID is charged through the App Store. You can restore purchases or manage/cancel your subscription from the controls on this screen.
+      <p>
+        Wavo Premium, Plus and Pro renew monthly until cancelled. Payment is charged to your Apple ID when you confirm the purchase.
       </p>
-      <p style={{ margin: 0 }}>
-        <a href="/terms.html">Terms of Service</a> · <a href="/privacy.html">Privacy Policy</a>
+      <p>
+        Use Restore Purchases for an existing Apple purchase, or Manage Subscription to view or cancel your subscription. Paid access remains available through the period already paid for.
+      </p>
+      <p>
+        <a href="/terms.html">Terms of Use</a> · <a href="/privacy.html">Privacy Policy</a>
       </p>
     </div>,
     host,
