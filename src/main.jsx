@@ -21,6 +21,7 @@ import CallTimeoutGuard from './CallTimeoutGuard.jsx'
 import ChatMotionCalls from './ChatMotionCalls.js'
 import ConfigError from './ConfigError.jsx'
 import DropInVoice from './DropInVoice.jsx'
+import EmployeeWorkTracking from './EmployeeWorkTracking.jsx'
 import GroupVideoCalls from './GroupVideoCalls.jsx'
 import LiveActivityCoordinator from './LiveActivityCoordinator.jsx'
 import NativeContentSafety from './NativeContentSafety.jsx'
@@ -95,6 +96,7 @@ createRoot(document.getElementById('root')).render(
       <BrowserRouter>
         <WavePhotoBridge />
         <CallKitCoordinator />
+        <EmployeeWorkTracking />
         <Routes>
           <Route path="/waves" element={<WavesPageV2 />} />
           <Route path="/support" element={<SupportPage />} />
