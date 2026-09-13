@@ -4,7 +4,14 @@ import { supabase } from './supabaseClient'
 
 export const APPLE_PRODUCTS = {
   premium: 'lol.wavo.premium.monthly',
+  plus: 'lol.wavo.plus.monthly',
   pro: 'lol.wavo.pro.monthly',
+}
+
+const APPLE_TIER_RANK = {
+  [APPLE_PRODUCTS.premium]: 1,
+  [APPLE_PRODUCTS.plus]: 2,
+  [APPLE_PRODUCTS.pro]: 3,
 }
 
 export const isNativeIOS = () => Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios'
@@ -32,7 +39,7 @@ export async function loadStoreProducts() {
   const { isBillingSupported } = await NativePurchases.isBillingSupported()
   if (!isBillingSupported) return []
   const { products } = await NativePurchases.getProducts({
-    productIdentifiers: [APPLE_PRODUCTS.premium, APPLE_PRODUCTS.pro],
+    productIdentifiers: Object.values(APPLE_PRODUCTS),
     productType: PURCHASE_TYPE.SUBS,
   })
   return products || []
@@ -51,20 +58,31 @@ export async function purchaseAppleTier(tier, userId) {
   return verifyAppleTransaction(transaction)
 }
 
-export async function restoreApplePurchases() {
-  if (!isNativeIOS()) throw new Error('Restore Purchases is available in the iOS app.')
-  await NativePurchases.restorePurchases()
+async function currentApplePurchases() {
   const { purchases } = await NativePurchases.getPurchases({
     productType: PURCHASE_TYPE.SUBS,
     onlyCurrentEntitlements: true,
   })
-  const active = (purchases || [])
-    .filter((p) => p?.isActive !== false && p?.jwsRepresentation && Object.values(APPLE_PRODUCTS).includes(p.productIdentifier))
-    .sort((a, b) => Number(b.productIdentifier === APPLE_PRODUCTS.pro) - Number(a.productIdentifier === APPLE_PRODUCTS.pro))
+  return (purchases || [])
+    .filter((purchase) => purchase?.isActive !== false && purchase?.jwsRepresentation && Object.values(APPLE_PRODUCTS).includes(purchase.productIdentifier))
+    .sort((a, b) => (APPLE_TIER_RANK[b.productIdentifier] || 0) - (APPLE_TIER_RANK[a.productIdentifier] || 0))
+}
+
+export async function reconcileApplePurchases() {
+  if (!isNativeIOS()) return null
+  const { isBillingSupported } = await NativePurchases.isBillingSupported()
+  if (!isBillingSupported) return null
+  const active = await currentApplePurchases()
+  if (!active.length) return null
+  return verifyAppleTransaction(active[0])
+}
+
+export async function restoreApplePurchases() {
+  if (!isNativeIOS()) throw new Error('Restore Purchases is available in the iOS app.')
+  await NativePurchases.restorePurchases()
+  const active = await currentApplePurchases()
   if (!active.length) throw new Error('No active Wavo subscription was found for this Apple ID.')
-  let result = null
-  for (const purchase of active) result = await verifyAppleTransaction(purchase)
-  return result
+  return verifyAppleTransaction(active[0])
 }
 
 export async function manageAppleSubscription() {
@@ -74,6 +92,7 @@ export async function manageAppleSubscription() {
 }
 
 export async function startWebCheckout(plan) {
+  if (isNativeIOS()) throw new Error('Web checkout is not available in the iOS app. Use Apple In-App Purchase.')
   const token = await accessToken()
   if (!token) throw new Error('Sign in before subscribing.')
   const response = await fetch('/api/checkout', {
