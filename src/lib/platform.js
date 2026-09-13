@@ -3,10 +3,9 @@
 // Tells the app whether it's running inside the native iOS/Android shell
 // or on the web at wavo.lol.
 //
-// App Store release rule:
-// Wavo's current native app is free-only. Paid Wavo plans are web products,
-// so native builds must not show purchase UI, prices, external checkout links,
-// or unlock paid digital features bought on another platform.
+// Paid Wavo features are available on iOS through Apple In-App Purchase.
+// Native builds must never send users to Wavo's web checkout. Web builds may
+// continue to use Stripe checkout.
 
 import { Capacitor } from '@capacitor/core';
 
@@ -31,23 +30,23 @@ export function isIOS() {
   return getPlatform() === 'ios';
 }
 
-/** Paid Wavo digital features are currently web-only. */
+/** Paid features may be used on every supported Wavo platform. */
 export function canUsePaidFeatures() {
-  return !isNative();
+  return true;
 }
 
-/** Prices, upgrades and checkout are web-only too. */
+/** External/web checkout is browser-only. Native iOS uses Apple IAP instead. */
 export function canShowBilling() {
   return !isNative();
 }
 
 /**
- * Guard for anything that navigates the user toward payment.
- * A stray native button must never open checkout.
+ * Guard for anything that navigates the user toward Wavo's web checkout.
+ * A stray native button must never open Stripe or an external purchase page.
  */
 export function assertBillingAllowed() {
   if (!canShowBilling()) {
-    console.warn('[wavo] Billing UI suppressed in the native free-only app');
+    console.warn('[wavo] Web checkout suppressed in the native app; use Apple IAP');
     return false;
   }
   return true;
