@@ -42,9 +42,9 @@ function rank(tier) {
   return value === 'pro' || value === 'vip' ? 3 : value === 'premium' || value === 'plus' ? 2 : 1
 }
 function ownMessage(message, userId) { return String(message?.sender_id || message?.user_id || '') === String(userId || '') }
-function monthlyPrice(products, id, webFallback, native) {
-  const price = products.find((item) => item.identifier === id)?.priceString
-  if (native) return price ? `${price}/month` : 'Loading from App Store…'
+function monthlyPrice(products, id, webFallback, native, storeError) {
+  const price = (products || []).find((item) => item.identifier === id)?.priceString
+  if (native) return price ? `${price}/month` : storeError ? 'App Store unavailable' : 'Loading from App Store…'
   return webFallback
 }
 
@@ -123,7 +123,7 @@ function PlanCard({ name, price, current, included, accent, features, onBuy, bus
   </article>
 }
 
-function ProfileStudio({ userId, profile, tier, settings, setSettings, folders, setFolders, streak, setStreak, badges, products, refreshProfile }) {
+function ProfileStudio({ userId, profile, tier, settings, setSettings, folders, setFolders, streak, setStreak, badges, products, storeError, reloadProducts, refreshProfile }) {
   const [busy, setBusy] = useState('')
   const [notice, setNotice] = useState('')
   const [newFolder, setNewFolder] = useState('')
@@ -131,15 +131,18 @@ function ProfileStudio({ userId, profile, tier, settings, setSettings, folders, 
   const plus = tier === 'plus'
   const pro = tier === 'pro'
   const native = isNativeIOS()
-  const premiumPrice = monthlyPrice(products, APPLE_PRODUCTS.premium, 'A$4.99/month', native)
-  const proPrice = monthlyPrice(products, APPLE_PRODUCTS.pro, 'A$14.99/month', native)
+  const premiumPrice = monthlyPrice(products, APPLE_PRODUCTS.premium, 'A$4.99/month', native, storeError)
+  const proPrice = monthlyPrice(products, APPLE_PRODUCTS.pro, 'A$14.99/month', native, storeError)
   const planName = pro ? 'Wavo Pro' : plus ? 'Wavo Plus' : tier === 'premium' ? 'Wavo Premium' : 'Make Wavo yours'
 
   async function buy(wanted) {
     setBusy(wanted); setNotice('')
     try {
-      if (native && !products.find((item) => item.identifier === APPLE_PRODUCTS[wanted])) {
-        throw new Error('Subscriptions are still loading from the App Store. Try again in a moment.')
+      if (native && !(products || []).find((item) => item.identifier === APPLE_PRODUCTS[wanted])) {
+        const refreshed = await reloadProducts(true)
+        if (!refreshed.find((item) => item.identifier === APPLE_PRODUCTS[wanted])) {
+          throw new Error('That subscription is not available from the App Store yet. Try again in a moment.')
+        }
       }
       if (native) await purchaseAppleTier(wanted, userId)
       else await startWebCheckout(wanted === 'pro' ? 'pro' : 'standard')
@@ -152,6 +155,13 @@ function ProfileStudio({ userId, profile, tier, settings, setSettings, folders, 
     setBusy('restore'); setNotice('')
     try { await restoreApplePurchases(); await refreshProfile(); setNotice('Apple purchases restored.') }
     catch (error) { setNotice(error?.message || 'Nothing to restore.') }
+    setBusy('')
+  }
+
+  async function retryStore() {
+    setBusy('store'); setNotice('')
+    try { await reloadProducts(true); setNotice('App Store subscriptions loaded.') }
+    catch (error) { setNotice(error?.message || 'The App Store is still unavailable.') }
     setBusy('')
   }
 
@@ -204,7 +214,7 @@ function ProfileStudio({ userId, profile, tier, settings, setSettings, folders, 
       <PlanCard name="Pro" price={proPrice} current={pro} accent busy={busy === 'pro'} onBuy={() => buy('pro')} button={paid ? 'Upgrade to Pro' : 'Get Pro'} features={['Everything in Premium', 'AI chat summaries + Ask Wavo', 'Voice-note transcription', 'Space analytics + roles', 'Scheduled Space announcements']} />
     </div>
 
-    {native && <div className="wpp-purchase-links"><button disabled={busy === 'restore'} onClick={restore}><RotateCcw size={14}/> Restore Purchases</button>{paid && <button onClick={() => manageAppleSubscription()}><Layers3 size={14}/> Manage Subscription</button>}</div>}
+    {native && <div className="wpp-purchase-links"><button disabled={busy === 'restore'} onClick={restore}><RotateCcw size={14}/> Restore Purchases</button>{storeError && <button disabled={busy === 'store'} onClick={retryStore}><RotateCcw size={14}/> {busy === 'store' ? 'Retrying…' : 'Retry App Store'}</button>}{paid && <button onClick={() => manageAppleSubscription()}><Layers3 size={14}/> Manage Subscription</button>}</div>}
 
     {paid && <>
       <div className="wpp-section-head"><div><Palette/><strong>Profile Studio</strong></div><small>Premium+</small></div>
@@ -404,7 +414,8 @@ export default function PremiumProEnhancement() {
   const [folders, setFolders] = useState([])
   const [streak, setStreak] = useState(null)
   const [badges, setBadges] = useState([])
-  const [products, setProducts] = useState([])
+  const [products, setProducts] = useState(null)
+  const [storeError, setStoreError] = useState('')
   const userId = session?.user?.id || null
   const tier = paidTier(profile)
 
@@ -425,13 +436,27 @@ export default function PremiumProEnhancement() {
     setSettings(s); setFolders(f); setStreak(st); setBadges(badgeRows)
   }, [userId])
 
+  const reloadProducts = useCallback(async (force = false) => {
+    if (!isNativeIOS()) return []
+    setStoreError('')
+    try {
+      const next = await loadStoreProducts({ force })
+      setProducts(next)
+      return next
+    } catch (error) {
+      setProducts([])
+      setStoreError(error?.message || 'Wavo could not load subscriptions from the App Store.')
+      throw error
+    }
+  }, [])
+
   useEffect(() => {
     let alive = true
     supabase.auth.getSession().then(({ data }) => { if (alive) setSession(data.session || null) })
     const { data: listener } = supabase.auth.onAuthStateChange((_event, next) => { if (alive) setSession(next || null) })
     return () => { alive = false; listener.subscription.unsubscribe() }
   }, [])
-  useEffect(() => { if (userId) { refreshProfile(); refreshPaidData(); if (isNativeIOS()) loadStoreProducts().then(setProducts).catch(() => setProducts([])) } }, [userId, refreshProfile, refreshPaidData])
+  useEffect(() => { if (userId) { refreshProfile(); refreshPaidData(); if (isNativeIOS()) reloadProducts().catch(() => {}) } }, [userId, refreshProfile, refreshPaidData, reloadProducts])
 
   useEffect(() => {
     const root = document.documentElement
@@ -453,7 +478,7 @@ export default function PremiumProEnhancement() {
 
   if (!userId || !profile) return null
   return <>
-    {hosts.profile && createPortal(<ProfileStudio userId={userId} profile={profile} tier={tier} settings={settings} setSettings={setSettings} folders={folders} setFolders={setFolders} streak={streak} setStreak={setStreak} badges={eligibleBadges} products={products} refreshProfile={refreshProfile}/>, hosts.profile)}
+    {hosts.profile && createPortal(<ProfileStudio userId={userId} profile={profile} tier={tier} settings={settings} setSettings={setSettings} folders={folders} setFolders={setFolders} streak={streak} setStreak={setStreak} badges={eligibleBadges} products={products} storeError={storeError} reloadProducts={reloadProducts} refreshProfile={refreshProfile}/>, hosts.profile)}
     {hosts.inbox && createPortal(<InboxFolders folders={folders} tier={tier}/>, hosts.inbox)}
     {hosts.chat && createPortal(<ChatPower userId={userId} tier={tier} settings={settings} folders={folders} setFolders={setFolders}/>, hosts.chat)}
   </>
