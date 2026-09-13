@@ -5,6 +5,8 @@ export function paidTier(profile) {
   const active = Boolean(profile?.is_premium) && (!profile?.premium_until || new Date(profile.premium_until) > new Date())
   if (!active) return 'free'
   const tier = String(profile?.tier || 'premium').toLowerCase()
+  const source = String(profile?.entitlement_source || '').toLowerCase()
+  if (source === 'stripe_plus' && !['pro', 'vip'].includes(tier)) return 'plus'
   return tier === 'vip' ? 'pro' : tier
 }
 
