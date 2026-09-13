@@ -5,10 +5,12 @@ import { Buffer } from "node:buffer";
 
 const BUNDLE_ID = "lol.wavo.app";
 const APPLE_APP_ID = 6792405668;
-const PRODUCTS: Record<string, "premium" | "pro"> = {
+const PRODUCTS: Record<string, "premium" | "plus" | "pro"> = {
   "lol.wavo.premium.monthly": "premium",
+  "lol.wavo.plus.monthly": "plus",
   "lol.wavo.pro.monthly": "pro",
 };
+const TIER_RANK: Record<string, number> = { premium: 1, plus: 2, pro: 3, vip: 3 };
 const cors = {
   "access-control-allow-origin": "*",
   "access-control-allow-headers": "authorization, x-client-info, apikey, content-type",
@@ -77,10 +79,18 @@ Deno.serve(async (req: Request) => {
     if (revoked || !Number.isFinite(expiresMs) || expiresMs <= Date.now()) return json({ error: "subscription_inactive" }, 400);
 
     const { data: current } = await admin.from("profiles").select("tier,is_premium,premium_until").eq("id", user.id).maybeSingle();
-    const currentPro = Boolean(current?.is_premium) && ["pro", "vip"].includes(String(current?.tier || "").toLowerCase()) && (!current?.premium_until || new Date(current.premium_until).getTime() > Date.now());
-    const tier = currentPro && purchasedTier === "premium" ? "pro" : purchasedTier;
+    const currentTier = String(current?.tier || "").toLowerCase();
+    const currentActive = Boolean(current?.is_premium) && (!current?.premium_until || new Date(current.premium_until).getTime() > Date.now());
+    const tier = currentActive && (TIER_RANK[currentTier] || 0) > (TIER_RANK[purchasedTier] || 0)
+      ? (currentTier === "vip" ? "pro" : currentTier)
+      : purchasedTier;
     const premiumUntil = new Date(expiresMs).toISOString();
-    const { error: profileError } = await admin.from("profiles").update({ is_premium: true, tier, premium_until: premiumUntil }).eq("id", user.id);
+    const { error: profileError } = await admin.from("profiles").update({
+      is_premium: true,
+      tier,
+      premium_until: premiumUntil,
+      entitlement_source: "apple",
+    }).eq("id", user.id);
     if (profileError) throw profileError;
     const { error: entitlementError } = await admin.from("store_entitlements").upsert({
       user_id: user.id,
