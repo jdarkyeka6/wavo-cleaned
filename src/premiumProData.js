@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { ensureThirdPartyAiConsent } from './lib/aiConsent'
 
 export function paidTier(profile) {
   const active = Boolean(profile?.is_premium) && (!profile?.premium_until || new Date(profile.premium_until) > new Date())
@@ -119,6 +120,7 @@ export async function moderateContent(text, imageUrl = '') {
 }
 
 export async function proAi(action, body = {}) {
+  if (!ensureThirdPartyAiConsent()) throw new Error('AI processing was cancelled.')
   const { data, error } = await supabase.functions.invoke('wavo-pro-ai', { body: { action, ...body } })
   if (error) throw error
   if (data?.error) throw new Error(data.message || data.error)
