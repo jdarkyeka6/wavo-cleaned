@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Bot, Check, Mic2, Sparkles } from 'lucide-react'
 import { supabase } from './supabaseClient'
@@ -49,7 +49,8 @@ export default function PlusPlanEnhancement() {
   const [answer, setAnswer] = useState('')
   const [messages, setMessages] = useState([])
   const [transcripts, setTranscripts] = useState({})
-  const [products, setProducts] = useState([])
+  const [products, setProducts] = useState(null)
+  const [storeError, setStoreError] = useState('')
 
   const userId = session?.user?.id || null
   const tier = effectiveTier(profile)
@@ -57,10 +58,24 @@ export default function PlusPlanEnhancement() {
   const pro = tier === 'pro'
   const aiEntitled = plus || pro
   const native = isNativeIOS()
-  const plusProduct = products.find((item) => item.identifier === APPLE_PRODUCTS.plus)
+  const plusProduct = (products || []).find((item) => item.identifier === APPLE_PRODUCTS.plus)
   const plusPrice = native
-    ? (plusProduct?.priceString ? `${plusProduct.priceString}/month` : 'Loading from App Store…')
+    ? (plusProduct?.priceString ? `${plusProduct.priceString}/month` : storeError ? 'App Store unavailable' : 'Loading from App Store…')
     : 'A$9.99/month'
+
+  const loadProducts = useCallback(async (force = false) => {
+    if (!native) return []
+    setStoreError('')
+    try {
+      const next = await loadStoreProducts({ force })
+      setProducts(next)
+      return next
+    } catch (error) {
+      setProducts([])
+      setStoreError(error?.message || 'Wavo could not load subscriptions from the App Store.')
+      throw error
+    }
+  }, [native])
 
   useEffect(() => {
     let alive = true
@@ -71,8 +86,8 @@ export default function PlusPlanEnhancement() {
 
   useEffect(() => {
     if (!native) return
-    loadStoreProducts().then(setProducts).catch(() => setProducts([]))
-  }, [native])
+    loadProducts().catch(() => {})
+  }, [native, loadProducts])
 
   useEffect(() => {
     if (!userId) { setProfile(null); return }
@@ -157,15 +172,28 @@ export default function PlusPlanEnhancement() {
     if (pro) return
     setBusy('buy'); setNotice('')
     try {
-      if (native) {
-        if (!plusProduct) throw new Error('Plus is still loading from the App Store. Try again in a moment.')
-        await purchaseAppleTier('plus', userId)
-      } else {
-        await startWebCheckout('plus')
+      if (native && !plusProduct) {
+        const refreshed = await loadProducts(true)
+        if (!refreshed.find((item) => item.identifier === APPLE_PRODUCTS.plus)) {
+          throw new Error('Wavo Plus is not available from the App Store yet. Try again in a moment.')
+        }
       }
+      if (native) await purchaseAppleTier('plus', userId)
+      else await startWebCheckout('plus')
       await refreshProfile()
       setNotice('Wavo Plus is active.')
     } catch (error) { setNotice(error?.message || 'Could not start Plus purchase.') }
+    setBusy('')
+  }
+
+  async function retryStore() {
+    setBusy('store'); setNotice('')
+    try {
+      await loadProducts(true)
+      setNotice('App Store subscriptions loaded.')
+    } catch (error) {
+      setNotice(error?.message || 'The App Store is still unavailable.')
+    }
     setBusy('')
   }
 
@@ -203,6 +231,7 @@ export default function PlusPlanEnhancement() {
         {pro
           ? <div className="wpp-plan-included">Included with Pro</div>
           : !plus && <button type="button" disabled={busy === 'buy'} onClick={buyPlus}>{busy === 'buy' ? (native ? 'Purchasing…' : 'Opening…') : tier === 'premium' ? 'Upgrade to Plus' : 'Get Plus'}</button>}
+        {native && storeError && <button type="button" disabled={busy === 'store'} onClick={retryStore}>{busy === 'store' ? 'Retrying…' : 'Retry App Store'}</button>}
         {notice && <small className="wavo-plus-notice">{notice}</small>}
       </article>,
       planHost,
