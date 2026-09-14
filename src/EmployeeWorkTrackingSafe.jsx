@@ -1,6 +1,6 @@
 import { Component, Suspense, lazy, useEffect, useState } from 'react'
 
-const EmployeeWorkTracking = lazy(() => import('./EmployeeWorkTrackingV2.jsx'))
+const EmployeeWorkTracking = lazy(() => import('./EmployeeWorkTrackingV3.jsx'))
 
 class EmployeeTrackerBoundary extends Component {
   constructor(props) {
