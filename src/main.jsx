@@ -46,6 +46,7 @@ import UsernameSettings from './UsernameSettings.jsx'
 import WavePhotoBridge from './WavePhotoBridge.jsx'
 import WavesPageV2 from './WavesPageV2.jsx'
 import WavoTogether from './WavoTogether.jsx'
+import { installAuthBootResilience } from './auth-boot-resilience.js'
 import { isConfigured } from './lib/config'
 import { installUiMode } from './lib/layout'
 import { canUsePaidFeatures, isNativeApp } from './lib/platform'
@@ -54,6 +55,7 @@ import './responsive-platform-edge.css'
 import './chat-keyboard-viewport.css'
 import './chat-viewport-final.css'
 
+installAuthBootResilience()
 installUiMode()
 const paidFeaturesEnabled = canUsePaidFeatures()
 
