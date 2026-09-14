@@ -1,0 +1,35 @@
+/* Keep employee QA controls visible on Wavo web regardless of header width/layout. */
+.app-header .employee-work-header-slot,
+.employee-work-floating .employee-work-header-slot {
+  position: fixed !important;
+  top: calc(76px + env(safe-area-inset-top)) !important;
+  right: max(14px, env(safe-area-inset-right)) !important;
+  z-index: 5000 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  width: auto !important;
+  max-width: calc(100vw - 28px) !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.employee-work-header-slot .employee-work-admin-button,
+.employee-work-header-slot .employee-work-start,
+.employee-work-header-slot .employee-work-running {
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+@media (max-width: 640px) {
+  .app-header .employee-work-header-slot,
+  .employee-work-floating .employee-work-header-slot {
+    top: calc(66px + env(safe-area-inset-top)) !important;
+    right: max(10px, env(safe-area-inset-right)) !important;
+    max-width: calc(100vw - 20px) !important;
+    flex-wrap: wrap !important;
+    justify-content: flex-end !important;
+  }
+}
