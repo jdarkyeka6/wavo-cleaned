@@ -438,7 +438,7 @@ export default function VideoWavesPage() {
       const curated = curatedResult.status === 'fulfilled' ? curatedResult.value : []
       const [signalsResult, choicesResult] = await Promise.all([
         supabase.from('waves_video_signals')
-          .select('video_key,channel_slug,watched_ms,plays,completions,skips,rewatches,liked,saved,updated_at')
+          .select('video_key,channel_slug,tags,watched_ms,plays,completions,skips,rewatches,liked,saved,updated_at')
           .eq('user_id', userId).order('updated_at', { ascending: false }).limit(1000),
         supabase.from('waves_channel_choices').select('channel_slug,visits').eq('user_id', userId),
       ])
