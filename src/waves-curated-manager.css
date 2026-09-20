@@ -41,3 +41,9 @@
 .waves-curator-error,.waves-curator-success{padding:13px;border-radius:12px}
 .waves-curator-error{background:#4e2026;color:#ffbabc}.waves-curator-success{background:#184a35;color:#b5ffdc}
 @media(max-width:620px){.waves-curator-header{padding:12px}.waves-curator-header strong span{display:none}.waves-curator-fields,.waves-curator-checks{grid-template-columns:1fr}.waves-curator-fields label:nth-child(3),.waves-curator-fields label:last-child{grid-column:auto}.waves-curator-item{padding:14px}.waves-curator-item-actions button{width:100%}.waves-curator-header button{font-size:12px}}
+
+
+.waves-curator-preview-toggle{background:#91f4d21b;color:#b3ffe4;border:1px solid #91f4d27f;border-radius:10px;padding:8px 11px;font-size:12px;font-weight:700}
+.waves-curator-preview{width:100%;display:grid;gap:10px;justify-items:center;background:#080f1a;border:1px solid #ffffff29;border-radius:16px;padding:15px}
+.waves-curator-preview iframe{width:min(100%,420px);height:min(69dvh,680px);aspect-ratio:9/16;border:0;background:#04070b;border-radius:12px}
+.waves-curator-preview p{font-size:12px;line-height:1.5;color:#9db1c0;margin:0}
