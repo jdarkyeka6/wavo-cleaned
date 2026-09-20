@@ -60,6 +60,11 @@ installAuthBootResilience()
 installUiMode()
 const paidFeaturesEnabled = canUsePaidFeatures()
 
+function isStandaloneWavesHost() {
+  if (typeof window === 'undefined') return false
+  return ['wavowaves.lol', 'www.wavowaves.lol'].includes(window.location.hostname)
+}
+
 function WavoApp() {
   return (
     <>
@@ -97,6 +102,9 @@ function WavoApp() {
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     {isConfigured ? (
+      isStandaloneWavesHost() ? (
+        <VideoWavesPage />
+      ) : (
       <BrowserRouter>
         <WavePhotoBridge />
         <CallKitCoordinator />
@@ -109,6 +117,7 @@ createRoot(document.getElementById('root')).render(
           <Route path="*" element={<WavoApp />} />
         </Routes>
       </BrowserRouter>
+      )
     ) : (
       <ConfigError />
     )}
