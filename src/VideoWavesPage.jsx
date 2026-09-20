@@ -355,6 +355,13 @@ export default function VideoWavesPage() {
   const [savedIds, setSavedIds] = useState([])
   const userId = session?.user?.id
   const feedRef = useRef(null)
+  const nextPageRef = useRef(1)
+  const hasMoreRef = useRef(true)
+  const loadingMoreRef = useRef(false)
+  const interestsRef = useRef({ signals: [], choices: [] })
+  const exhaustedChannelsRef = useRef(new Set())
+  const userIdRef = useRef(userId)
+  userIdRef.current = userId
   const shownPosts = posts.filter((post) => channel === 'all' || (channel === 'friends' ? post.kind === 'friend' : post.kind === 'curated' && post.channel_slug === channel))
 
   useEffect(() => {
@@ -444,6 +451,10 @@ export default function VideoWavesPage() {
       ])
       if (signalsResult.error) console.warn('[waves] preferences unavailable', signalsResult.error.message)
       if (choicesResult.error) console.warn('[waves] channel choices unavailable', choicesResult.error.message)
+      interestsRef.current = { signals: signalsResult.data || [], choices: choicesResult.data || [] }
+      nextPageRef.current = 1
+      hasMoreRef.current = curatedResult.status === 'fulfilled' && curated.length > 0
+      exhaustedChannelsRef.current = new Set()
       const rows = rankWavesFeed(friends, curated, signalsResult.data || [], choicesResult.data || [], savedIds)
       setPosts(rows)
       const requested = new URLSearchParams(window.location.search).get('wave')
@@ -461,6 +472,43 @@ export default function VideoWavesPage() {
   }
 
   useEffect(() => { if (userId) refresh() }, [userId])
+
+  async function loadMore() {
+    if (!userId || !hasMoreRef.current || loadingMoreRef.current || loading) return
+    const viewer = userId
+    loadingMoreRef.current = true
+    try {
+      const next = await loadCuratedWaves(nextPageRef.current)
+      if (userIdRef.current !== viewer) return
+      nextPageRef.current += 1
+      if (!next.length || nextPageRef.current >= 500) hasMoreRef.current = false
+      if (channel !== 'all' && channel !== 'friends' && !next.some((post) => post.channel_slug === channel)) {
+        exhaustedChannelsRef.current.add(channel)
+      }
+      if (!next.length) return
+      setPosts((current) => {
+        const seen = new Set(current.map(postKey))
+        const fresh = next.filter((post) => !seen.has(postKey(post)))
+        const ranked = rankWavesFeed([], fresh, interestsRef.current.signals, interestsRef.current.choices, savedIds)
+        return [...current, ...ranked]
+      })
+    } catch (err) {
+      console.warn('[waves] more videos unavailable', err)
+      setToast('Could not load more Waves. Try changing channels.')
+    } finally { loadingMoreRef.current = false }
+  }
+
+  useEffect(() => {
+    if (loading || !hasMoreRef.current || channel === 'friends' || exhaustedChannelsRef.current.has(channel)) return
+    if (!shownPosts.length) {
+      // Channel-balanced page zero contains every channel with available
+      // videos. If none match, don't scan every Funny page for nothing.
+      if (channel !== 'all' && nextPageRef.current === 1) exhaustedChannelsRef.current.add(channel)
+      return
+    }
+    const position = shownPosts.findIndex((post) => postKey(post) === activeId)
+    if (position >= 0 && position >= shownPosts.length - 5) void loadMore()
+  }, [activeId, posts, channel, loading])
 
   useEffect(() => {
     setActiveId(shownPosts[0] ? postKey(shownPosts[0]) : null)
