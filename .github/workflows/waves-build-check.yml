@@ -15,4 +15,5 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: node --test tests/wavesRecommendations.test.mjs
       - run: npm run build
