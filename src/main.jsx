@@ -46,6 +46,7 @@ import UsernameSettings from './UsernameSettings.jsx'
 import WavePhotoBridge from './WavePhotoBridge.jsx'
 import WavesPageV2 from './WavesPageV2.jsx'
 import WavoTogether from './WavoTogether.jsx'
+import VideoWavesPage from './VideoWavesPage.jsx'
 import { installAuthBootResilience } from './auth-boot-resilience.js'
 import { isConfigured } from './lib/config'
 import { installUiMode } from './lib/layout'
@@ -58,6 +59,11 @@ import './chat-viewport-final.css'
 installAuthBootResilience()
 installUiMode()
 const paidFeaturesEnabled = canUsePaidFeatures()
+
+function isStandaloneWavesHost() {
+  if (typeof window === 'undefined') return false
+  return ['wavowaves.lol', 'www.wavowaves.lol'].includes(window.location.hostname)
+}
 
 function WavoApp() {
   return (
@@ -96,17 +102,22 @@ function WavoApp() {
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     {isConfigured ? (
+      isStandaloneWavesHost() ? (
+        <VideoWavesPage />
+      ) : (
       <BrowserRouter>
         <WavePhotoBridge />
         <CallKitCoordinator />
         {!isNativeApp && <EmployeeWorkTracking />}
         <Routes>
           <Route path="/waves" element={<WavesPageV2 />} />
+          <Route path="/waves/video" element={<VideoWavesPage />} />
           <Route path="/support" element={<SupportPage />} />
           <Route path="/admin" element={<AdminRoute />} />
           <Route path="*" element={<WavoApp />} />
         </Routes>
       </BrowserRouter>
+      )
     ) : (
       <ConfigError />
     )}
