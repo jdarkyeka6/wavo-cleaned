@@ -8,6 +8,7 @@ import { CURATED_CHANNELS, channelBySlug, loadCuratedWaves, postKey } from './wa
 import { rankWavesFeed } from './wavesRecommendations'
 import { useWavesWatchSignals } from './wavesWatchSignals'
 import WavesCuratedManager from './WavesCuratedManager'
+import { isNativeApp } from './lib/platform'
 
 const VIDEO_LIMIT_BYTES = 50 * 1024 * 1024
 const VIDEO_LIMIT_MS = 60_000
@@ -114,7 +115,7 @@ function Login({ onLogin }) {
   }
 
   return <main className="video-waves-auth">
-    <a className="video-waves-back-link" href="https://wavo.lol/"><ArrowLeft size={18} /> Wavo</a>
+    <a className="video-waves-back-link" href={isNativeApp ? '/' : 'https://wavo.lol/'}><ArrowLeft size={18} /> Wavo</a>
     <div className="video-waves-auth-card">
       <div className="video-waves-mark">W<span>~</span></div>
       <span className="video-waves-eyebrow">YOUR PEOPLE. YOUR WAVES.</span>
@@ -578,7 +579,7 @@ export default function VideoWavesPage() {
 
   return <main className="video-waves-shell">
     <header className="video-waves-topbar">
-      <a href="https://wavo.lol/" aria-label="Back to Wavo"><ArrowLeft size={20} /></a>
+      <a href={isNativeApp ? '/' : 'https://wavo.lol/'} aria-label="Back to Wavo"><ArrowLeft size={20} /></a>
       <strong>Waves<span className="video-waves-brand-dot">.</span></strong>
       <span>{channel === 'all' ? 'For You' : channel === 'friends' ? 'Friends' : channelBySlug[channel]?.name || 'Channels'}</span>
       <div className="video-waves-top-actions">
