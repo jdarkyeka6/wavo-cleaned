@@ -51,13 +51,12 @@ export function rotateCuratedFeed(friendPosts, curatedPosts) {
   return result
 }
 
-export async function loadCuratedWaves() {
-  // The table RLS returns published rows to signed-in members, never review
-  // notes or source Drive URLs. Storage RLS likewise restricts signing URLs.
-  const { data, error } = await supabase.from('waves_curated_clips')
-    .select('id,channel_slug,title,caption,media_path,playback_url,playback_hls_url,video_provider,video_asset_id,source_credit,published_at,tags,moderation_state')
-    .eq('status', 'published').eq('moderation_state', 'clear')
-    .order('published_at', { ascending: false }).limit(80)
+export async function loadCuratedWaves(page = 0) {
+  // Published clips are fetched in channel-balanced pages under RLS. A huge
+  // Funny import cannot bury every Animals or Travel clip behind 1,400 videos.
+  const { data, error } = await supabase.rpc('waves_curated_feed_page', {
+    p_page: page, p_per_channel: 15,
+  })
   if (error) throw error
   const clips = data || []
   if (!clips.length) return []
@@ -69,13 +68,13 @@ export async function loadCuratedWaves() {
     if (!likesByClip.has(like.clip_id)) likesByClip.set(like.clip_id, [])
     likesByClip.get(like.clip_id).push(like)
   }
+  const { data: sessionData } = await supabase.auth.getSession()
+  const token = sessionData?.session?.access_token
   const signed = await Promise.all(clips.map(async (clip) => {
     let playbackUrl = clip.video_provider === 'google_drive'
       ? null
       : (clip.playback_url || null)
     if (clip.video_provider === 'google_drive' && clip.video_asset_id) {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData?.session?.access_token
       if (!token) return null
       playbackUrl = `/api/waves-video?id=${encodeURIComponent(clip.id)}&token=${encodeURIComponent(token)}`
     }
