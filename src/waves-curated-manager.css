@@ -23,10 +23,12 @@
 .waves-curator-review-controls{display:grid;gap:20px;align-content:center}
 .waves-curator-steps{display:grid;grid-template-columns:45px 1fr 45px;align-items:center;text-align:center;gap:8px;color:#d0dce9;font-size:14px;font-weight:650}
 .waves-curator-steps button{width:45px;height:45px;border:1px solid #ffffff33;border-radius:50%;display:grid;place-items:center;background:#ffffff16;color:#fff}
-.waves-curator-vote{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.waves-curator-vote{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .waves-curator-vote button{border-radius:17px;min-height:74px;display:flex;align-items:center;justify-content:center;gap:10px;font-size:22px;font-weight:900;box-shadow:0 8px 25px #0004}
 .waves-curator-vote .no{background:#44212a;border:1px solid #ee738a78;color:#ffadbf}
 .waves-curator-vote .yes{background:#a0f8d9;border:1px solid #a0f8d9;color:#093026}
+.waves-curator-vote .maybe{background:#4c3d20;border:1px solid #efc66f91;color:#ffe5a6}
+.waves-curator-vote:has(.no:nth-child(1):nth-last-child(2)){grid-template-columns:repeat(2,minmax(0,1fr))}
 .waves-curator-undo{background:#ffffff19;border:1px solid #ffffff33;color:#fff;border-radius:15px;min-height:56px;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:800}
 .waves-curator-explainer{margin:0;color:#b0c0d0;font-size:13px;line-height:1.6}
 .waves-curator-shortcuts{margin:0;color:#6f88a5;font-size:11px;line-height:1.5}
@@ -45,7 +47,7 @@
 .waves-curator-stage{grid-template-columns:1fr;gap:12px}
 .waves-curator-player{margin:0 auto;min-height:unset;height:min(calc(100dvh - 273px),680px);max-height:none;width:min(100%,400px);aspect-ratio:auto;border-radius:18px}
 .waves-curator-review-controls{gap:10px;width:min(100%,400px);margin:0 auto}
-.waves-curator-vote button{min-height:56px;font-size:19px}
+.waves-curator-vote button{min-height:56px;font-size:16px;gap:5px;padding:8px 3px}.waves-curator-vote button svg{width:19px;height:19px}
 .waves-curator-steps{grid-template-columns:38px 1fr 38px;font-size:12px}
 .waves-curator-steps button{width:38px;height:38px}
 .waves-curator-explainer{font-size:11px;line-height:1.4}
