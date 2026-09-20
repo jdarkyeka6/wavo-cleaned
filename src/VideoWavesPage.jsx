@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
-import { ArrowLeft, Bookmark, Heart, LogOut, MessageCircle, Plus, Send, Share2, SlidersHorizontal, Volume2, VolumeX, X } from 'lucide-react'
+import { ArrowLeft, Bookmark, Flag, Heart, LogOut, MessageCircle, Plus, Send, Share2, SlidersHorizontal, Volume2, VolumeX, X } from 'lucide-react'
 import { supabase } from './supabaseClient'
 import { createPost, deletePost, getFriends, getPosts, reactToPost, sendDmMessage } from './wavoData'
 import './video-waves.css'
@@ -201,7 +201,7 @@ function Upload({ userId, onClose, onCreated }) {
   </div>
 }
 
-function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onReply, saved, onSave, onSignal }) {
+function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onReply, saved, onSave, onSignal, onReport }) {
   const videoRef = useRef(null)
   const watch = useWavesWatchSignals(videoRef, post, active, onSignal)
   const [playing, setPlaying] = useState(false)
@@ -296,6 +296,7 @@ function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onR
       </button>
       {!mine && !curated && <button onClick={() => onReply(post)} aria-label="Reply to creator"><MessageCircle size={28} /><span>Reply</span></button>}
       <button onClick={share} aria-label="Share"><Share2 size={28} /><span>Share</span></button>
+      {curated && <button onClick={() => onReport(post)} aria-label="Report video"><Flag size={26} /><span>Report</span></button>}
       <button className={saved ? 'active' : ''} onClick={() => onSave(post.id)} aria-label={saved ? 'Remove from saved videos' : 'Save on this device'}>
         <Bookmark size={28} fill={saved ? 'currentColor' : 'none'} /><span>Save</span>
       </button>
@@ -350,6 +351,7 @@ export default function VideoWavesPage() {
   const [toast, setToast] = useState('')
   const [uploadOpen, setUploadOpen] = useState(false)
   const [replyPost, setReplyPost] = useState(null)
+  const [reportPost, setReportPost] = useState(null)
   const [savedIds, setSavedIds] = useState([])
   const userId = session?.user?.id
   const feedRef = useRef(null)
@@ -513,6 +515,15 @@ export default function VideoWavesPage() {
     setToast(nowSaved ? 'Saved on this device' : 'Removed from saved videos')
   }
 
+  async function reportVideo(post, reason) {
+    const { error: reportError } = await supabase.from('waves_video_reports').upsert({
+      clip_id: post.id, reporter_id: userId, reason, status: 'open',
+    }, { onConflict: 'clip_id,reporter_id' })
+    if (reportError) { setToast('Could not send report.'); return }
+    setReportPost(null)
+    setToast('Report sent for review')
+  }
+
   if (booting) return <div className="video-waves-loading">Loading Wavo Waves…</div>
   if (!userId) return <Login onLogin={setSession} />
   if (manageOpen && isAdmin) return <WavesCuratedManager userId={userId} onClose={() => setManageOpen(false)} onChanged={refresh} />
@@ -547,10 +558,18 @@ export default function VideoWavesPage() {
       {shownPosts.map((post) => <div key={postKey(post)} data-video-wave-id={postKey(post)} className="video-wave-snap">
         <VideoCard post={post} userId={userId} active={activeId === postKey(post)} muted={muted} setMuted={setMuted}
           onLike={like} onShare={setToast} onReply={setReplyPost}
-          saved={savedIds.includes(postKey(post))} onSave={() => toggleSaved(post)} onSignal={recordSignal} />
+          saved={savedIds.includes(postKey(post))} onSave={() => toggleSaved(post)} onSignal={recordSignal} onReport={setReportPost} />
       </div>)}
     </section>
     {uploadOpen && <Upload userId={userId} onClose={() => setUploadOpen(false)} onCreated={refresh} />}
+    {reportPost && <div className="video-wave-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setReportPost(null) }}>
+      <div className="video-wave-reply">
+        <div className="video-wave-sheet-title"><strong>Report this video</strong><button type="button" onClick={() => setReportPost(null)} aria-label="Close"><X /></button></div>
+        <p>Choose the closest reason. The video stays up unless moderation takes action.</p>
+        {['unsafe','sexual','violence','hate','harassment','privacy','spam','copyright','other'].map((reason) =>
+          <button className="video-waves-secondary" type="button" key={reason} onClick={() => reportVideo(reportPost, reason)}>{reason[0].toUpperCase() + reason.slice(1)}</button>)}
+      </div>
+    </div>}
     {replyPost && <Reply post={replyPost} userId={userId} onClose={() => setReplyPost(null)}
       onSent={() => { setReplyPost(null); setToast('Reply sent in Wavo messages') }} />}
     {toast && <button className="video-wave-toast" onClick={() => setToast('')} role="status">{toast}</button>}
