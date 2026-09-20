@@ -70,7 +70,15 @@ export async function loadCuratedWaves() {
     likesByClip.get(like.clip_id).push(like)
   }
   const signed = await Promise.all(clips.map(async (clip) => {
-    let playbackUrl = clip.playback_url || null
+    let playbackUrl = clip.video_provider === 'google_drive'
+      ? null
+      : (clip.playback_url || null)
+    if (clip.video_provider === 'google_drive' && clip.video_asset_id) {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      if (!token) return null
+      playbackUrl = `/api/waves-video?id=${encodeURIComponent(clip.id)}&token=${encodeURIComponent(token)}`
+    }
     if (!playbackUrl && clip.media_path) {
       const { data: url, error: signError } = await supabase.storage.from('waves-curated')
         .createSignedUrl(clip.media_path, 15 * 60)
