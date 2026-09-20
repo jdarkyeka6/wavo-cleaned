@@ -2,6 +2,8 @@ name: Waves build check
 on:
   push:
     branches: [waves-review-empty-feed-fix]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 jobs:
   build:
