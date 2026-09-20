@@ -516,9 +516,9 @@ export default function VideoWavesPage() {
   }
 
   async function reportVideo(post, reason) {
-    const { error: reportError } = await supabase.from('waves_video_reports').upsert({
+    const { error: reportError } = await supabase.from('waves_video_reports').insert({
       clip_id: post.id, reporter_id: userId, reason, status: 'open',
-    }, { onConflict: 'clip_id,reporter_id' })
+    })
     if (reportError) { setToast('Could not send report.'); return }
     setReportPost(null)
     setToast('Report sent for review')
