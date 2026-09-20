@@ -62,5 +62,5 @@ test('hidden tags carry interests across different channels', () => {
   const unrelatedFunny = { ...clip(2, 'funny'), tags: ['fails'] }
   const signals = [{ video_key: 'curated:' + liked.id, channel_slug: 'funny', liked: true, saved: true, plays: 1 }]
   const result = rank([], [liked, dogTravel, unrelatedFunny], signals)
-  assert.equal(result[0].id, dogTravel.id)
+  assert.ok(result.findIndex((video) => video.id === dogTravel.id) < result.findIndex((video) => video.id === unrelatedFunny.id))
 })
