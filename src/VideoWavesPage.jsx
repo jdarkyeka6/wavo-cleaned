@@ -201,7 +201,7 @@ function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onR
   const [playing, setPlaying] = useState(false)
   const mine = post.author_id === userId
   const myReaction = (post.reactions || []).find((reaction) => reaction.user_id === userId)
-  const liked = Boolean(myReaction)
+  const liked = myReaction?.emoji === '❤️'
 
   useEffect(() => {
     const video = videoRef.current
@@ -324,6 +324,7 @@ export default function VideoWavesPage() {
   const feedRef = useRef(null)
 
   useEffect(() => {
+    document.title = 'Waves | Wavo'
     let alive = true
     supabase.auth.getSession()
       .then(({ data }) => { if (alive) setSession(data.session || null) })
@@ -378,14 +379,14 @@ export default function VideoWavesPage() {
   }, [posts])
 
   async function like(post) {
-    const liked = (post.reactions || []).some((reaction) => reaction.user_id === userId)
+    const removing = (post.reactions || []).some((reaction) => reaction.user_id === userId && reaction.emoji === '❤️')
     try {
-      await reactToPost(userId, post.id, liked ? '❤️' : '❤️')
+      await reactToPost(userId, post.id, '❤️')
       setPosts((current) => current.map((item) => item.id === post.id ? {
         ...item,
-        reactions: liked
+        reactions: removing
           ? (item.reactions || []).filter((reaction) => reaction.user_id !== userId)
-          : [...(item.reactions || []), { user_id: userId, emoji: '❤️' }],
+          : [...(item.reactions || []).filter((reaction) => reaction.user_id !== userId), { user_id: userId, emoji: '❤️' }],
       } : item))
     } catch { setToast('Could not update your reaction.') }
   }
