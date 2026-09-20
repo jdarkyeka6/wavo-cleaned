@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, ArrowRight, Check, ChevronLeft, ExternalLink, RotateCcw, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, ChevronLeft, ExternalLink, HelpCircle, RotateCcw, X } from 'lucide-react'
 import { supabase } from './supabaseClient'
 import { channelBySlug } from './wavesCuratedData'
 import './waves-curated-manager.css'
@@ -8,6 +8,7 @@ const FIELDS = 'clip_id,drive_source_url,source_filename,decision,decided_at'
 const VIEWS = [
   { value: 'pending', label: 'To review' },
   { value: 'yes', label: 'Yes' },
+  { value: 'maybe', label: 'Maybe' },
   { value: 'no', label: 'No' },
 ]
 
@@ -64,6 +65,7 @@ export default function WavesCuratedManager({ userId, onClose }) {
   const index = selected ? filtered.findIndex((clip) => clip.id === selected.id) : -1
   const pending = clips.filter((clip) => clip.review.decision === 'pending').length
   const approved = clips.filter((clip) => clip.review.decision === 'yes').length
+  const maybe = clips.filter((clip) => clip.review.decision === 'maybe').length
   const rejected = clips.filter((clip) => clip.review.decision === 'no').length
 
   const navigate = useCallback((delta) => {
@@ -96,18 +98,19 @@ export default function WavesCuratedManager({ userId, onClose }) {
         setActiveId(clip.id)
         setNotice('Returned to the review queue.')
       } else {
-        const remaining = updated.filter((item) => item.review.decision === 'pending')
+        const queue = view === 'maybe' ? 'maybe' : 'pending'
+        const remaining = updated.filter((item) => item.review.decision === queue)
         const next = filtered[index + 1]?.id
-        setView('pending')
+        setView(queue)
         setActiveId(remaining.find((item) => item.id === next)?.id || remaining[0]?.id || null)
-        setNotice(decision === 'yes' ? 'Saved: yes. Next video!' : 'Saved: no. Next video!')
+        setNotice(decision === 'yes' ? 'Saved: yes. Next video!' : decision === 'no' ? 'Saved: no. Next video!' : 'Saved: maybe. Next video!')
       }
     } catch (updateError) {
       setError('Could not save your choice. ' + (updateError.message || 'Try again.'))
     } finally {
       setSaving(false)
     }
-  }, [clips, filtered, index, saving, selected, userId])
+  }, [clips, filtered, index, saving, selected, userId, view])
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -116,8 +119,9 @@ export default function WavesCuratedManager({ userId, onClose }) {
       if (target instanceof HTMLElement && (
         ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName) || target.isContentEditable
       )) return
-      if (event.key.toLowerCase() === 'y' && view === 'pending') { event.preventDefault(); decide('yes') }
-      if (event.key.toLowerCase() === 'n' && view === 'pending') { event.preventDefault(); decide('no') }
+      if (event.key.toLowerCase() === 'y' && (view === 'pending' || view === 'maybe')) { event.preventDefault(); decide('yes') }
+      if (event.key.toLowerCase() === 'm' && view === 'pending') { event.preventDefault(); decide('maybe') }
+      if (event.key.toLowerCase() === 'n' && (view === 'pending' || view === 'maybe')) { event.preventDefault(); decide('no') }
       if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); navigate(1) }
       if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); navigate(-1) }
     }
@@ -140,7 +144,7 @@ export default function WavesCuratedManager({ userId, onClose }) {
         {VIEWS.map((option) => <button type="button" key={option.value}
           className={view === option.value ? 'active' : ''}
           onClick={() => { setView(option.value); setActiveId(null); setError(''); setNotice('') }}>
-          {option.label} <span>{option.value === 'pending' ? pending : option.value === 'yes' ? approved : rejected}</span>
+          {option.label} <span>{option.value === 'pending' ? pending : option.value === 'yes' ? approved : option.value === 'maybe' ? maybe : rejected}</span>
         </button>)}
       </nav>
 
@@ -152,7 +156,7 @@ export default function WavesCuratedManager({ userId, onClose }) {
           <div className="waves-curator-done"><Check size={31} /></div>
           <h1>{view === 'pending' ? 'All caught up!' : 'Nothing here yet'}</h1>
           <p>{view === 'pending'
-            ? 'Your Yes picks are saved. I can continue preparing and checking those clips. Nothing is published just by pressing Yes.'
+            ? 'Your choices are saved. Your Yes picks still need their footage and audio rights checked before publishing.'
             : 'Go back to To review to see the remaining videos.'}</p>
           <button type="button" onClick={() => { setView(view === 'pending' ? 'yes' : 'pending'); setActiveId(null) }}>{view === 'pending' ? 'See my Yes picks' : 'Back to review'}</button>
         </div> :
@@ -178,17 +182,23 @@ export default function WavesCuratedManager({ userId, onClose }) {
               <span>Watch, then choose.</span>
               <button type="button" onClick={() => navigate(1)} disabled={saving || index === filtered.length - 1} aria-label="Next video"><ArrowRight size={22}/></button>
             </div>
-            {view === 'pending' ? <div className="waves-curator-vote">
-              <button className="no" type="button" onClick={() => decide('no')} disabled={saving}><X size={26} /> No</button>
-              <button className="yes" type="button" onClick={() => decide('yes')} disabled={saving}><Check size={26} /> Yes</button>
-            </div> : <button className="waves-curator-undo" type="button" disabled={saving} onClick={() => decide('pending')}>
+            {(view === 'pending' || view === 'maybe') ? <>
+              <div className="waves-curator-vote">
+                <button className="no" type="button" onClick={() => decide('no')} disabled={saving}><X size={25} /> No</button>
+                {view === 'pending' && <button className="maybe" type="button" onClick={() => decide('maybe')} disabled={saving}><HelpCircle size={23} /> Maybe</button>}
+                <button className="yes" type="button" onClick={() => decide('yes')} disabled={saving}><Check size={25} /> Yes</button>
+              </div>
+              {view === 'maybe' && <button className="waves-curator-undo" type="button" disabled={saving} onClick={() => decide('pending')}>
+                <RotateCcw size={17}/> Back to To review
+              </button>}
+            </> : <button className="waves-curator-undo" type="button" disabled={saving} onClick={() => decide('pending')}>
               <RotateCcw size={17}/> Change my mind
             </button>}
             <p className="waves-curator-explainer">
-              Yes = keep this clip for further checks. No = reject it. Your choice is saved automatically.
+              Yes = keep for further checks. Maybe = decide later. No = reject. Your choice is saved automatically.
               Purchased footage and audio still need rights clearance before appearing publicly on Waves.
             </p>
-            <p className="waves-curator-shortcuts">Keyboard: Y = Yes · N = No · ← / → = previous / next</p>
+            <p className="waves-curator-shortcuts">Keyboard: Y = Yes · M = Maybe · N = No · ← / → = previous / next</p>
           </div>
         </div>}
     </div>
