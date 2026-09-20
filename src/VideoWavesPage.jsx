@@ -4,7 +4,9 @@ import { ArrowLeft, Bookmark, Heart, LogOut, MessageCircle, Plus, Send, Share2, 
 import { supabase } from './supabaseClient'
 import { createPost, deletePost, getFriends, getPosts, reactToPost, sendDmMessage } from './wavoData'
 import './video-waves.css'
-import { CURATED_CHANNELS, channelBySlug, loadCuratedWaves, postKey, rotateCuratedFeed } from './wavesCuratedData'
+import { CURATED_CHANNELS, channelBySlug, loadCuratedWaves, postKey } from './wavesCuratedData'
+import { rankWavesFeed } from './wavesRecommendations'
+import { useWavesWatchSignals } from './wavesWatchSignals'
 import WavesCuratedManager from './WavesCuratedManager'
 
 const VIDEO_LIMIT_BYTES = 50 * 1024 * 1024
@@ -199,8 +201,9 @@ function Upload({ userId, onClose, onCreated }) {
   </div>
 }
 
-function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onReply, saved, onSave }) {
+function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onReply, saved, onSave, onSignal }) {
   const videoRef = useRef(null)
+  const watch = useWavesWatchSignals(videoRef, post, active, onSignal)
   const [playing, setPlaying] = useState(false)
   const curated = post.kind === 'curated'
   const channel = curated ? channelBySlug[post.channel_slug] : null
@@ -276,7 +279,7 @@ function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onR
 
   return <article className="video-wave-card">
     <video ref={videoRef} className="video-wave-player" src={post.media_hls_url ? undefined : post.media_url_signed} preload={active ? 'auto' : 'metadata'} playsInline loop muted={muted}
-      onClick={togglePlay} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} aria-label={post.body || 'Wave video'} />
+      onClick={togglePlay} onPlay={() => { setPlaying(true); watch.onPlay() }} onTimeUpdate={watch.onTimeUpdate} onPause={() => setPlaying(false)} aria-label={post.body || 'Wave video'} />
     <div className="video-wave-scrim" />
     {!playing && <button className="video-wave-play" onClick={togglePlay} aria-label="Play video"><Play size={34} fill="currentColor" /></button>}
     <button className="video-wave-sound" onClick={() => setMuted((value) => !value)} aria-label={muted ? 'Unmute' : 'Mute'}>
@@ -391,6 +394,35 @@ export default function VideoWavesPage() {
     } catch { setSavedIds([]) }
   }, [userId])
 
+  function recordSignal(post, delta = {}) {
+    if (!userId) return
+    supabase.rpc('record_waves_video_signal', {
+      p_video_key: postKey(post),
+      p_channel_slug: post.kind === 'curated' ? post.channel_slug : null,
+      p_watched_ms: delta.watchedMs || 0,
+      p_plays: delta.plays || 0,
+      p_completions: delta.completions || 0,
+      p_skips: delta.skips || 0,
+      p_rewatches: delta.rewatches || 0,
+      p_liked: delta.liked ?? null,
+      p_saved: delta.saved ?? null,
+    }).then(({ error: signalError }) => {
+      if (signalError) console.warn('[waves] learning unavailable', signalError.message)
+    }).catch((signalError) => console.warn('[waves] learning unavailable', signalError))
+  }
+
+  function chooseChannel(slug) {
+    if (slug !== 'all' && slug !== 'friends' && slug !== channel) {
+      supabase.rpc('record_waves_channel_choice', { p_channel_slug: slug })
+        .then(({ error: choiceError }) => {
+          if (choiceError) console.warn('[waves] channel preference unavailable', choiceError.message)
+        }).catch((choiceError) => console.warn('[waves] channel preference unavailable', choiceError))
+    }
+    setChannel(slug)
+    // Re-ranking on return avoids rearranging a video while it is playing.
+    if (slug === 'all' && channel !== 'all') void refresh()
+  }
+
   async function refresh() {
     if (!userId) return
     setLoading(true)
@@ -402,7 +434,15 @@ export default function VideoWavesPage() {
       if (curatedResult.status === 'rejected') console.warn('[waves] curated feed unavailable', curatedResult.reason)
       const friends = friendsResult.status === 'fulfilled' ? friendsResult.value : []
       const curated = curatedResult.status === 'fulfilled' ? curatedResult.value : []
-      const rows = rotateCuratedFeed(friends, curated)
+      const [signalsResult, choicesResult] = await Promise.all([
+        supabase.from('waves_video_signals')
+          .select('video_key,channel_slug,watched_ms,plays,completions,skips,rewatches,liked,saved,updated_at')
+          .eq('user_id', userId).order('updated_at', { ascending: false }).limit(1000),
+        supabase.from('waves_channel_choices').select('channel_slug,visits').eq('user_id', userId),
+      ])
+      if (signalsResult.error) console.warn('[waves] preferences unavailable', signalsResult.error.message)
+      if (choicesResult.error) console.warn('[waves] channel choices unavailable', choicesResult.error.message)
+      const rows = rankWavesFeed(friends, curated, signalsResult.data || [], choicesResult.data || [], savedIds)
       setPosts(rows)
       const requested = new URLSearchParams(window.location.search).get('wave')
       const selected = rows.find((row) => (row.kind === 'curated' ? 'curated:' : '') + row.id === requested)
@@ -447,6 +487,7 @@ export default function VideoWavesPage() {
       setPosts((current) => current.map((item) => item.kind === 'curated' && item.id === post.id ? { ...item,
         reactions: mine ? item.reactions.filter((reaction) => reaction.user_id !== userId) : [...item.reactions, { user_id: userId }],
       } : item))
+      recordSignal(post, { liked: !mine })
       return
     }
     const removing = (post.reactions || []).some((reaction) => reaction.user_id === userId && reaction.emoji === '❤️')
@@ -458,14 +499,18 @@ export default function VideoWavesPage() {
           ? (item.reactions || []).filter((reaction) => reaction.user_id !== userId)
           : [...(item.reactions || []).filter((reaction) => reaction.user_id !== userId), { user_id: userId, emoji: '❤️' }],
       } : item))
+      recordSignal(post, { liked: !removing })
     } catch { setToast('Could not update your reaction.') }
   }
 
-  function toggleSaved(id) {
-    const next = savedIds.includes(id) ? savedIds.filter((saved) => saved !== id) : [...savedIds, id]
+  function toggleSaved(post) {
+    const id = postKey(post)
+    const nowSaved = !savedIds.includes(id)
+    const next = nowSaved ? [...savedIds, id] : savedIds.filter((saved) => saved !== id)
     setSavedIds(next)
     try { localStorage.setItem('wavo-video-saved:' + userId, JSON.stringify(next)) } catch { /* optional local feature */ }
-    setToast(savedIds.includes(id) ? 'Removed from saved videos' : 'Saved on this device')
+    recordSignal(post, { saved: nowSaved })
+    setToast(nowSaved ? 'Saved on this device' : 'Removed from saved videos')
   }
 
   if (booting) return <div className="video-waves-loading">Loading Wavo Waves…</div>
@@ -483,7 +528,7 @@ export default function VideoWavesPage() {
         <button onClick={() => supabase.auth.signOut()} aria-label="Sign out"><LogOut size={18} /></button>
       </div>
     </header>
-    <nav className="video-waves-channels" aria-label="Waves channels"><button className={channel === 'all' ? 'chosen' : ''} onClick={() => setChannel('all')}>✨ For You</button><button className={channel === 'friends' ? 'chosen' : ''} onClick={() => setChannel('friends')}>👥 Friends</button>{CURATED_CHANNELS.map((entry) => <button key={entry.slug} className={channel === entry.slug ? 'chosen' : ''} onClick={() => setChannel(entry.slug)}>{entry.emoji} {entry.name}</button>)}</nav>
+    <nav className="video-waves-channels" aria-label="Waves channels"><button className={channel === 'all' ? 'chosen' : ''} onClick={() => chooseChannel('all')}>✨ For You</button><button className={channel === 'friends' ? 'chosen' : ''} onClick={() => chooseChannel('friends')}>👥 Friends</button>{CURATED_CHANNELS.map((entry) => <button key={entry.slug} className={channel === entry.slug ? 'chosen' : ''} onClick={() => chooseChannel(entry.slug)}>{entry.emoji} {entry.name}</button>)}</nav>
     {loading && <div className="video-waves-loading">Loading video Waves…</div>}
     {error && <div className="video-waves-error" role="alert">{error}<button onClick={refresh}>Retry</button></div>}
     {!loading && !error && !shownPosts.length && <div className="video-waves-empty">
@@ -502,7 +547,7 @@ export default function VideoWavesPage() {
       {shownPosts.map((post) => <div key={postKey(post)} data-video-wave-id={postKey(post)} className="video-wave-snap">
         <VideoCard post={post} userId={userId} active={activeId === postKey(post)} muted={muted} setMuted={setMuted}
           onLike={like} onShare={setToast} onReply={setReplyPost}
-          saved={savedIds.includes(postKey(post))} onSave={() => toggleSaved(postKey(post))} />
+          saved={savedIds.includes(postKey(post))} onSave={() => toggleSaved(post)} onSignal={recordSignal} />
       </div>)}
     </section>
     {uploadOpen && <Upload userId={userId} onClose={() => setUploadOpen(false)} onCreated={refresh} />}
