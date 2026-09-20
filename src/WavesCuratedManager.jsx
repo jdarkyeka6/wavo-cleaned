@@ -9,6 +9,13 @@ const MAX_FILE = 50 * 1024 * 1024
 const reviewFields = ['rights_verified', 'audio_verified', 'edited', 'content_approved']
 const blankChecks = { rights_verified: false, audio_verified: false, edited: false, content_approved: false }
 
+// Only make Drive file preview URLs for known file IDs. A source link is never
+// a public feed URL and this iframe appears only inside the administrator UI.
+function drivePreviewUrl(url) {
+  const match = /^https:\/\/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)(?:\/|\?|$)/.exec(url || '')
+  return match ? 'https://drive.google.com/file/d/' + match[1] + '/preview' : null
+}
+
 async function durationMs(file) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file)
@@ -36,6 +43,7 @@ export default function WavesCuratedManager({ userId, onClose, onChanged }) {
   const [newName, setNewName] = useState('')
   const [newChannel, setNewChannel] = useState('funny')
   const [pendingFiles, setPendingFiles] = useState({})
+  const [previewId, setPreviewId] = useState(null)
 
   async function reload() {
     const [clips, reviews] = await Promise.all([
@@ -180,8 +188,9 @@ export default function WavesCuratedManager({ userId, onClose, onChanged }) {
     </header>
     <div className="waves-curator-body">
       <div className="waves-curator-intro">
-        <h1>Choose the clips. Build the channels.</h1>
-        <p>Every candidate starts in a private review queue. The Google Drive source link stays private and is never streamed to viewers. Only edited clips with documented footage and music permissions can be published to a labelled Wavo-curated channel.</p>
+        <h1>{items.filter((clip) => clip.status === 'draft').length} clips waiting for review</h1>
+        <p>{items.filter((clip) => clip.status === 'published').length} published · {items.filter((clip) => clip.media_path && clip.status === 'draft').length} uploaded drafts. The feed remains empty until an edited video passes the footage, audio and content checks and is published.</p>
+        <p>Click Preview on a candidate below to watch it privately in Google Drive. This does not publish or copy it to Waves.</p>
       </div>
       {error && <p className="waves-curator-error" role="alert">{error}</p>}
       {message && <p className="waves-curator-success" role="status">{message}</p>}
@@ -209,8 +218,13 @@ export default function WavesCuratedManager({ userId, onClose, onChanged }) {
           <div className="waves-curator-item-heading">
             <span className={clip.status === 'published' ? 'waves-curator-live' : 'waves-curator-draft'}>{clip.status === 'published' ? 'LIVE' : 'PRIVATE DRAFT'}</span>
             <strong>{clip.title}</strong>
-            {clip.review.drive_source_url && <a href={clip.review.drive_source_url} target="_blank" rel="noreferrer">View source <ExternalLink size={13} /></a>}
+            {drivePreviewUrl(clip.review.drive_source_url) && <button type="button" className="waves-curator-preview-toggle" onClick={() => setPreviewId((current) => current === clip.id ? null : clip.id)}>{previewId === clip.id ? 'Close preview' : '▶ Preview privately'}</button>}
+            {clip.review.drive_source_url && <a href={clip.review.drive_source_url} target="_blank" rel="noreferrer">Open in Drive <ExternalLink size={13} /></a>
           </div>
+          {previewId === clip.id && drivePreviewUrl(clip.review.drive_source_url) && <div className="waves-curator-preview">
+            <iframe src={drivePreviewUrl(clip.review.drive_source_url)} title={'Private Drive preview of ' + clip.title} allow="autoplay; fullscreen" allowFullScreen loading="lazy" referrerPolicy="no-referrer" />
+            <p>Admin-only source preview. You may need to sign in to Google Drive. The original Drive video is not hosted or available to the public on Waves.</p>
+          </div>}
           <div className="waves-curator-fields">
             <label>Channel<select value={clip.channel_slug} onChange={(event) => editClip(clip.id, 'channel_slug', event.target.value)} disabled={clip.status === 'published'}>
               {CURATED_CHANNELS.map((channel) => <option key={channel.slug} value={channel.slug}>@{channel.handle}</option>)}
