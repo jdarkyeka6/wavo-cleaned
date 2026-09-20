@@ -38,9 +38,9 @@ export default async function handler(req, res) {
   if (!userData?.user) return send(res, 401, { error: "Session expired" });
 
   const { data: clip, error } = await admin.from("waves_curated_clips")
-    .select("video_provider,video_asset_id,status")
+    .select("video_provider,video_asset_id,status,moderation_state")
     .eq("id", clipId).eq("status", "published").maybeSingle();
-  if (error || !clip || clip.video_provider !== "google_drive" || !clip.video_asset_id) {
+  if (error || !clip || clip.moderation_state !== "clear" || clip.video_provider !== "google_drive" || !clip.video_asset_id) {
     return send(res, 404, { error: "Video not found" });
   }
 

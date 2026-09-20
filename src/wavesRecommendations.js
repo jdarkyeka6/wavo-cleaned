@@ -25,7 +25,7 @@ export function rankWavesFeed(friendPosts, curatedPosts, signals = [], channelCh
     previous.items += 1
     interests.set(signal.channel_slug, previous)
     const sourcePost = postByKey.get(signal.video_key)
-    for (const tag of sourcePost?.tags || []) {
+    for (const tag of (signal.tags?.length ? signal.tags : sourcePost?.tags || [])) {
       const tagPrevious = tagInterests.get(tag) || { total: 0, items: 0 }
       tagPrevious.total += cap(feedback, -6, 11)
       tagPrevious.items += 1
