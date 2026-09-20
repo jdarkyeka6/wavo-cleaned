@@ -46,6 +46,7 @@ import UsernameSettings from './UsernameSettings.jsx'
 import WavePhotoBridge from './WavePhotoBridge.jsx'
 import WavesPageV2 from './WavesPageV2.jsx'
 import WavoTogether from './WavoTogether.jsx'
+import VideoWavesPage from './VideoWavesPage.jsx'
 import { installAuthBootResilience } from './auth-boot-resilience.js'
 import { isConfigured } from './lib/config'
 import { installUiMode } from './lib/layout'
@@ -102,6 +103,7 @@ createRoot(document.getElementById('root')).render(
         {!isNativeApp && <EmployeeWorkTracking />}
         <Routes>
           <Route path="/waves" element={<WavesPageV2 />} />
+          <Route path="/waves/video" element={<VideoWavesPage />} />
           <Route path="/support" element={<SupportPage />} />
           <Route path="/admin" element={<AdminRoute />} />
           <Route path="*" element={<WavoApp />} />
