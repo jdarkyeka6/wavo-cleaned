@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Bookmark, Heart, LogOut, MessageCircle, Plus, Send, Share2, Volume2, VolumeX, X } from 'lucide-react'
+import { ArrowLeft, Bookmark, Heart, LogOut, MessageCircle, Plus, Send, Share2, SlidersHorizontal, Volume2, VolumeX, X } from 'lucide-react'
 import { supabase } from './supabaseClient'
 import { createPost, deletePost, getFriends, getPosts, reactToPost, sendDmMessage } from './wavoData'
 import './video-waves.css'
+import { CURATED_CHANNELS, channelBySlug, loadCuratedWaves, postKey, rotateCuratedFeed } from './wavesCuratedData'
+import WavesCuratedManager from './WavesCuratedManager'
 
 const VIDEO_LIMIT_BYTES = 50 * 1024 * 1024
 const VIDEO_LIMIT_MS = 60_000
@@ -33,9 +35,9 @@ function count(value) {
   return (value / 1_000_000).toFixed(1) + 'M'
 }
 
-function waveUrl(id) {
+function waveUrl(id, curated = false) {
   const standalone = ['wavowaves.lol', 'www.wavowaves.lol'].includes(window.location.hostname)
-  return window.location.origin + (standalone ? '/?wave=' : '/waves/video?wave=') + encodeURIComponent(id)
+  return window.location.origin + (standalone ? '/?wave=' : '/waves/video?wave=') + encodeURIComponent((curated ? 'curated:' : '') + id)
 }
 
 async function signMedia(path) {
@@ -55,7 +57,7 @@ async function loadVideoWaves(userId) {
 
   const signed = await Promise.all(posts.map(async (post) => {
     try {
-      return { ...post, media_url_signed: await signMedia(post.media_path) }
+      return { ...post, kind: 'friend', media_url_signed: await signMedia(post.media_path) }
     } catch {
       return null
     }
@@ -199,7 +201,9 @@ function Upload({ userId, onClose, onCreated }) {
 function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onReply, saved, onSave }) {
   const videoRef = useRef(null)
   const [playing, setPlaying] = useState(false)
-  const mine = post.author_id === userId
+  const curated = post.kind === 'curated'
+  const channel = curated ? channelBySlug[post.channel_slug] : null
+  const mine = !curated && post.author_id === userId
   const myReaction = (post.reactions || []).find((reaction) => reaction.user_id === userId)
   const liked = myReaction?.emoji === '❤️'
 
@@ -238,12 +242,12 @@ function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onR
   }
 
   async function share() {
-    const url = waveUrl(post.id)
+    const url = waveUrl(post.id, curated)
     try {
       if (navigator.share) await navigator.share({ title: 'Wave by @' + (post.author?.username || 'wavo'), url })
       else {
         await navigator.clipboard.writeText(url)
-        onShare('Private link copied. Only the selected audience can view this Wave.')
+        onShare(curated ? 'Waves link copied' : 'Private link copied. Only the selected audience can view this Wave.')
       }
     } catch (error) {
       if (error?.name !== 'AbortError') onShare('Could not share this Wave.')
@@ -259,15 +263,15 @@ function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onR
       {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
     </button>
     <div className="video-wave-meta">
-      <div className="video-wave-author"><Avatar profile={post.author} /><strong>@{post.author?.username || 'wavo'}</strong><span>· {relativeTime(post.created_at)}</span></div>
+      <div className="video-wave-author">{curated ? <span className="video-wave-channel-avatar" aria-hidden="true">{channel?.emoji || '🌊'}</span> : <Avatar profile={post.author} />}<strong>@{post.author?.username || 'wavo'}</strong><span>· {relativeTime(post.created_at)}</span></div>
       {post.body && <p>{post.body}</p>}
-      <span className="video-wave-audio">♫ Original Wave audio · Friends only</span>
+      <span className="video-wave-audio">{curated ? 'Wavo-curated collection · ' + (channel?.name || 'Waves') : '♫ Original Wave audio · Friends only'}</span>{curated && post.source_credit && <span className="video-wave-source">Source: {post.source_credit}</span>}
     </div>
     <aside className="video-wave-actions">
       <button className={liked ? 'active' : ''} onClick={() => onLike(post)} aria-label={liked ? 'Remove reaction' : 'Like'}>
         <Heart size={28} fill={liked ? 'currentColor' : 'none'} /><span>{count((post.reactions || []).length)}</span>
       </button>
-      {!mine && <button onClick={() => onReply(post)} aria-label="Reply to creator"><MessageCircle size={28} /><span>Reply</span></button>}
+      {!mine && !curated && <button onClick={() => onReply(post)} aria-label="Reply to creator"><MessageCircle size={28} /><span>Reply</span></button>}
       <button onClick={share} aria-label="Share"><Share2 size={28} /><span>Share</span></button>
       <button className={saved ? 'active' : ''} onClick={() => onSave(post.id)} aria-label={saved ? 'Remove from saved videos' : 'Save on this device'}>
         <Bookmark size={28} fill={saved ? 'currentColor' : 'none'} /><span>Save</span>
@@ -312,6 +316,9 @@ export default function VideoWavesPage() {
   const [session, setSession] = useState(null)
   const [booting, setBooting] = useState(true)
   const [posts, setPosts] = useState([])
+  const [channel, setChannel] = useState('all')
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [manageOpen, setManageOpen] = useState(false)
   const [activeId, setActiveId] = useState(null)
   const [muted, setMuted] = useState(true)
   const [loading, setLoading] = useState(true)
@@ -322,6 +329,7 @@ export default function VideoWavesPage() {
   const [savedIds, setSavedIds] = useState([])
   const userId = session?.user?.id
   const feedRef = useRef(null)
+  const shownPosts = posts.filter((post) => channel === 'all' || (channel === 'friends' ? post.kind === 'friend' : post.kind === 'curated' && post.channel_slug === channel))
 
   useEffect(() => {
     document.title = 'Waves | Wavo'
@@ -337,7 +345,16 @@ export default function VideoWavesPage() {
   }, [])
 
   useEffect(() => {
-    if (!userId) { setPosts([]); setLoading(false); return }
+    if (!userId) { setPosts([]); setLoading(false); setIsAdmin(false); return }
+    let active = true
+    supabase.from('profiles').select('is_admin').eq('id', userId).single()
+      .then(({ data }) => { if (active) setIsAdmin(data?.is_admin === true) })
+      .catch(() => { if (active) setIsAdmin(false) })
+    return () => { active = false }
+  }, [userId])
+
+  useEffect(() => {
+    if (!userId) return
     try {
       const stored = JSON.parse(localStorage.getItem('wavo-video-saved:' + userId) || '[]')
       setSavedIds(Array.isArray(stored) ? stored : [])
@@ -349,14 +366,20 @@ export default function VideoWavesPage() {
     setLoading(true)
     setError('')
     try {
-      const rows = await loadVideoWaves(userId)
+      const [friendsResult, curatedResult] = await Promise.allSettled([loadVideoWaves(userId), loadCuratedWaves()])
+      if (friendsResult.status === 'rejected' && curatedResult.status === 'rejected') throw friendsResult.reason
+      if (friendsResult.status === 'rejected') console.warn('[waves] friend feed unavailable', friendsResult.reason)
+      if (curatedResult.status === 'rejected') console.warn('[waves] curated feed unavailable', curatedResult.reason)
+      const friends = friendsResult.status === 'fulfilled' ? friendsResult.value : []
+      const curated = curatedResult.status === 'fulfilled' ? curatedResult.value : []
+      const rows = rotateCuratedFeed(friends, curated)
       setPosts(rows)
       const requested = new URLSearchParams(window.location.search).get('wave')
-      const selected = rows.find((row) => row.id === requested)
-      setActiveId(selected?.id || rows[0]?.id || null)
+      const selected = rows.find((row) => (row.kind === 'curated' ? 'curated:' : '') + row.id === requested)
+      setActiveId(selected ? postKey(selected) : rows[0] ? postKey(rows[0]) : null)
       if (selected) requestAnimationFrame(() => {
         const cards = feedRef.current?.querySelectorAll('[data-video-wave-id]') || []
-        const card = [...cards].find((element) => element.dataset.videoWaveId === selected.id)
+        const card = [...cards].find((element) => element.dataset.videoWaveId === postKey(selected))
         card?.scrollIntoView({ block: 'start' })
       })
     } catch (loadError) {
@@ -368,7 +391,12 @@ export default function VideoWavesPage() {
   useEffect(() => { if (userId) refresh() }, [userId])
 
   useEffect(() => {
-    if (!posts.length || !feedRef.current) return
+    setActiveId(shownPosts[0] ? postKey(shownPosts[0]) : null)
+    if (feedRef.current) feedRef.current.scrollTop = 0
+  }, [channel])
+
+  useEffect(() => {
+    if (!shownPosts.length || !feedRef.current) return
     const observer = new IntersectionObserver((entries) => {
       const visible = entries.filter((entry) => entry.isIntersecting)
         .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
@@ -376,9 +404,21 @@ export default function VideoWavesPage() {
     }, { root: feedRef.current, threshold: [0.55, 0.8] })
     feedRef.current.querySelectorAll('[data-video-wave-id]').forEach((card) => observer.observe(card))
     return () => observer.disconnect()
-  }, [posts])
+  }, [posts, channel])
 
   async function like(post) {
+    if (post.kind === 'curated') {
+      const mine = (post.reactions || []).some((reaction) => reaction.user_id === userId)
+      const action = mine
+        ? supabase.from('waves_curated_likes').delete().eq('clip_id', post.id).eq('user_id', userId)
+        : supabase.from('waves_curated_likes').insert({ clip_id: post.id, user_id: userId })
+      const { error: likeError } = await action
+      if (likeError) { setToast('Could not update your like.'); return }
+      setPosts((current) => current.map((item) => item.kind === 'curated' && item.id === post.id ? { ...item,
+        reactions: mine ? item.reactions.filter((reaction) => reaction.user_id !== userId) : [...item.reactions, { user_id: userId }],
+      } : item))
+      return
+    }
     const removing = (post.reactions || []).some((reaction) => reaction.user_id === userId && reaction.emoji === '❤️')
     try {
       await reactToPost(userId, post.id, '❤️')
@@ -400,29 +440,32 @@ export default function VideoWavesPage() {
 
   if (booting) return <div className="video-waves-loading">Loading Wavo Waves…</div>
   if (!userId) return <Login onLogin={setSession} />
+  if (manageOpen && isAdmin) return <WavesCuratedManager userId={userId} onClose={() => setManageOpen(false)} onChanged={refresh} />
 
   return <main className="video-waves-shell">
     <header className="video-waves-topbar">
       <a href="https://wavo.lol/" aria-label="Back to Wavo"><ArrowLeft size={20} /></a>
       <strong>Waves<span className="video-waves-brand-dot">.</span></strong>
-      <span>Friends</span>
+      <span>{channel === 'all' ? 'For You' : channel === 'friends' ? 'Friends' : channelBySlug[channel]?.name || 'Channels'}</span>
       <div className="video-waves-top-actions">
+        {isAdmin && <button onClick={() => setManageOpen(true)} aria-label="Open Waves Studio"><SlidersHorizontal size={18} /> <span>Studio</span></button>}
         <button onClick={() => setUploadOpen(true)} aria-label="Post a video"><Plus size={20} /> <span>Post</span></button>
         <button onClick={() => supabase.auth.signOut()} aria-label="Sign out"><LogOut size={18} /></button>
       </div>
     </header>
+    <nav className="video-waves-channels" aria-label="Waves channels"><button className={channel === 'all' ? 'chosen' : ''} onClick={() => setChannel('all')}>✨ For You</button><button className={channel === 'friends' ? 'chosen' : ''} onClick={() => setChannel('friends')}>👥 Friends</button>{CURATED_CHANNELS.map((entry) => <button key={entry.slug} className={channel === entry.slug ? 'chosen' : ''} onClick={() => setChannel(entry.slug)}>{entry.emoji} {entry.name}</button>)}</nav>
     {loading && <div className="video-waves-loading">Loading video Waves…</div>}
     {error && <div className="video-waves-error" role="alert">{error}<button onClick={refresh}>Retry</button></div>}
-    {!loading && !error && !posts.length && <div className="video-waves-empty">
-      <strong>No video Waves yet.</strong>
-      <span>Share the first one with your Wavo friends.</span>
+    {!loading && !error && !shownPosts.length && <div className="video-waves-empty">
+      <strong>{channel === 'all' ? 'No video Waves yet.' : 'Nothing in this channel yet.'}</strong>
+      <span>{channel === 'all' ? 'Your friends and approved curated videos will appear here.' : 'Try For You or another channel while we add more clips.'}</span>
       <button className="video-waves-primary" onClick={() => setUploadOpen(true)}>Post a video</button>
     </div>}
     <section className="video-waves-feed" ref={feedRef} aria-label="Video Waves">
-      {posts.map((post) => <div key={post.id} data-video-wave-id={post.id} className="video-wave-snap">
-        <VideoCard post={post} userId={userId} active={activeId === post.id} muted={muted} setMuted={setMuted}
+      {shownPosts.map((post) => <div key={postKey(post)} data-video-wave-id={postKey(post)} className="video-wave-snap">
+        <VideoCard post={post} userId={userId} active={activeId === postKey(post)} muted={muted} setMuted={setMuted}
           onLike={like} onShare={setToast} onReply={setReplyPost}
-          saved={savedIds.includes(post.id)} onSave={toggleSaved} />
+          saved={savedIds.includes(postKey(post))} onSave={() => toggleSaved(postKey(post))} />
       </div>)}
     </section>
     {uploadOpen && <Upload userId={userId} onClose={() => setUploadOpen(false)} onCreated={refresh} />}
