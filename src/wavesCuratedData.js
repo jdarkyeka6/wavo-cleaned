@@ -55,7 +55,7 @@ export async function loadCuratedWaves() {
   // The table RLS returns published rows to signed-in members, never review
   // notes or source Drive URLs. Storage RLS likewise restricts signing URLs.
   const { data, error } = await supabase.from('waves_curated_clips')
-    .select('id,channel_slug,title,caption,media_path,source_credit,published_at')
+    .select('id,channel_slug,title,caption,media_path,playback_url,playback_hls_url,video_provider,video_asset_id,source_credit,published_at')
     .eq('status', 'published')
     .order('published_at', { ascending: false }).limit(80)
   if (error) throw error
@@ -70,9 +70,14 @@ export async function loadCuratedWaves() {
     likesByClip.get(like.clip_id).push(like)
   }
   const signed = await Promise.all(clips.map(async (clip) => {
-    const { data: url, error: signError } = await supabase.storage.from('waves-curated')
-      .createSignedUrl(clip.media_path, 15 * 60)
-    if (signError || !url?.signedUrl) return null
+    let playbackUrl = clip.playback_url || null
+    if (!playbackUrl && clip.media_path) {
+      const { data: url, error: signError } = await supabase.storage.from('waves-curated')
+        .createSignedUrl(clip.media_path, 15 * 60)
+      if (signError || !url?.signedUrl) return null
+      playbackUrl = url.signedUrl
+    }
+    if (!playbackUrl && !clip.playback_hls_url) return null
     const channel = channelBySlug[clip.channel_slug]
     if (!channel) return null
     return {
@@ -83,7 +88,9 @@ export async function loadCuratedWaves() {
       body: clip.caption,
       source_credit: clip.source_credit,
       created_at: clip.published_at,
-      media_url_signed: url.signedUrl,
+      media_url_signed: playbackUrl,
+      media_hls_url: clip.playback_hls_url || null,
+      video_provider: clip.video_provider || (clip.media_path ? 'supabase' : 'external'),
       author: { username: channel.handle },
       reactions: likesByClip.get(clip.id) || [],
     }

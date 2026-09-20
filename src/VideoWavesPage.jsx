@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import Hls from 'hls.js'
 import { ArrowLeft, Bookmark, Heart, LogOut, MessageCircle, Plus, Send, Share2, SlidersHorizontal, Volume2, VolumeX, X } from 'lucide-react'
 import { supabase } from './supabaseClient'
 import { createPost, deletePost, getFriends, getPosts, reactToPost, sendDmMessage } from './wavoData'
@@ -209,6 +210,25 @@ function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onR
 
   useEffect(() => {
     const video = videoRef.current
+    if (!video || !post.media_hls_url) return
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = post.media_hls_url
+      return
+    }
+    if (!Hls.isSupported()) return
+    const hls = new Hls({
+      maxBufferLength: 12,
+      maxMaxBufferLength: 24,
+      startLevel: -1,
+      capLevelToPlayerSize: true,
+    })
+    hls.loadSource(post.media_hls_url)
+    hls.attachMedia(video)
+    return () => hls.destroy()
+  }, [post.media_hls_url])
+
+  useEffect(() => {
+    const video = videoRef.current
     if (!video) return
     if (active && !document.hidden) {
       video.play().catch(() => setPlaying(false))
@@ -255,7 +275,7 @@ function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onR
   }
 
   return <article className="video-wave-card">
-    <video ref={videoRef} className="video-wave-player" src={post.media_url_signed} preload={active ? 'auto' : 'metadata'} playsInline loop muted={muted}
+    <video ref={videoRef} className="video-wave-player" src={post.media_hls_url ? undefined : post.media_url_signed} preload={active ? 'auto' : 'metadata'} playsInline loop muted={muted}
       onClick={togglePlay} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} aria-label={post.body || 'Wave video'} />
     <div className="video-wave-scrim" />
     {!playing && <button className="video-wave-play" onClick={togglePlay} aria-label="Play video"><Play size={34} fill="currentColor" /></button>}

@@ -40,7 +40,7 @@ export default function WavesCuratedManager({ userId, onClose, onChanged }) {
       // Two admin-only queries. Public viewers cannot access review/source URLs.
       const [clipResponse, reviewResponse] = await Promise.all([
         supabase.from('waves_curated_clips')
-          .select('id,channel_slug,title,status,media_path,created_at')
+          .select('id,channel_slug,title,status,media_path,playback_url,playback_hls_url,video_provider,video_asset_id,created_at')
           .order('created_at', { ascending: false }).limit(300),
         supabase.from('waves_curated_reviews').select(FIELDS).limit(300),
       ])
@@ -94,7 +94,7 @@ export default function WavesCuratedManager({ userId, onClose, onChanged }) {
       // hosted AND has independently reviewed footage, audio and content can
       // change its public status. The DB trigger enforces the final gate.
       const eligibleForRelease = Boolean(
-        clip.media_path && clip.review.rights_verified &&
+        (clip.media_path || clip.playback_url || clip.playback_hls_url) && clip.review.rights_verified &&
         clip.review.audio_verified && clip.review.edited &&
         clip.review.content_approved && clip.review.licence_notes?.trim()
       )
@@ -135,7 +135,7 @@ export default function WavesCuratedManager({ userId, onClose, onChanged }) {
         setView(queue)
         setActiveId(remaining.find((item) => item.id === next)?.id || remaining[0]?.id || null)
         if (nextStatus === 'published' && decision === 'yes') setNotice('Yes saved. This cleared video is now public on Waves.')
-        else if (decision === 'yes') setNotice('Yes saved. This clip remains private until the actual video is uploaded and its footage and audio rights are cleared.')
+        else if (decision === 'yes') setNotice('Yes saved. This clip remains private until the actual video is hosted and its footage and audio rights are cleared.')
         else setNotice(decision === 'no' ? 'Saved: no. Next video!' : 'Saved: maybe. Next video!')
       }
     } catch (updateError) {
