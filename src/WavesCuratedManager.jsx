@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, ArrowRight, Check, ChevronLeft, ExternalLink, HelpCircle, RotateCcw, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, ChevronLeft, ExternalLink, HelpCircle, Maximize2, Minimize2, RotateCcw, X } from 'lucide-react'
 import { supabase } from './supabaseClient'
 import { channelBySlug } from './wavesCuratedData'
 import './waves-curated-manager.css'
 
-const FIELDS = 'clip_id,drive_source_url,source_filename,decision,decided_at'
+const FIELDS = 'clip_id,drive_source_url,source_filename,decision,decided_at,rights_verified,audio_verified,edited,content_approved,licence_notes'
 const VIEWS = [
   { value: 'pending', label: 'To review' },
   { value: 'yes', label: 'Yes' },
@@ -23,7 +23,7 @@ function textFor(clip) {
   return { channel, filename }
 }
 
-export default function WavesCuratedManager({ userId, onClose }) {
+export default function WavesCuratedManager({ userId, onClose, onChanged }) {
   const [clips, setClips] = useState([])
   const [view, setView] = useState('pending')
   const [activeId, setActiveId] = useState(null)
@@ -31,6 +31,7 @@ export default function WavesCuratedManager({ userId, onClose }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [widePreview, setWidePreview] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -39,8 +40,8 @@ export default function WavesCuratedManager({ userId, onClose }) {
       // Two admin-only queries. Public viewers cannot access review/source URLs.
       const [clipResponse, reviewResponse] = await Promise.all([
         supabase.from('waves_curated_clips')
-          .select('id,channel_slug,title,status,created_at')
-          .eq('status', 'draft').order('created_at', { ascending: false }).limit(300),
+          .select('id,channel_slug,title,status,media_path,created_at')
+          .order('created_at', { ascending: false }).limit(300),
         supabase.from('waves_curated_reviews').select(FIELDS).limit(300),
       ])
       if (clipResponse.error) throw clipResponse.error
@@ -89,8 +90,38 @@ export default function WavesCuratedManager({ userId, onClose }) {
           decided_by: decision === 'pending' ? null : userId,
         }).eq('clip_id', clip.id)
       if (updateError) throw updateError
+      // A Yes is a request to release the clip. Only a video that is already
+      // hosted AND has independently reviewed footage, audio and content can
+      // change its public status. The DB trigger enforces the final gate.
+      const eligibleForRelease = Boolean(
+        clip.media_path && clip.review.rights_verified &&
+        clip.review.audio_verified && clip.review.edited &&
+        clip.review.content_approved && clip.review.licence_notes?.trim()
+      )
+      let nextStatus = clip.status
+      if (decision === 'yes' && eligibleForRelease && clip.status !== 'published') {
+        const { error: publishError } = await supabase.from('waves_curated_clips')
+          .update({ status: 'published', published_at: new Date().toISOString() })
+          .eq('id', clip.id).eq('status', 'draft')
+        if (publishError) {
+          setNotice('Yes saved, but automatic publication needs attention: ' + publishError.message)
+        } else {
+          nextStatus = 'published'
+          onChanged?.()
+        }
+      } else if (decision !== 'yes' && clip.status === 'published') {
+        const { error: unpublishError } = await supabase.from('waves_curated_clips')
+          .update({ status: 'draft', published_at: null })
+          .eq('id', clip.id).eq('status', 'published')
+        if (unpublishError) {
+          setNotice('Your choice was saved, but the public clip could not be unpublished: ' + unpublishError.message)
+        } else {
+          nextStatus = 'draft'
+          onChanged?.()
+        }
+      }
       const updated = clips.map((item) => item.id === clip.id
-        ? { ...item, review: { ...item.review, decision } }
+        ? { ...item, status: nextStatus, review: { ...item.review, decision } }
         : item)
       setClips(updated)
       if (decision === 'pending') {
@@ -103,14 +134,16 @@ export default function WavesCuratedManager({ userId, onClose }) {
         const next = filtered[index + 1]?.id
         setView(queue)
         setActiveId(remaining.find((item) => item.id === next)?.id || remaining[0]?.id || null)
-        setNotice(decision === 'yes' ? 'Saved: yes. Next video!' : decision === 'no' ? 'Saved: no. Next video!' : 'Saved: maybe. Next video!')
+        if (nextStatus === 'published' && decision === 'yes') setNotice('Yes saved. This cleared video is now public on Waves.')
+        else if (decision === 'yes') setNotice('Yes saved. This clip remains private until the actual video is uploaded and its footage and audio rights are cleared.')
+        else setNotice(decision === 'no' ? 'Saved: no. Next video!' : 'Saved: maybe. Next video!')
       }
     } catch (updateError) {
       setError('Could not save your choice. ' + (updateError.message || 'Try again.'))
     } finally {
       setSaving(false)
     }
-  }, [clips, filtered, index, saving, selected, userId, view])
+  }, [clips, filtered, index, saving, selected, userId, view, onChanged])
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -160,17 +193,19 @@ export default function WavesCuratedManager({ userId, onClose }) {
             : 'Go back to To review to see the remaining videos.'}</p>
           <button type="button" onClick={() => { setView(view === 'pending' ? 'yes' : 'pending'); setActiveId(null) }}>{view === 'pending' ? 'See my Yes picks' : 'Back to review'}</button>
         </div> :
-        <div className="waves-curator-stage">
+        <div className={'waves-curator-stage' + (widePreview ? ' widescreen' : '')}>
           <div className="waves-curator-player">
             <div className="waves-curator-player-heading">
               <div className="waves-curator-counter">{index + 1} / {filtered.length}</div>
               <span>{details?.channel?.emoji || '🌊'} @{details?.channel?.handle || 'wavesfunny'}</span>
+              <button type="button" className="waves-curator-wide-button" onClick={() => setWidePreview((old) => !old)}>{widePreview ? <Minimize2 size={14}/> : <Maximize2 size={14}/>} {widePreview ? 'Portrait' : 'Wide view'}</button>
             </div>
             {src ? <iframe key={selected.id} src={src} title={'Preview ' + details.filename}
               loading="eager" allow="autoplay; fullscreen" allowFullScreen referrerPolicy="no-referrer" />
               : <div className="waves-curator-no-preview">Preview unavailable. Open the clip in Drive.</div>}
             <div className="waves-curator-player-foot">
               <span title={details.filename}>{details.filename}</span>
+              {selected.status === 'published' && <span className="waves-curator-review-status">Public on Waves</span>}
               {selected.review.drive_source_url && <a href={selected.review.drive_source_url} target="_blank" rel="noreferrer">
                 Play with sound in Drive <ExternalLink size={15} />
               </a>}
@@ -195,8 +230,7 @@ export default function WavesCuratedManager({ userId, onClose }) {
               <RotateCcw size={17}/> Change my mind
             </button>}
             <p className="waves-curator-explainer">
-              Tap play, then use the speaker control inside the video to hear sound. If it stays silent, use “Play with sound in Drive” to check whether the original clip has audio. Yes = keep, Maybe = decide later, No = reject. Your choices save automatically.
-              Purchased footage and audio still need rights clearance before appearing publicly on Waves.
+              If Drive's player looks cropped, choose Wide view. Yes = approve for public release once the edited file is hosted and footage and audio rights are cleared. Maybe = decide later. No = reject. Choices save automatically.
             </p>
             <p className="waves-curator-shortcuts">Keyboard: Y = Yes · M = Maybe · N = No · ← / → = previous / next</p>
           </div>
