@@ -1,260 +1,196 @@
-import { useEffect, useState } from 'react'
-import { ArrowLeft, Check, ExternalLink, FileVideo2, FolderPlus, RefreshCw, UploadCloud, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, ArrowRight, Check, ChevronLeft, ExternalLink, RotateCcw, X } from 'lucide-react'
 import { supabase } from './supabaseClient'
-import { CURATED_CHANNELS } from './wavesCuratedData'
+import { channelBySlug } from './wavesCuratedData'
 import './waves-curated-manager.css'
 
-const STORAGE_BUCKET = 'waves-curated'
-const MAX_FILE = 50 * 1024 * 1024
-const reviewFields = ['rights_verified', 'audio_verified', 'edited', 'content_approved']
-const blankChecks = { rights_verified: false, audio_verified: false, edited: false, content_approved: false }
+const FIELDS = 'clip_id,drive_source_url,source_filename,decision,decided_at'
+const VIEWS = [
+  { value: 'pending', label: 'To review' },
+  { value: 'yes', label: 'Yes' },
+  { value: 'no', label: 'No' },
+]
 
-// Only make Drive file preview URLs for known file IDs. A source link is never
-// a public feed URL and this iframe appears only inside the administrator UI.
-function drivePreviewUrl(url) {
-  const match = /^https:\/\/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)(?:\/|\?|$)/.exec(url || '')
+function previewUrl(url) {
+  const match = /^https:\/\/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)(?:\/|\?|$)/.exec(url || '')
   return match ? 'https://drive.google.com/file/d/' + match[1] + '/preview' : null
 }
 
-async function durationMs(file) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file)
-    const video = document.createElement('video')
-    const cleanup = () => { URL.revokeObjectURL(url); video.removeAttribute('src'); video.load() }
-    video.preload = 'metadata'
-    video.onloadedmetadata = () => {
-      const ms = video.duration * 1000
-      cleanup()
-      if (!Number.isFinite(ms) || ms <= 0) reject(new Error('Could not read video duration.'))
-      else resolve(ms)
-    }
-    video.onerror = () => { cleanup(); reject(new Error('Could not read this video.')) }
-    video.src = url
-  })
+function textFor(clip) {
+  const channel = channelBySlug[clip.channel_slug]
+  const filename = clip.review.source_filename || clip.title
+  return { channel, filename }
 }
 
-export default function WavesCuratedManager({ userId, onClose, onChanged }) {
-  const [items, setItems] = useState([])
-  const [busy, setBusy] = useState('')
+export default function WavesCuratedManager({ userId, onClose }) {
+  const [clips, setClips] = useState([])
+  const [view, setView] = useState('pending')
+  const [activeId, setActiveId] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [message, setMessage] = useState('')
-  const [filter, setFilter] = useState('all')
-  const [sourceUrl, setSourceUrl] = useState('')
-  const [newName, setNewName] = useState('')
-  const [newChannel, setNewChannel] = useState('funny')
-  const [pendingFiles, setPendingFiles] = useState({})
-  const [previewId, setPreviewId] = useState(null)
+  const [notice, setNotice] = useState('')
 
-  async function reload() {
-    const [clips, reviews] = await Promise.all([
-      supabase.from('waves_curated_clips')
-        .select('id,channel_slug,title,caption,media_path,source_credit,status,created_at')
-        .order('created_at', { ascending: false }).limit(200),
-      supabase.from('waves_curated_reviews').select('*').limit(200),
-    ])
-    if (clips.error) throw clips.error
-    if (reviews.error) throw reviews.error
-    const reviewMap = new Map((reviews.data || []).map((review) => [review.clip_id, review]))
-    setItems((clips.data || []).map((clip) => ({
-      ...clip, review: {
-        clip_id: clip.id,
-        drive_source_url: '',
-        source_filename: '',
-        licence_notes: '',
-        ...blankChecks,
-        ...(reviewMap.get(clip.id) || {}),
-      },
-    })))
-  }
-
-  useEffect(() => {
-    let alive = true
-    reload().catch((err) => { if (alive) setError(err.message || 'Could not load curator queue.') })
-    return () => { alive = false }
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      // Two admin-only queries. Public viewers cannot access review/source URLs.
+      const [clipResponse, reviewResponse] = await Promise.all([
+        supabase.from('waves_curated_clips')
+          .select('id,channel_slug,title,status,created_at')
+          .eq('status', 'draft').order('created_at', { ascending: false }).limit(300),
+        supabase.from('waves_curated_reviews').select(FIELDS).limit(300),
+      ])
+      if (clipResponse.error) throw clipResponse.error
+      if (reviewResponse.error) throw reviewResponse.error
+      const byId = new Map((reviewResponse.data || []).map((review) => [review.clip_id, review]))
+      const next = (clipResponse.data || [])
+        .filter((clip) => byId.has(clip.id))
+        .map((clip) => ({ ...clip, review: byId.get(clip.id) }))
+      setClips(next)
+      setActiveId((old) => old && next.some((clip) => clip.id === old) ? old : next.find((clip) => clip.review.decision === 'pending')?.id || null)
+    } catch (loadError) {
+      setError('Could not open your review queue. ' + (loadError.message || 'Try Refresh.'))
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  function editClip(id, field, value) {
-    setItems((existing) => existing.map((clip) => clip.id === id ? { ...clip, [field]: value } : clip))
-  }
+  useEffect(() => { load() }, [load])
 
-  function editReview(id, field, value) {
-    setItems((existing) => existing.map((clip) => clip.id === id
-      ? { ...clip, review: { ...clip.review, [field]: value } } : clip))
-  }
+  const filtered = useMemo(() => clips.filter((clip) => clip.review.decision === view), [clips, view])
+  const selected = filtered.find((clip) => clip.id === activeId) || filtered[0] || null
+  const index = selected ? filtered.findIndex((clip) => clip.id === selected.id) : -1
+  const pending = clips.filter((clip) => clip.review.decision === 'pending').length
+  const approved = clips.filter((clip) => clip.review.decision === 'yes').length
+  const rejected = clips.filter((clip) => clip.review.decision === 'no').length
 
-  async function work(label, action) {
-    if (busy) return
-    setBusy(label)
+  const navigate = useCallback((delta) => {
+    if (!filtered.length) return
+    const current = filtered.findIndex((clip) => clip.id === activeId)
+    const next = Math.max(0, Math.min(filtered.length - 1, (current < 0 ? 0 : current) + delta))
+    setActiveId(filtered[next].id)
+  }, [activeId, filtered])
+
+  const decide = useCallback(async (decision) => {
+    if (!selected || saving) return
+    const clip = selected
+    setSaving(true)
     setError('')
-    setMessage('')
-    try { await action(); setMessage('Saved.'); await reload() }
-    catch (err) { setError(err.message || 'Could not save this change.') }
-    finally { setBusy('') }
-  }
-
-  async function stage(event) {
-    event.preventDefault()
-    await work('stage', async () => {
-      if (!newName.trim()) throw new Error('Give this candidate a descriptive title.')
-      if (sourceUrl.trim() && !/^https:\/\/drive\.google\.com\//i.test(sourceUrl.trim())) {
-        throw new Error('Use a Google Drive source link or leave it empty.')
+    setNotice('')
+    try {
+      const { error: updateError } = await supabase.from('waves_curated_reviews')
+        .update({
+          decision,
+          decided_at: decision === 'pending' ? null : new Date().toISOString(),
+          decided_by: decision === 'pending' ? null : userId,
+        }).eq('clip_id', clip.id)
+      if (updateError) throw updateError
+      const updated = clips.map((item) => item.id === clip.id
+        ? { ...item, review: { ...item.review, decision } }
+        : item)
+      setClips(updated)
+      if (decision === 'pending') {
+        setView('pending')
+        setActiveId(clip.id)
+        setNotice('Returned to the review queue.')
+      } else {
+        const remaining = updated.filter((item) => item.review.decision === 'pending')
+        const next = filtered[index + 1]?.id
+        setView('pending')
+        setActiveId(remaining.find((item) => item.id === next)?.id || remaining[0]?.id || null)
+        setNotice(decision === 'yes' ? 'Saved: yes. Next video!' : 'Saved: no. Next video!')
       }
-      const { data, error: createError } = await supabase.from('waves_curated_clips')
-        .insert({ channel_slug: newChannel, title: newName.trim().slice(0, 120), created_by: userId })
-        .select('id').single()
-      if (createError) throw createError
-      const { error: reviewError } = await supabase.from('waves_curated_reviews').insert({
-        clip_id: data.id, drive_source_url: sourceUrl.trim(),
-      })
-      if (reviewError) {
-        await supabase.from('waves_curated_clips').delete().eq('id', data.id)
-        throw reviewError
-      }
-      setNewName('')
-      setSourceUrl('')
-    })
-  }
+    } catch (updateError) {
+      setError('Could not save your choice. ' + (updateError.message || 'Try again.'))
+    } finally {
+      setSaving(false)
+    }
+  }, [clips, filtered, index, saving, selected, userId])
 
-  async function save(row, shouldPublish = false) {
-    await work(row.id + (shouldPublish ? ':publish' : ':save'), async () => {
-      if (row.status === 'published' && !shouldPublish) {
-        const { error: unpublishError } = await supabase.from('waves_curated_clips')
-          .update({ status: 'draft', published_at: null }).eq('id', row.id)
-        if (unpublishError) throw unpublishError
-        return
-      }
-      const { error: clipError } = await supabase.from('waves_curated_clips').update({
-        title: row.title.trim().slice(0, 120),
-        caption: row.caption.trim().slice(0, 1200),
-        channel_slug: row.channel_slug,
-        source_credit: row.source_credit.trim().slice(0, 200),
-      }).eq('id', row.id)
-      if (clipError) throw clipError
-      const review = row.review
-      const { error: reviewError } = await supabase.from('waves_curated_reviews').upsert({
-        clip_id: row.id,
-        drive_source_url: review.drive_source_url.trim(),
-        source_filename: review.source_filename.trim().slice(0, 200),
-        licence_notes: review.licence_notes.trim().slice(0, 2000),
-        rights_verified: review.rights_verified,
-        audio_verified: review.audio_verified,
-        edited: review.edited,
-        content_approved: review.content_approved,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'clip_id' })
-      if (reviewError) throw reviewError
-      if (shouldPublish) {
-        if (!row.media_path) throw new Error('Upload the reviewed and edited MP4 first.')
-        if (!reviewFields.every((field) => review[field])) throw new Error('Finish all four review checks first.')
-        if (!review.licence_notes.trim()) throw new Error('Record the rights evidence or creator permission before publishing.')
-        const { error: publishError } = await supabase.from('waves_curated_clips')
-          .update({ status: 'published', published_at: new Date().toISOString() }).eq('id', row.id)
-        if (publishError) throw publishError
-        await onChanged?.()
-      }
-    })
-  }
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.repeat) return
+      const target = event.target
+      if (target instanceof HTMLElement && (
+        ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName) || target.isContentEditable
+      )) return
+      if (event.key.toLowerCase() === 'y' && view === 'pending') { event.preventDefault(); decide('yes') }
+      if (event.key.toLowerCase() === 'n' && view === 'pending') { event.preventDefault(); decide('no') }
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); navigate(1) }
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); navigate(-1) }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [decide, navigate, view])
 
-  async function upload(clip) {
-    const file = pendingFiles[clip.id]
-    if (!file) { setError('Choose a reviewed and edited video first.'); return }
-    await work(clip.id + ':upload', async () => {
-      if (!['video/mp4', 'video/quicktime'].includes(file.type)) throw new Error('Choose an MP4 or MOV video.')
-      if (file.size > MAX_FILE) throw new Error('The video must be under 50 MB.')
-      if (await durationMs(file) > 60_000) throw new Error('The video must be 60 seconds or shorter.')
-      const extension = file.type === 'video/quicktime' ? '.mov' : '.mp4'
-      const path = userId + '/curated/' + crypto.randomUUID() + extension
-      const { error: uploadError } = await supabase.storage.from(STORAGE_BUCKET)
-        .upload(path, file, { contentType: file.type, upsert: false })
-      if (uploadError) throw uploadError
-      const { error: saveError } = await supabase.from('waves_curated_clips')
-        .update({ media_path: path }).eq('id', clip.id).eq('status', 'draft')
-      if (saveError) {
-        await supabase.storage.from(STORAGE_BUCKET).remove([path])
-        throw saveError
-      }
-      if (clip.media_path) await supabase.storage.from(STORAGE_BUCKET).remove([clip.media_path])
-      setPendingFiles((current) => ({ ...current, [clip.id]: null }))
-    })
-  }
+  const details = selected ? textFor(selected) : null
+  const src = selected ? previewUrl(selected.review.drive_source_url) : null
 
-  const visible = items.filter((row) => filter === 'all' || row.channel_slug === filter)
-
-  return <main className="waves-curator" aria-label="Waves curator">
+  return <main className="waves-curator" aria-label="Waves Studio quick review">
     <header className="waves-curator-header">
-      <button type="button" onClick={onClose}><ArrowLeft size={20} /> Back to Waves</button>
-      <strong>Waves Studio <span>· Curated collections</span></strong>
-      <button type="button" onClick={() => work('refresh', reload)} disabled={Boolean(busy)} aria-label="Refresh"><RefreshCw size={18} /></button>
+      <button type="button" onClick={onClose}><ArrowLeft size={19} /> Waves</button>
+      <strong>Waves Studio <span>· Quick review</span></strong>
+      <button type="button" onClick={load} aria-label="Refresh review queue" disabled={saving || loading}><RotateCcw size={18} /></button>
     </header>
-    <div className="waves-curator-body">
-      <div className="waves-curator-intro">
-        <h1>{items.filter((clip) => clip.status === 'draft').length} clips waiting for review</h1>
-        <p>{items.filter((clip) => clip.status === 'published').length} published · {items.filter((clip) => clip.media_path && clip.status === 'draft').length} uploaded drafts. The feed remains empty until an edited video passes the footage, audio and content checks and is published.</p>
-        <p>Click Preview on a candidate below to watch it privately in Google Drive. This does not publish or copy it to Waves.</p>
-      </div>
-      {error && <p className="waves-curator-error" role="alert">{error}</p>}
-      {message && <p className="waves-curator-success" role="status">{message}</p>}
 
-      <form className="waves-curator-stage" onSubmit={stage}>
-        <h2><FolderPlus size={20} /> Add candidate from Google Drive</h2>
-        <label>Working title<input required value={newName} maxLength={120} onChange={(event) => setNewName(event.target.value)} placeholder="e.g. Cat steals the sofa" /></label>
-        <label>Private source link<input value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} placeholder="https://drive.google.com/file/d/…" /></label>
-        <label>Channel<select value={newChannel} onChange={(event) => setNewChannel(event.target.value)}>
-          {CURATED_CHANNELS.map((channel) => <option key={channel.slug} value={channel.slug}>{channel.emoji} @{channel.handle}</option>)}
-        </select></label>
-        <button className="waves-curator-cta" disabled={Boolean(busy)} type="submit">Add to review queue</button>
-      </form>
-
-      <nav className="waves-curator-filters" aria-label="Filter candidates">
-        <button className={filter === 'all' ? 'selected' : ''} onClick={() => setFilter('all')}>All ({items.length})</button>
-        {CURATED_CHANNELS.map((channel) => <button key={channel.slug} className={filter === channel.slug ? 'selected' : ''} onClick={() => setFilter(channel.slug)}>
-          {channel.emoji} {channel.name} ({items.filter((item) => item.channel_slug === channel.slug).length})
+    <div className="waves-curator-review">
+      <nav className="waves-curator-tabs" aria-label="Review status">
+        {VIEWS.map((option) => <button type="button" key={option.value}
+          className={view === option.value ? 'active' : ''}
+          onClick={() => { setView(option.value); setActiveId(null); setError(''); setNotice('') }}>
+          {option.label} <span>{option.value === 'pending' ? pending : option.value === 'yes' ? approved : rejected}</span>
         </button>)}
       </nav>
 
-      <section className="waves-curator-candidates">
-        {visible.length === 0 && <p>No candidates in this channel yet. Add a Google Drive link above.</p>}
-        {visible.map((clip) => <article key={clip.id} className="waves-curator-item">
-          <div className="waves-curator-item-heading">
-            <span className={clip.status === 'published' ? 'waves-curator-live' : 'waves-curator-draft'}>{clip.status === 'published' ? 'LIVE' : 'PRIVATE DRAFT'}</span>
-            <strong>{clip.title}</strong>
-            {drivePreviewUrl(clip.review.drive_source_url) && <button type="button" className="waves-curator-preview-toggle" onClick={() => setPreviewId((current) => current === clip.id ? null : clip.id)}>{previewId === clip.id ? 'Close preview' : '▶ Preview privately'}</button>}
-            {clip.review.drive_source_url && <a href={clip.review.drive_source_url} target="_blank" rel="noreferrer">Open in Drive <ExternalLink size={13} /></a>}
+      {error && <div className="waves-curator-alert" role="alert">{error}</div>}
+      {notice && <div className="waves-curator-note" role="status">{notice}</div>}
+
+      {loading ? <div className="waves-curator-empty">Finding your videos…</div> :
+        !selected ? <div className="waves-curator-empty">
+          <div className="waves-curator-done"><Check size={31} /></div>
+          <h1>{view === 'pending' ? 'All caught up!' : 'Nothing here yet'}</h1>
+          <p>{view === 'pending'
+            ? 'Your Yes picks are saved. I can continue preparing and checking those clips. Nothing is published just by pressing Yes.'
+            : 'Go back to To review to see the remaining videos.'}</p>
+          <button type="button" onClick={() => { setView(view === 'pending' ? 'yes' : 'pending'); setActiveId(null) }}>{view === 'pending' ? 'See my Yes picks' : 'Back to review'}</button>
+        </div> :
+        <div className="waves-curator-stage">
+          <div className="waves-curator-player">
+            <div className="waves-curator-player-heading">
+              <div className="waves-curator-counter">{index + 1} / {filtered.length}</div>
+              <span>{details?.channel?.emoji || '🌊'} @{details?.channel?.handle || 'wavesfunny'}</span>
+            </div>
+            {src ? <iframe key={selected.id} src={src} title={'Preview ' + details.filename}
+              loading="eager" allow="autoplay; fullscreen" allowFullScreen referrerPolicy="no-referrer" />
+              : <div className="waves-curator-no-preview">Preview unavailable. Open the clip in Drive.</div>}
+            <div className="waves-curator-player-foot">
+              <span title={details.filename}>{details.filename}</span>
+              {selected.review.drive_source_url && <a href={selected.review.drive_source_url} target="_blank" rel="noreferrer">
+                Open in Drive <ExternalLink size={15} />
+              </a>}
+            </div>
           </div>
-          {previewId === clip.id && drivePreviewUrl(clip.review.drive_source_url) && <div className="waves-curator-preview">
-            <iframe src={drivePreviewUrl(clip.review.drive_source_url)} title={'Private Drive preview of ' + clip.title} allow="autoplay; fullscreen" allowFullScreen loading="lazy" referrerPolicy="no-referrer" />
-            <p>Admin-only source preview. You may need to sign in to Google Drive. The original Drive video is not hosted or available to the public on Waves.</p>
-          </div>}
-          <div className="waves-curator-fields">
-            <label>Channel<select value={clip.channel_slug} onChange={(event) => editClip(clip.id, 'channel_slug', event.target.value)} disabled={clip.status === 'published'}>
-              {CURATED_CHANNELS.map((channel) => <option key={channel.slug} value={channel.slug}>@{channel.handle}</option>)}
-            </select></label>
-            <label>Title<input value={clip.title} maxLength={120} onChange={(event) => editClip(clip.id, 'title', event.target.value)} /></label>
-            <label>Caption<textarea value={clip.caption} maxLength={1200} onChange={(event) => editClip(clip.id, 'caption', event.target.value)} /></label>
-            <label>Original creator / source attribution<input value={clip.source_credit} maxLength={200} onChange={(event) => editClip(clip.id, 'source_credit', event.target.value)} placeholder="Credit when known; don't impersonate" /></label>
-            <label>Private Google Drive source<input value={clip.review.drive_source_url} onChange={(event) => editReview(clip.id, 'drive_source_url', event.target.value)} /></label>
-            <label>Original filename<input value={clip.review.source_filename} onChange={(event) => editReview(clip.id, 'source_filename', event.target.value)} /></label>
-            <label>Licence / permission evidence<textarea value={clip.review.licence_notes} maxLength={2000} onChange={(event) => editReview(clip.id, 'licence_notes', event.target.value)} placeholder="What establishes the original footage and audio rights for Wavo's own ad-supported stream?" /></label>
-          </div>
-          {clip.status !== 'published' && <div className="waves-curator-upload">
-            <label><FileVideo2 size={18} /> Choose the edited MP4/MOV <input type="file" accept="video/mp4,video/quicktime,.mp4,.mov" onChange={(event) => setPendingFiles((current) => ({ ...current, [clip.id]: event.target.files?.[0] || null }))} /></label>
-            <button type="button" onClick={() => upload(clip)} disabled={Boolean(busy) || !pendingFiles[clip.id]}><UploadCloud size={17} /> {clip.media_path ? 'Replace hosted clip' : 'Upload reviewed clip'}</button>
-            {clip.media_path && <span><Check size={15} /> Hosted file attached</span>}
-          </div>}
-          <div className="waves-curator-checks">
-            <label><input type="checkbox" checked={clip.review.rights_verified} onChange={(event) => editReview(clip.id, 'rights_verified', event.target.checked)} /> Original footage licensed for Waves</label>
-            <label><input type="checkbox" checked={clip.review.audio_verified} onChange={(event) => editReview(clip.id, 'audio_verified', event.target.checked)} /> Audio and music rights checked</label>
-            <label><input type="checkbox" checked={clip.review.edited} onChange={(event) => editReview(clip.id, 'edited', event.target.checked)} /> Required edits completed</label>
-            <label><input type="checkbox" checked={clip.review.content_approved} onChange={(event) => editReview(clip.id, 'content_approved', event.target.checked)} /> Quality and safety reviewed</label>
-          </div>
-          <div className="waves-curator-item-actions">
-            <button type="button" onClick={() => save(clip)} disabled={Boolean(busy)}>{clip.status === 'published' ? 'Unpublish' : 'Save draft'}</button>
-            {clip.status !== 'published' && <button type="button" className="waves-curator-cta" onClick={() => save(clip, true)} disabled={Boolean(busy) || !clip.media_path || !reviewFields.every((field) => clip.review[field]) || !clip.review.licence_notes.trim()}>
-              Publish to @{CURATED_CHANNELS.find((entry) => entry.slug === clip.channel_slug)?.handle}
+          <div className="waves-curator-review-controls">
+            <div className="waves-curator-steps">
+              <button type="button" onClick={() => navigate(-1)} disabled={saving || index <= 0} aria-label="Previous video"><ChevronLeft size={23}/></button>
+              <span>Watch, then choose.</span>
+              <button type="button" onClick={() => navigate(1)} disabled={saving || index === filtered.length - 1} aria-label="Next video"><ArrowRight size={22}/></button>
+            </div>
+            {view === 'pending' ? <div className="waves-curator-vote">
+              <button className="no" type="button" onClick={() => decide('no')} disabled={saving}><X size={26} /> No</button>
+              <button className="yes" type="button" onClick={() => decide('yes')} disabled={saving}><Check size={26} /> Yes</button>
+            </div> : <button className="waves-curator-undo" type="button" disabled={saving} onClick={() => decide('pending')}>
+              <RotateCcw size={17}/> Change my mind
             </button>}
+            <p className="waves-curator-explainer">
+              Yes = keep this clip for further checks. No = reject it. Your choice is saved automatically.
+              Purchased footage and audio still need rights clearance before appearing publicly on Waves.
+            </p>
+            <p className="waves-curator-shortcuts">Keyboard: Y = Yes · N = No · ← / → = previous / next</p>
           </div>
-        </article>)}
-      </section>
+        </div>}
     </div>
   </main>
 }
