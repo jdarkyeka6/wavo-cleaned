@@ -219,7 +219,7 @@ export default function WavesCuratedManager({ userId, onClose, onChanged }) {
             <span className={clip.status === 'published' ? 'waves-curator-live' : 'waves-curator-draft'}>{clip.status === 'published' ? 'LIVE' : 'PRIVATE DRAFT'}</span>
             <strong>{clip.title}</strong>
             {drivePreviewUrl(clip.review.drive_source_url) && <button type="button" className="waves-curator-preview-toggle" onClick={() => setPreviewId((current) => current === clip.id ? null : clip.id)}>{previewId === clip.id ? 'Close preview' : '▶ Preview privately'}</button>}
-            {clip.review.drive_source_url && <a href={clip.review.drive_source_url} target="_blank" rel="noreferrer">Open in Drive <ExternalLink size={13} /></a>
+            {clip.review.drive_source_url && <a href={clip.review.drive_source_url} target="_blank" rel="noreferrer">Open in Drive <ExternalLink size={13} /></a>}
           </div>
           {previewId === clip.id && drivePreviewUrl(clip.review.drive_source_url) && <div className="waves-curator-preview">
             <iframe src={drivePreviewUrl(clip.review.drive_source_url)} title={'Private Drive preview of ' + clip.title} allow="autoplay; fullscreen" allowFullScreen loading="lazy" referrerPolicy="no-referrer" />
