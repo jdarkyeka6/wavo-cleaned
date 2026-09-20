@@ -77,3 +77,6 @@
 .video-waves-channels button{white-space:nowrap;flex-shrink:0;color:#fff;background:#ffffff1b;border:1px solid #ffffff39;border-radius:999px;padding:8px 12px;font:650 12px Outfit,system-ui,sans-serif;cursor:pointer}
 .video-waves-channels button.chosen{background:#91f4d2;color:#0b2a20;border-color:#91f4d2}
 @media(max-width:600px){.video-waves-channels{padding:7px 10px;top:60px}.video-waves-topbar{min-height:60px}.video-waves-top-actions{gap:5px}.video-waves-top-actions button{min-width:36px;min-height:36px}}
+
+.video-waves-shell .video-wave-sound{top:128px}
+@media(max-width:600px){.video-waves-shell .video-wave-sound{top:119px}}
