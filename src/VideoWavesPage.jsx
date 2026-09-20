@@ -477,7 +477,7 @@ export default function VideoWavesPage() {
         <span>{channel === 'all' ? 'Your friends and approved curated videos will appear here.' : 'Try For You or another channel while we add more clips.'}</span>
         <button className="video-waves-primary" onClick={() => setUploadOpen(true)}>Post a video</button>
       </>}
-    </div>
+    </div>}
     <section className="video-waves-feed" ref={feedRef} aria-label="Video Waves">
       {shownPosts.map((post) => <div key={postKey(post)} data-video-wave-id={postKey(post)} className="video-wave-snap">
         <VideoCard post={post} userId={userId} active={activeId === postKey(post)} muted={muted} setMuted={setMuted}
