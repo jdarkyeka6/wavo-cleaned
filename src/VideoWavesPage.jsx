@@ -319,6 +319,7 @@ export default function VideoWavesPage() {
   const [channel, setChannel] = useState('all')
   const [isAdmin, setIsAdmin] = useState(false)
   const [manageOpen, setManageOpen] = useState(false)
+  const [draftCount, setDraftCount] = useState(0)
   const [activeId, setActiveId] = useState(null)
   const [muted, setMuted] = useState(true)
   const [loading, setLoading] = useState(true)
@@ -348,7 +349,16 @@ export default function VideoWavesPage() {
     if (!userId) { setPosts([]); setLoading(false); setIsAdmin(false); return }
     let active = true
     supabase.from('profiles').select('is_admin').eq('id', userId).single()
-      .then(({ data }) => { if (active) setIsAdmin(data?.is_admin === true) })
+      .then(async ({ data }) => {
+        if (!active) return
+        const admin = data?.is_admin === true
+        setIsAdmin(admin)
+        if (admin) {
+          const { count, error: draftError } = await supabase.from('waves_curated_clips')
+            .select('id', { count: 'exact', head: true }).eq('status', 'draft')
+          if (active && !draftError) setDraftCount(count || 0)
+        }
+      })
       .catch(() => { if (active) setIsAdmin(false) })
     return () => { active = false }
   }, [userId])
@@ -457,9 +467,16 @@ export default function VideoWavesPage() {
     {loading && <div className="video-waves-loading">Loading video Waves…</div>}
     {error && <div className="video-waves-error" role="alert">{error}<button onClick={refresh}>Retry</button></div>}
     {!loading && !error && !shownPosts.length && <div className="video-waves-empty">
-      <strong>{channel === 'all' ? 'No video Waves yet.' : 'Nothing in this channel yet.'}</strong>
-      <span>{channel === 'all' ? 'Your friends and approved curated videos will appear here.' : 'Try For You or another channel while we add more clips.'}</span>
-      <button className="video-waves-primary" onClick={() => setUploadOpen(true)}>Post a video</button>
+      {isAdmin && channel !== 'friends' ? <>
+        <strong>{draftCount ? `${draftCount} clips are waiting in Studio` : 'Your curated feed is waiting for its first clip.'}</strong>
+        <span>Channels are ready. Videos in the private review queue are not visible here until their source rights, audio, edits and content are checked and they are published.</span>
+        <button className="video-waves-primary" onClick={() => setManageOpen(true)}>Review clips in Studio</button>
+        <button className="video-waves-secondary" onClick={() => setUploadOpen(true)}>Or post your own video</button>
+      </> : <>
+        <strong>{channel === 'all' ? 'No video Waves yet.' : 'Nothing in this channel yet.'}</strong>
+        <span>{channel === 'all' ? 'Your friends and approved curated videos will appear here.' : 'Try For You or another channel while we add more clips.'}</span>
+        <button className="video-waves-primary" onClick={() => setUploadOpen(true)}>Post a video</button>
+      </>}
     </div>}
     <section className="video-waves-feed" ref={feedRef} aria-label="Video Waves">
       {shownPosts.map((post) => <div key={postKey(post)} data-video-wave-id={postKey(post)} className="video-wave-snap">

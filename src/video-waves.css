@@ -80,3 +80,7 @@
 
 .video-waves-shell .video-wave-sound{top:128px}
 @media(max-width:600px){.video-waves-shell .video-wave-sound{top:119px}}
+
+
+.video-waves-empty .video-waves-secondary{border:1px solid #ffffff4d;border-radius:14px;background:#ffffff1a;color:#fff;min-height:44px;padding:9px 17px;font-weight:650}
+.video-waves-empty>span{max-width:490px;line-height:1.6}
