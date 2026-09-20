@@ -1,4 +1,4 @@
-.waves-curator{min-height:100dvh;background:#080e16;color:#fff;font-family:Outfit,system-ui,sans-serif}
+.waves-curator{position:relative;z-index:1;isolation:isolate;min-height:100dvh;background:#080e16;color:#fff;font-family:Outfit,system-ui,sans-serif}
 .waves-curator *{box-sizing:border-box}
 .waves-curator button,.waves-curator input,.waves-curator textarea,.waves-curator select{font:inherit}
 .waves-curator button{cursor:pointer}
