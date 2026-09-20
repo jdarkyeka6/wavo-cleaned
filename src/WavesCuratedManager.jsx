@@ -4,6 +4,7 @@ import { supabase } from './supabaseClient'
 import { channelBySlug } from './wavesCuratedData'
 import './waves-curated-manager.css'
 import WavesBulkImporter from './WavesBulkImporter'
+import WavesReportsManager from './WavesReportsManager'
 
 const FIELDS = 'clip_id,drive_source_url,source_filename,decision,decided_at,rights_verified,audio_verified,edited,content_approved,licence_notes'
 const VIEWS = [
@@ -175,6 +176,7 @@ export default function WavesCuratedManager({ userId, onClose, onChanged }) {
 
     <div className="waves-curator-review">
       <WavesBulkImporter onChanged={load} />
+      <WavesReportsManager onChanged={load} />
       <nav className="waves-curator-tabs" aria-label="Review status">
         {VIEWS.map((option) => <button type="button" key={option.value}
           className={view === option.value ? 'active' : ''}
