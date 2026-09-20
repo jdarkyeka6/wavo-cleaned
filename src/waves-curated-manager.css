@@ -72,3 +72,11 @@
 .waves-bulk-import-actions{display:flex;gap:9px;flex-wrap:wrap}
 .waves-bulk-import-actions button{background:#a0f8d9;border:0;color:#0a2a20;border-radius:10px;padding:8px 13px;font-size:13px;font-weight:750}
 .waves-bulk-import-actions button+button{background:#263449;color:#f7fbff}
+
+.waves-reports{background:#131b2a;border:1px solid #34445d;border-radius:14px;padding:12px 16px;margin:0 0 17px}
+.waves-reports-toggle{font-weight:750;color:#fff;background:transparent;border:0;padding:3px 0}
+.waves-reports p,.waves-reports span{font-size:12px;color:#b9c6d9}
+.waves-reports button{background:#273a58;color:#f2f6fc;border:1px solid #526582;border-radius:9px;padding:7px 10px;margin:3px}
+.waves-reports-item{margin:12px 0;padding:12px;background:#0a111c;border:1px solid #314866;border-radius:12px;display:flex;flex-direction:column;gap:6px}
+.waves-reports-item iframe{width:min(100%,320px);height:340px;border:0;border-radius:10px}
+.waves-reports-item>div{display:flex;flex-wrap:wrap;gap:6px}
