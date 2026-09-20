@@ -4,7 +4,9 @@ import { ArrowLeft, Bookmark, Heart, LogOut, MessageCircle, Plus, Send, Share2, 
 import { supabase } from './supabaseClient'
 import { createPost, deletePost, getFriends, getPosts, reactToPost, sendDmMessage } from './wavoData'
 import './video-waves.css'
-import { CURATED_CHANNELS, channelBySlug, loadCuratedWaves, postKey, rotateCuratedFeed } from './wavesCuratedData'
+import { CURATED_CHANNELS, channelBySlug, loadCuratedWaves, postKey } from './wavesCuratedData'
+import { rankWavesFeed } from './wavesRecommendations'
+import { useWavesWatchSignals } from './wavesWatchSignals'
 import WavesCuratedManager from './WavesCuratedManager'
 
 const VIDEO_LIMIT_BYTES = 50 * 1024 * 1024
@@ -199,8 +201,9 @@ function Upload({ userId, onClose, onCreated }) {
   </div>
 }
 
-function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onReply, saved, onSave }) {
+function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onReply, saved, onSave, onSignal }) {
   const videoRef = useRef(null)
+  const watch = useWavesWatchSignals(videoRef, post, active, onSignal)
   const [playing, setPlaying] = useState(false)
   const curated = post.kind === 'curated'
   const channel = curated ? channelBySlug[post.channel_slug] : null
@@ -276,7 +279,7 @@ function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onR
 
   return <article className="video-wave-card">
     <video ref={videoRef} className="video-wave-player" src={post.media_hls_url ? undefined : post.media_url_signed} preload={active ? 'auto' : 'metadata'} playsInline loop muted={muted}
-      onClick={togglePlay} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} aria-label={post.body || 'Wave video'} />
+      onClick={togglePlay} onPlay={() => { setPlaying(true); watch.onPlay() }} onTimeUpdate={watch.onTimeUpdate} onPause={() => setPlaying(false)} aria-label={post.body || 'Wave video'} />
     <div className="video-wave-scrim" />
     {!playing && <button className="video-wave-play" onClick={togglePlay} aria-label="Play video"><Play size={34} fill="currentColor" /></button>}
     <button className="video-wave-sound" onClick={() => setMuted((value) => !value)} aria-label={muted ? 'Unmute' : 'Mute'}>
