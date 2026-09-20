@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { isNativeApp } from './lib/platform'
 
 export const CURATED_CHANNELS = [
   { slug: 'funny', handle: 'wavesfunny', name: 'Funny', emoji: '😂' },
@@ -76,7 +77,8 @@ export async function loadCuratedWaves(page = 0) {
       : (clip.playback_url || null)
     if (clip.video_provider === 'google_drive' && clip.video_asset_id) {
       if (!token) return null
-      playbackUrl = `/api/waves-video?id=${encodeURIComponent(clip.id)}&token=${encodeURIComponent(token)}`
+      const proxyOrigin = isNativeApp ? 'https://wavowaves.lol' : ''
+      playbackUrl = `${proxyOrigin}/api/waves-video?id=${encodeURIComponent(clip.id)}&token=${encodeURIComponent(token)}`
     }
     if (!playbackUrl && clip.media_path) {
       const { data: url, error: signError } = await supabase.storage.from('waves-curated')

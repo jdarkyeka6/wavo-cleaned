@@ -580,6 +580,7 @@ export default function WavesPageV2() {
       <header className="waves-topbar">
         <a href="/" aria-label="Back to Wavo"><ArrowLeft size={19} /></a>
         <div><span>WAVO</span><strong>Waves</strong></div>
+        <a className="waves-video-shortcut" href="/waves/video">🎬 Video Waves</a>
         <button onClick={() => setComposerOpen(true)}><Plus size={19} /> New Wave</button>
       </header>
 

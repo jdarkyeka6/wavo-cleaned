@@ -60,3 +60,6 @@
     backdrop-filter: blur(18px);
   }
 }
+
+.waves-topbar .waves-video-shortcut{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;gap:6px;border:1px solid rgba(50,214,255,.32);border-radius:10px;padding:8px 11px;color:#dbfaff;background:rgba(50,214,255,.1);text-decoration:none;font-size:12px;font-weight:800}
+@media(max-width:390px){.waves-topbar .waves-video-shortcut{font-size:11px;padding:8px 6px}}
