@@ -7,6 +7,8 @@ export function rankWavesFeed(friendPosts, curatedPosts, signals = [], channelCh
   const byKey = new Map(signals.map((signal) => [signal.video_key, signal]))
   const saved = new Set(savedKeys)
   const interests = new Map()
+  const tagInterests = new Map()
+  const postByKey = new Map(curatedPosts.map((post) => ['curated:' + post.id, post]))
   for (const signal of signals) {
     if (!signal.channel_slug) continue
     const plays = cap(number(signal.plays), 0, 1000)
@@ -22,6 +24,13 @@ export function rankWavesFeed(friendPosts, curatedPosts, signals = [], channelCh
     previous.total += cap(feedback, -6, 11)
     previous.items += 1
     interests.set(signal.channel_slug, previous)
+    const sourcePost = postByKey.get(signal.video_key)
+    for (const tag of sourcePost?.tags || []) {
+      const tagPrevious = tagInterests.get(tag) || { total: 0, items: 0 }
+      tagPrevious.total += cap(feedback, -6, 11)
+      tagPrevious.items += 1
+      tagInterests.set(tag, tagPrevious)
+    }
   }
 
   const choiceBonus = new Map(channelChoices.map(({ channel_slug, visits }) => [
@@ -31,6 +40,13 @@ export function rankWavesFeed(friendPosts, curatedPosts, signals = [], channelCh
     const preference = interests.get(slug)
     const learned = preference ? cap(preference.total / (preference.items + 2), -3, 4.5) : 0
     return learned * 1.35 + (choiceBonus.get(slug) || 0)
+  }
+  function tagScore(post) {
+    const scores = (post.tags || []).map((tag) => {
+      const preference = tagInterests.get(tag)
+      return preference ? cap(preference.total / (preference.items + 2), -3, 4.5) : 0
+    })
+    return scores.length ? scores.sort((a, b) => b - a).slice(0, 3).reduce((sum, value) => sum + value, 0) * 0.9 : 0
   }
   function baseScore(post) {
     const key = (post.kind === 'curated' ? 'curated:' : 'friend:') + post.id
@@ -68,7 +84,7 @@ export function rankWavesFeed(friendPosts, curatedPosts, signals = [], channelCh
       const diversityPenalty = shown * 0.35 + (slug === lastChannel ? 2.5 : 0)
       // Every sixth curated slot deliberately explores a less-shown channel.
       const exploreBonus = curatedCount % 6 === 5 ? 2.5 / (1 + shown) : 0
-      const score = base + channelScore(slug) - diversityPenalty + exploreBonus
+      const score = base + channelScore(slug) + tagScore(post) - diversityPenalty + exploreBonus
       if (score > bestScore) { bestScore = score; bestIndex = i }
     }
     const [chosen] = curated.splice(bestIndex, 1)

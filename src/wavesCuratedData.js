@@ -55,8 +55,8 @@ export async function loadCuratedWaves() {
   // The table RLS returns published rows to signed-in members, never review
   // notes or source Drive URLs. Storage RLS likewise restricts signing URLs.
   const { data, error } = await supabase.from('waves_curated_clips')
-    .select('id,channel_slug,title,caption,media_path,playback_url,playback_hls_url,video_provider,video_asset_id,source_credit,published_at')
-    .eq('status', 'published')
+    .select('id,channel_slug,title,caption,media_path,playback_url,playback_hls_url,video_provider,video_asset_id,source_credit,published_at,tags,moderation_state')
+    .eq('status', 'published').eq('moderation_state', 'clear')
     .order('published_at', { ascending: false }).limit(80)
   if (error) throw error
   const clips = data || []
@@ -95,6 +95,7 @@ export async function loadCuratedWaves() {
       title: clip.title,
       body: clip.caption,
       source_credit: clip.source_credit,
+      tags: clip.tags || [],
       created_at: clip.published_at,
       media_url_signed: playbackUrl,
       media_hls_url: clip.playback_hls_url || null,

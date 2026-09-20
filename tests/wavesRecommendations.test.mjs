@@ -54,3 +54,13 @@ test('only supplied accessible friend posts enter the ranked feed', () => {
   assert.equal(result.length, 2)
   assert.equal(result[0].id, accessible.id)
 })
+
+
+test('hidden tags carry interests across different channels', () => {
+  const liked = { ...clip(90, 'funny'), tags: ['dogs', 'pets'] }
+  const dogTravel = { ...clip(1, 'travel'), tags: ['dogs', 'outdoors'] }
+  const unrelatedFunny = { ...clip(2, 'funny'), tags: ['fails'] }
+  const signals = [{ video_key: 'curated:' + liked.id, channel_slug: 'funny', liked: true, saved: true, plays: 1 }]
+  const result = rank([], [liked, dogTravel, unrelatedFunny], signals)
+  assert.ok(result.findIndex((video) => video.id === dogTravel.id) < result.findIndex((video) => video.id === unrelatedFunny.id))
+})
