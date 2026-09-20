@@ -172,7 +172,7 @@ export default function WavesCuratedManager({ userId, onClose }) {
             <div className="waves-curator-player-foot">
               <span title={details.filename}>{details.filename}</span>
               {selected.review.drive_source_url && <a href={selected.review.drive_source_url} target="_blank" rel="noreferrer">
-                Open in Drive <ExternalLink size={15} />
+                Play with sound in Drive <ExternalLink size={15} />
               </a>}
             </div>
           </div>
@@ -195,7 +195,7 @@ export default function WavesCuratedManager({ userId, onClose }) {
               <RotateCcw size={17}/> Change my mind
             </button>}
             <p className="waves-curator-explainer">
-              Yes = keep for further checks. Maybe = decide later. No = reject. Your choice is saved automatically.
+              Tap play, then use the speaker control inside the video to hear sound. If it stays silent, use “Play with sound in Drive” to check whether the original clip has audio. Yes = keep, Maybe = decide later, No = reject. Your choices save automatically.
               Purchased footage and audio still need rights clearance before appearing publicly on Waves.
             </p>
             <p className="waves-curator-shortcuts">Keyboard: Y = Yes · M = Maybe · N = No · ← / → = previous / next</p>
