@@ -1,56 +1,432 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Bookmark, Heart, MessageCircle, MoreHorizontal, Play, Share2, Volume2, VolumeX } from 'lucide-react'
+import { ArrowLeft, Bookmark, Heart, LogOut, MessageCircle, Plus, Send, Share2, Volume2, VolumeX, X } from 'lucide-react'
 import { supabase } from './supabaseClient'
-import { reactToPost } from './wavoData'
+import { createPost, deletePost, getFriends, getPosts, reactToPost, sendDmMessage } from './wavoData'
 import './video-waves.css'
 
+const VIDEO_LIMIT_BYTES = 50 * 1024 * 1024
+const VIDEO_LIMIT_MS = 60_000
 const PAGE_SIZE = 50
-function initial(name){return (name?.trim()?.[0] || 'W').toUpperCase()}
-function Avatar({profile}){return <div className="video-wave-avatar">{profile?.avatar_url ? <img src={profile.avatar_url} alt=""/> : initial(profile?.username)}</div>}
-async function signMedia(path){if(!path)return null;const {data}=await supabase.storage.from('wave-media').createSignedUrl(path,15*60);return data?.signedUrl||null}
-async function loadVideoWaves(){
- const {data:posts,error}=await supabase.from('posts').select('*').eq('media_type','video').order('created_at',{ascending:false}).limit(PAGE_SIZE);
- if(error)throw error;if(!posts?.length)return [];
- const authorIds=[...new Set(posts.map(p=>p.author_id).filter(Boolean))];const postIds=posts.map(p=>p.id);
- const [profiles,reactions]=await Promise.all([supabase.from('profiles').select('id,username,avatar_url,status').in('id',authorIds),supabase.from('post_reactions').select('*').in('post_id',postIds)]);
- const profileMap=Object.fromEntries((profiles.data||[]).map(p=>[p.id,p]));const reactionRows=reactions.data||[];
- return Promise.all(posts.map(async post=>({...post,author:profileMap[post.author_id],reactions:reactionRows.filter(r=>r.post_id===post.id),media_url_signed:await signMedia(post.media_path)}))).then(rows=>rows.filter(p=>p.media_url_signed));
-}
-function count(value){if(value<1000)return String(value);if(value<1000000)return (value/1000).toFixed(value<10000?1:0)+'K';return (value/1000000).toFixed(1)+'M'}
-function relativeTime(value){const minutes=Math.max(0,Math.floor((Date.now()-new Date(value).getTime())/60000));if(minutes<1)return 'now';if(minutes<60)return minutes+'m';const hours=Math.floor(minutes/60);if(hours<24)return hours+'h';return Math.floor(hours/24)+'d'}
 
-function VideoCard({post,userId,active,onLike,onShare,onSave,onOpenComments}){
- const videoRef=useRef(null);const [muted,setMuted]=useState(true);const [playing,setPlaying]=useState(active);const [saved,setSaved]=useState(false);
- const myReaction=(post.reactions||[]).find(r=>r.user_id===userId);const liked=Boolean(myReaction);const likeCount=(post.reactions||[]).length;
- useEffect(()=>{const video=videoRef.current;if(!video)return;if(active){video.currentTime=0;video.muted=muted;video.play().then(()=>setPlaying(true)).catch(()=>setPlaying(false))}else{video.pause();setPlaying(false)}},[active,muted]);
- function togglePlay(){const video=videoRef.current;if(!video)return;if(video.paused){video.play().catch(()=>{});setPlaying(true)}else{video.pause();setPlaying(false)}}
- async function share(){const url=window.location.origin+'/waves/video?wave='+post.id;if(navigator.share){await navigator.share({title:'Wave by @'+(post.author?.username||'user'),text:post.body||'Watch this Wave',url}).catch(()=>{})}else{await navigator.clipboard?.writeText(url);onShare()}}
- return <article className="video-wave-card">
-  <video ref={videoRef} className="video-wave-player" src={post.media_url_signed} playsInline loop muted={muted} preload={active?'auto':'metadata'} onClick={togglePlay} onPlay={()=>setPlaying(true)} onPause={()=>setPlaying(false)} aria-label={post.body||'Wave video'}/>
-  <div className="video-wave-scrim"/>
-  <button className="video-wave-sound" onClick={()=>setMuted(v=>!v)} aria-label={muted?'Unmute':'Mute'}>{muted?<VolumeX size={20}/>:<Volume2 size={20}/>}</button>
-  <div className="video-wave-meta"><div className="video-wave-author"><Avatar profile={post.author}/><strong>@{post.author?.username||'wavo'}</strong><span>· {relativeTime(post.created_at)}</span></div>{post.body&&<p>{post.body}</p>}<span className="video-wave-audio">♫ Original Wave audio</span></div>
-  <aside className="video-wave-actions">
-   <button className={liked?'active':''} onClick={()=>onLike(post,liked?null:'❤️')} aria-label="Like"><Heart size={28} fill={liked?'currentColor':'none'}/><span>{count(likeCount)}</span></button>
-   <button onClick={()=>onOpenComments(post)} aria-label="Comments"><MessageCircle size={28}/><span>Comments</span></button>
-   <button onClick={share} aria-label="Share"><Share2 size={28}/><span>Share</span></button>
-   <button className={saved?'active':''} onClick={()=>{setSaved(v=>!v);onSave(post,!saved)}} aria-label="Save"><Bookmark size={28} fill={saved?'currentColor':'none'}/><span>Save</span></button>
-   <button onClick={()=>navigator.clipboard?.writeText(window.location.origin+'/waves/video?wave='+post.id)} aria-label="More"><MoreHorizontal size={28}/><span>More</span></button>
-  </aside>
- </article>
+function initial(name) {
+  return (name?.trim()?.[0] || 'W').toUpperCase()
 }
 
-export default function VideoWavesPage(){
- const [session,setSession]=useState(null);const [posts,setPosts]=useState([]);const [activeId,setActiveId]=useState(null);const [loading,setLoading]=useState(true);const [error,setError]=useState('');const [toast,setToast]=useState('');const [commentsPost,setCommentsPost]=useState(null);
- const userId=session?.user?.id;
- useEffect(()=>{let alive=true;supabase.auth.getSession().then(({data})=>{if(alive)setSession(data.session||null)});const {data}=supabase.auth.onAuthStateChange((_event,next)=>setSession(next));return()=>{alive=false;data.subscription.unsubscribe()}},[]);
- useEffect(()=>{if(!userId)return;setLoading(true);loadVideoWaves().then(rows=>{setPosts(rows);setActiveId(rows[0]?.id||null)}).catch(err=>{console.error('[wavo] video waves',err);setError('Could not load Waves right now.')}).finally(()=>setLoading(false))},[userId]);
- useEffect(()=>{if(!posts.length)return;const cards=[...document.querySelectorAll('[data-video-wave-id]')];const observer=new IntersectionObserver(entries=>{const visible=entries.filter(e=>e.isIntersecting).sort((a,b)=>b.intersectionRatio-a.intersectionRatio)[0];if(visible?.target?.dataset?.videoWaveId)setActiveId(visible.target.dataset.videoWaveId)},{threshold:[0.55,0.8]});cards.forEach(card=>observer.observe(card));return()=>observer.disconnect()},[posts]);
- async function like(post,emoji){if(!userId)return;await reactToPost(userId,post.id,emoji);setPosts(current=>current.map(item=>item.id===post.id?{...item,reactions:emoji?[...(item.reactions||[]).filter(r=>r.user_id!==userId),{user_id:userId,emoji}]:(item.reactions||[]).filter(r=>r.user_id!==userId)}:item))}
- if(!userId)return <div className="video-wave-gate">Sign in to open Waves.</div>;
- return <main className="video-waves-shell"><header className="video-waves-topbar"><button onClick={()=>window.history.length>1?window.history.back():window.location.assign('/')}><ArrowLeft size={20}/></button><strong>Waves</strong><span>For You</span></header>
-  {loading&&<div className="video-waves-loading">Loading Waves…</div>}{error&&<div className="video-waves-error">{error}</div>}{!loading&&!posts.length&&<div className="video-waves-empty"><strong>No video Waves yet.</strong><span>Post the first one.</span></div>}
-  <section className="video-waves-feed">{posts.map(post=><div key={post.id} data-video-wave-id={post.id} className="video-wave-snap"><VideoCard post={post} userId={userId} active={activeId===post.id} onLike={like} onShare={()=>setToast('Link copied')} onSave={()=>{}} onOpenComments={post=>{setCommentsPost(post);setToast('Comments panel is next in the video-feed pass.')}}/></div>)}</section>
-  {commentsPost&&<div className="video-wave-modal" onClick={()=>setCommentsPost(null)}><div onClick={e=>e.stopPropagation()} className="video-wave-comments"><strong>Comments</strong><p>Comment threads are being added in the next pass.</p><button onClick={()=>setCommentsPost(null)}>Close</button></div></div>}
-  {toast&&<button className="video-wave-toast" onClick={()=>setToast('')}>{toast}</button>}</main>
+function Avatar({ profile }) {
+  return <span className="video-wave-avatar">
+    {profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : initial(profile?.username)}
+  </span>
+}
+
+function relativeTime(value) {
+  const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000))
+  if (minutes < 1) return 'now'
+  if (minutes < 60) return String(minutes) + 'm'
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return String(hours) + 'h'
+  return String(Math.floor(hours / 24)) + 'd'
+}
+
+function count(value) {
+  if (value < 1000) return String(value)
+  if (value < 1_000_000) return (value / 1000).toFixed(value < 10000 ? 1 : 0) + 'K'
+  return (value / 1_000_000).toFixed(1) + 'M'
+}
+
+function waveUrl(id) {
+  const standalone = ['wavowaves.lol', 'www.wavowaves.lol'].includes(window.location.hostname)
+  return window.location.origin + (standalone ? '/?wave=' : '/waves/video?wave=') + encodeURIComponent(id)
+}
+
+async function signMedia(path) {
+  if (!path) return null
+  const { data, error } = await supabase.storage.from('wave-media').createSignedUrl(path, 15 * 60)
+  if (error) throw error
+  return data?.signedUrl || null
+}
+
+async function loadVideoWaves(userId) {
+  // Reuse Wavo's existing friends/selected-recipient RLS and media access.
+  // No public discovery or assumption that private posts may be redistributed.
+  const friends = await getFriends(userId)
+  const posts = (await getPosts(userId, friends))
+    .filter((post) => post.media_type === 'video' && post.media_path && post.visibility !== 'group')
+    .slice(0, PAGE_SIZE)
+
+  const signed = await Promise.all(posts.map(async (post) => {
+    try {
+      return { ...post, media_url_signed: await signMedia(post.media_path) }
+    } catch {
+      return null
+    }
+  }))
+  return signed.filter((post) => post?.media_url_signed)
+}
+
+function getVideoDuration(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const video = document.createElement('video')
+    const finish = (duration, error) => {
+      URL.revokeObjectURL(url)
+      video.removeAttribute('src')
+      video.load()
+      if (error) reject(error)
+      else resolve(duration)
+    }
+    video.preload = 'metadata'
+    video.onloadedmetadata = () => {
+      const duration = video.duration * 1000
+      if (!Number.isFinite(duration) || duration <= 0) finish(null, new Error('Could not read the video duration.'))
+      else finish(duration)
+    }
+    video.onerror = () => finish(null, new Error('Could not read this video.'))
+    video.src = url
+  })
+}
+
+function Login({ onLogin }) {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  async function submit(event) {
+    event.preventDefault()
+    if (busy) return
+    setBusy(true)
+    setError('')
+    try {
+      const email = username.includes('@') ? username.trim().toLowerCase() : username.trim().toLowerCase() + '@wavo.app'
+      const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password })
+      if (authError) throw authError
+      onLogin(data.session)
+    } catch {
+      setError('Could not sign in. Check your username and password.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <main className="video-waves-auth">
+    <a className="video-waves-back-link" href="https://wavo.lol/"><ArrowLeft size={18} /> Wavo</a>
+    <div className="video-waves-auth-card">
+      <div className="video-waves-mark">W<span>~</span></div>
+      <span className="video-waves-eyebrow">YOUR PEOPLE. YOUR WAVES.</span>
+      <h1>Every moment<br />makes a wave.</h1>
+      <p>Sign in with your existing Wavo account to see videos shared with you.</p>
+      <form onSubmit={submit}>
+        <label>Wavo username or email<input autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required autoCapitalize="none" spellCheck={false} /></label>
+        <label>Password<input autoComplete="current-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
+        {error && <p className="video-waves-form-error" role="alert">{error}</p>}
+        <button className="video-waves-primary" disabled={busy}>{busy ? 'Signing in…' : 'Enter Waves'}</button>
+      </form>
+      <small>Waves is part of Wavo. Accounts and sharing permissions stay with Wavo.</small>
+    </div>
+  </main>
+}
+
+function Upload({ userId, onClose, onCreated }) {
+  const [file, setFile] = useState(null)
+  const [preview, setPreview] = useState('')
+  const [caption, setCaption] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!file) {
+      setPreview('')
+      return
+    }
+    const url = URL.createObjectURL(file)
+    setPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [file])
+
+  async function publish(event) {
+    event.preventDefault()
+    if (!file || busy) return
+    setError('')
+    setBusy(true)
+    let post
+    let path
+    try {
+      if (!['video/mp4', 'video/quicktime'].includes(file.type)) throw new Error('Upload an MP4 or MOV video.')
+      if (file.size > VIDEO_LIMIT_BYTES) throw new Error('Videos must be 50 MB or smaller.')
+      const duration = await getVideoDuration(file)
+      if (duration > VIDEO_LIMIT_MS) throw new Error('Videos must be 60 seconds or shorter.')
+      const extension = file.type === 'video/quicktime' ? 'mov' : 'mp4'
+      post = await createPost(userId, { body: caption.trim(), visibility: 'friends' })
+      path = userId + '/' + post.id + '/' + crypto.randomUUID() + '.' + extension
+      const { error: uploadError } = await supabase.storage.from('wave-media').upload(path, file, {
+        contentType: file.type,
+        cacheControl: '3600',
+        upsert: false,
+      })
+      if (uploadError) throw uploadError
+      const { error: updateError } = await supabase.from('posts').update({
+        media_path: path,
+        media_type: 'video',
+        media_filename: file.name.slice(0, 180),
+        media_size_bytes: file.size,
+        video_duration_ms: Math.round(duration),
+      }).eq('id', post.id).eq('author_id', userId)
+      if (updateError) throw updateError
+      await onCreated()
+      onClose()
+    } catch (uploadError) {
+      if (path) await supabase.storage.from('wave-media').remove([path]).catch(() => {})
+      if (post?.id) await deletePost(userId, post.id).catch(() => {})
+      setError(uploadError?.message || 'Could not upload this Wave.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <div className="video-wave-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose() }}>
+    <form className="video-wave-upload" onSubmit={publish}>
+      <div className="video-wave-sheet-title"><strong>New video Wave</strong><button type="button" onClick={onClose} disabled={busy} aria-label="Close"><X /></button></div>
+      {preview ? <video className="video-wave-upload-preview" src={preview} playsInline controls /> : <label className="video-wave-upload-picker"><Plus size={28} /> Choose a video<input type="file" accept="video/mp4,video/quicktime,.mp4,.mov" onChange={(event) => setFile(event.target.files?.[0] || null)} /></label>}
+      {preview && <label className="video-wave-change-file">Choose another<input type="file" accept="video/mp4,video/quicktime,.mp4,.mov" onChange={(event) => setFile(event.target.files?.[0] || null)} /></label>}
+      <textarea aria-label="Caption" maxLength={1200} placeholder="Write a caption…" value={caption} onChange={(event) => setCaption(event.target.value)} />
+      <p className="video-wave-privacy">Shared with your Wavo friends only. Up to 60 seconds / 50 MB.</p>
+      {error && <p className="video-waves-form-error" role="alert">{error}</p>}
+      <button className="video-waves-primary" type="submit" disabled={!file || busy}>{busy ? 'Publishing…' : 'Publish Wave'}</button>
+    </form>
+  </div>
+}
+
+function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onReply, saved, onSave }) {
+  const videoRef = useRef(null)
+  const [playing, setPlaying] = useState(false)
+  const mine = post.author_id === userId
+  const myReaction = (post.reactions || []).find((reaction) => reaction.user_id === userId)
+  const liked = Boolean(myReaction)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    if (active && !document.hidden) {
+      video.play().catch(() => setPlaying(false))
+    } else {
+      video.pause()
+    }
+  }, [active])
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    video.muted = muted
+  }, [muted])
+
+  useEffect(() => {
+    function visibilityChanged() {
+      const video = videoRef.current
+      if (!video) return
+      if (document.hidden) video.pause()
+      else if (active) video.play().catch(() => setPlaying(false))
+    }
+    document.addEventListener('visibilitychange', visibilityChanged)
+    return () => document.removeEventListener('visibilitychange', visibilityChanged)
+  }, [active])
+
+  function togglePlay() {
+    const video = videoRef.current
+    if (!video) return
+    if (video.paused) video.play().catch(() => setPlaying(false))
+    else video.pause()
+  }
+
+  async function share() {
+    const url = waveUrl(post.id)
+    try {
+      if (navigator.share) await navigator.share({ title: 'Wave by @' + (post.author?.username || 'wavo'), url })
+      else {
+        await navigator.clipboard.writeText(url)
+        onShare('Private link copied. Only the selected audience can view this Wave.')
+      }
+    } catch (error) {
+      if (error?.name !== 'AbortError') onShare('Could not share this Wave.')
+    }
+  }
+
+  return <article className="video-wave-card">
+    <video ref={videoRef} className="video-wave-player" src={post.media_url_signed} preload={active ? 'auto' : 'metadata'} playsInline loop muted={muted}
+      onClick={togglePlay} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} aria-label={post.body || 'Wave video'} />
+    <div className="video-wave-scrim" />
+    {!playing && <button className="video-wave-play" onClick={togglePlay} aria-label="Play video"><Play size={34} fill="currentColor" /></button>}
+    <button className="video-wave-sound" onClick={() => setMuted((value) => !value)} aria-label={muted ? 'Unmute' : 'Mute'}>
+      {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+    </button>
+    <div className="video-wave-meta">
+      <div className="video-wave-author"><Avatar profile={post.author} /><strong>@{post.author?.username || 'wavo'}</strong><span>· {relativeTime(post.created_at)}</span></div>
+      {post.body && <p>{post.body}</p>}
+      <span className="video-wave-audio">♫ Original Wave audio · Friends only</span>
+    </div>
+    <aside className="video-wave-actions">
+      <button className={liked ? 'active' : ''} onClick={() => onLike(post)} aria-label={liked ? 'Remove reaction' : 'Like'}>
+        <Heart size={28} fill={liked ? 'currentColor' : 'none'} /><span>{count((post.reactions || []).length)}</span>
+      </button>
+      {!mine && <button onClick={() => onReply(post)} aria-label="Reply to creator"><MessageCircle size={28} /><span>Reply</span></button>}
+      <button onClick={share} aria-label="Share"><Share2 size={28} /><span>Share</span></button>
+      <button className={saved ? 'active' : ''} onClick={() => onSave(post.id)} aria-label={saved ? 'Remove from saved videos' : 'Save on this device'}>
+        <Bookmark size={28} fill={saved ? 'currentColor' : 'none'} /><span>Save</span>
+      </button>
+    </aside>
+  </article>
+}
+
+function Reply({ post, userId, onClose, onSent }) {
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  async function submit(event) {
+    event.preventDefault()
+    if (!message.trim() || busy) return
+    setBusy(true)
+    setError('')
+    try {
+      const context = post.body ? post.body.slice(0, 90) : 'Video Wave'
+      await sendDmMessage(userId, post.author_id, '↪ Replied to Wave: ' + context + '\n' + message.trim())
+      onSent()
+    } catch {
+      setError('Could not send that reply.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <div className="video-wave-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+    <form className="video-wave-reply" onSubmit={submit}>
+      <div className="video-wave-sheet-title"><strong>Reply to @{post.author?.username || 'creator'}</strong><button type="button" onClick={onClose} aria-label="Close"><X /></button></div>
+      <p>Your reply is sent as a private Wavo message, not a public comment.</p>
+      <textarea required autoFocus maxLength={1200} placeholder="Write your reply…" value={message} onChange={(event) => setMessage(event.target.value)} />
+      {error && <p className="video-waves-form-error" role="alert">{error}</p>}
+      <button className="video-waves-primary" disabled={!message.trim() || busy}><Send size={16} /> {busy ? 'Sending…' : 'Send reply'}</button>
+    </form>
+  </div>
+}
+
+export default function VideoWavesPage() {
+  const [session, setSession] = useState(null)
+  const [booting, setBooting] = useState(true)
+  const [posts, setPosts] = useState([])
+  const [activeId, setActiveId] = useState(null)
+  const [muted, setMuted] = useState(true)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [toast, setToast] = useState('')
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [replyPost, setReplyPost] = useState(null)
+  const [savedIds, setSavedIds] = useState([])
+  const userId = session?.user?.id
+  const feedRef = useRef(null)
+
+  useEffect(() => {
+    let alive = true
+    supabase.auth.getSession()
+      .then(({ data }) => { if (alive) setSession(data.session || null) })
+      .catch(() => { if (alive) setError('Could not check your Wavo session.') })
+      .finally(() => { if (alive) setBooting(false) })
+    const { data } = supabase.auth.onAuthStateChange((_event, next) => {
+      if (alive) { setSession(next); setBooting(false) }
+    })
+    return () => { alive = false; data.subscription.unsubscribe() }
+  }, [])
+
+  useEffect(() => {
+    if (!userId) { setPosts([]); setLoading(false); return }
+    try {
+      const stored = JSON.parse(localStorage.getItem('wavo-video-saved:' + userId) || '[]')
+      setSavedIds(Array.isArray(stored) ? stored : [])
+    } catch { setSavedIds([]) }
+  }, [userId])
+
+  async function refresh() {
+    if (!userId) return
+    setLoading(true)
+    setError('')
+    try {
+      const rows = await loadVideoWaves(userId)
+      setPosts(rows)
+      const requested = new URLSearchParams(window.location.search).get('wave')
+      const selected = rows.find((row) => row.id === requested)
+      setActiveId(selected?.id || rows[0]?.id || null)
+      if (selected) requestAnimationFrame(() => {
+        const cards = feedRef.current?.querySelectorAll('[data-video-wave-id]') || []
+        const card = [...cards].find((element) => element.dataset.videoWaveId === selected.id)
+        card?.scrollIntoView({ block: 'start' })
+      })
+    } catch (loadError) {
+      console.error('[wavo] video waves', loadError)
+      setError('Could not load your video Waves. Try again.')
+    } finally { setLoading(false) }
+  }
+
+  useEffect(() => { if (userId) refresh() }, [userId])
+
+  useEffect(() => {
+    if (!posts.length || !feedRef.current) return
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries.filter((entry) => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
+      if (visible?.target?.dataset?.videoWaveId) setActiveId(visible.target.dataset.videoWaveId)
+    }, { root: feedRef.current, threshold: [0.55, 0.8] })
+    feedRef.current.querySelectorAll('[data-video-wave-id]').forEach((card) => observer.observe(card))
+    return () => observer.disconnect()
+  }, [posts])
+
+  async function like(post) {
+    const liked = (post.reactions || []).some((reaction) => reaction.user_id === userId)
+    try {
+      await reactToPost(userId, post.id, liked ? '❤️' : '❤️')
+      setPosts((current) => current.map((item) => item.id === post.id ? {
+        ...item,
+        reactions: liked
+          ? (item.reactions || []).filter((reaction) => reaction.user_id !== userId)
+          : [...(item.reactions || []), { user_id: userId, emoji: '❤️' }],
+      } : item))
+    } catch { setToast('Could not update your reaction.') }
+  }
+
+  function toggleSaved(id) {
+    const next = savedIds.includes(id) ? savedIds.filter((saved) => saved !== id) : [...savedIds, id]
+    setSavedIds(next)
+    try { localStorage.setItem('wavo-video-saved:' + userId, JSON.stringify(next)) } catch { /* optional local feature */ }
+    setToast(savedIds.includes(id) ? 'Removed from saved videos' : 'Saved on this device')
+  }
+
+  if (booting) return <div className="video-waves-loading">Loading Wavo Waves…</div>
+  if (!userId) return <Login onLogin={setSession} />
+
+  return <main className="video-waves-shell">
+    <header className="video-waves-topbar">
+      <a href="https://wavo.lol/" aria-label="Back to Wavo"><ArrowLeft size={20} /></a>
+      <strong>Waves<span className="video-waves-brand-dot">.</span></strong>
+      <span>Friends</span>
+      <div className="video-waves-top-actions">
+        <button onClick={() => setUploadOpen(true)} aria-label="Post a video"><Plus size={20} /> <span>Post</span></button>
+        <button onClick={() => supabase.auth.signOut()} aria-label="Sign out"><LogOut size={18} /></button>
+      </div>
+    </header>
+    {loading && <div className="video-waves-loading">Loading video Waves…</div>}
+    {error && <div className="video-waves-error" role="alert">{error}<button onClick={refresh}>Retry</button></div>}
+    {!loading && !error && !posts.length && <div className="video-waves-empty">
+      <strong>No video Waves yet.</strong>
+      <span>Share the first one with your Wavo friends.</span>
+      <button className="video-waves-primary" onClick={() => setUploadOpen(true)}>Post a video</button>
+    </div>}
+    <section className="video-waves-feed" ref={feedRef} aria-label="Video Waves">
+      {posts.map((post) => <div key={post.id} data-video-wave-id={post.id} className="video-wave-snap">
+        <VideoCard post={post} userId={userId} active={activeId === post.id} muted={muted} setMuted={setMuted}
+          onLike={like} onShare={setToast} onReply={setReplyPost}
+          saved={savedIds.includes(post.id)} onSave={toggleSaved} />
+      </div>)}
+    </section>
+    {uploadOpen && <Upload userId={userId} onClose={() => setUploadOpen(false)} onCreated={refresh} />}
+    {replyPost && <Reply post={replyPost} userId={userId} onClose={() => setReplyPost(null)}
+      onSent={() => { setReplyPost(null); setToast('Reply sent in Wavo messages') }} />}
+    {toast && <button className="video-wave-toast" onClick={() => setToast('')} role="status">{toast}</button>}
+  </main>
 }
