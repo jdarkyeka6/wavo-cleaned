@@ -10,8 +10,8 @@ import { useWavesWatchSignals } from './wavesWatchSignals'
 import WavesCuratedManager from './WavesCuratedManager'
 import { isNativeApp } from './lib/platform'
 
-const VIDEO_LIMIT_BYTES = 50 * 1024 * 1024
-const VIDEO_LIMIT_MS = 60_000
+const VIDEO_LIMIT_BYTES = 500 * 1024 * 1024
+const VIDEO_LIMIT_MS = 5 * 60_000
 const PAGE_SIZE = 50
 
 function initial(name) {
@@ -158,9 +158,9 @@ function Upload({ userId, onClose, onCreated }) {
     let path
     try {
       if (!['video/mp4', 'video/quicktime'].includes(file.type)) throw new Error('Upload an MP4 or MOV video.')
-      if (file.size > VIDEO_LIMIT_BYTES) throw new Error('Videos must be 50 MB or smaller.')
+      if (file.size > VIDEO_LIMIT_BYTES) throw new Error('Videos must be 500 MB or smaller.')
       const duration = await getVideoDuration(file)
-      if (duration > VIDEO_LIMIT_MS) throw new Error('Videos must be 60 seconds or shorter.')
+      if (duration > VIDEO_LIMIT_MS) throw new Error('Videos must be 5 minutes or shorter.')
       const extension = file.type === 'video/quicktime' ? 'mov' : 'mp4'
       post = await createPost(userId, { body: caption.trim(), visibility: 'friends' })
       path = userId + '/' + post.id + '/' + crypto.randomUUID() + '.' + extension
@@ -195,7 +195,7 @@ function Upload({ userId, onClose, onCreated }) {
       {preview ? <video className="video-wave-upload-preview" src={preview} playsInline controls /> : <label className="video-wave-upload-picker"><Plus size={28} /> Choose a video<input type="file" accept="video/mp4,video/quicktime,.mp4,.mov" onChange={(event) => setFile(event.target.files?.[0] || null)} /></label>}
       {preview && <label className="video-wave-change-file">Choose another<input type="file" accept="video/mp4,video/quicktime,.mp4,.mov" onChange={(event) => setFile(event.target.files?.[0] || null)} /></label>}
       <textarea aria-label="Caption" maxLength={1200} placeholder="Write a caption…" value={caption} onChange={(event) => setCaption(event.target.value)} />
-      <p className="video-wave-privacy">Shared with your Wavo friends only. Up to 60 seconds / 50 MB.</p>
+      <p className="video-wave-privacy">Shared with your Wavo friends only. Up to 5 minutes / 500 MB.</p>
       {error && <p className="video-waves-form-error" role="alert">{error}</p>}
       <button className="video-waves-primary" type="submit" disabled={!file || busy}>{busy ? 'Publishing…' : 'Publish Wave'}</button>
     </form>
