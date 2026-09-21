@@ -84,3 +84,69 @@
 
 .video-waves-empty .video-waves-secondary{border:1px solid #ffffff4d;border-radius:14px;background:#ffffff1a;color:#fff;min-height:44px;padding:9px 17px;font-weight:650}
 .video-waves-empty>span{max-width:490px;line-height:1.6}
+
+
+/* The native WebView includes the status bar and home indicator in its
+   viewport. Keep overlays inside safe areas and avoid a page-wide sideways
+   scroll when the category chips extend past the edge. */
+.video-waves-shell{
+  width:100%;max-width:100%;height:var(--wavo-viewport-height,100dvh);
+  min-height:0;overflow:hidden;
+}
+.video-waves-feed,.video-wave-snap{height:var(--wavo-viewport-height,100dvh)}
+.video-wave-player{max-width:100%;max-height:100%}
+.video-wave-media-error{
+  position:absolute;z-index:5;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:min(310px,calc(100% - 100px));min-width:0;padding:19px 13px;
+  display:grid;justify-items:center;gap:10px;text-align:center;
+  color:#fff;background:#080c14e8;border:1px solid #ffffff36;border-radius:18px;
+}
+.video-wave-media-error strong{font-size:16px}
+.video-wave-media-error span{font-size:13px;line-height:1.4;color:#d0d6dd}
+.video-wave-media-error button{
+  border:0;border-radius:999px;padding:10px 17px;min-height:42px;
+  color:#09231b;background:var(--waves-mint);font-weight:750;
+}
+@media(max-width:760px){
+  .video-waves-topbar{
+    gap:clamp(6px,1.6vw,12px);
+    padding:calc(8px + var(--wavo-safe-top,0px))
+      calc(10px + var(--wavo-safe-right,0px)) 8px
+      calc(10px + var(--wavo-safe-left,0px));
+    min-height:calc(60px + var(--wavo-safe-top,0px));
+  }
+  .video-waves-topbar>a,.video-waves-topbar>strong{flex-shrink:0}
+  .video-waves-topbar>span{
+    flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap;padding-left:9px;
+  }
+  .video-waves-top-actions{gap:5px;flex-shrink:0;min-width:0}
+  .video-waves-top-actions button{min-width:36px;min-height:36px;padding:6px 8px}
+  .video-waves-channels{
+    top:calc(60px + var(--wavo-safe-top,0px));
+    left:0;right:0;transform:none;width:100%;max-width:100%;
+    padding:7px calc(10px + var(--wavo-safe-right,0px))
+      7px calc(10px + var(--wavo-safe-left,0px));
+    -webkit-overflow-scrolling:touch;
+  }
+  .video-waves-shell .video-wave-sound{
+    top:calc(119px + var(--wavo-safe-top,0px));
+    right:calc(12px + var(--wavo-safe-right,0px));
+  }
+  .video-wave-actions{
+    right:calc(8px + var(--wavo-safe-right,0px));
+    bottom:calc(12px + var(--wavo-safe-bottom,0px));
+    gap:clamp(5px,1.3dvh,12px);
+  }
+  .video-wave-meta{
+    left:calc(14px + var(--wavo-safe-left,0px));
+    right:calc(84px + var(--wavo-safe-right,0px));
+    bottom:calc(15px + var(--wavo-safe-bottom,0px));
+    max-height:32dvh;overflow:hidden;
+  }
+  .video-wave-media-error{width:min(310px,calc(100% - 90px))}
+}
+@media(max-width:380px){
+  .video-waves-topbar>span{display:none}
+  .video-waves-topbar strong{font-size:19px}
+}
