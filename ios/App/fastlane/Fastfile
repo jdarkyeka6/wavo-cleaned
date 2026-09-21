@@ -126,10 +126,15 @@ platform :ios do
       end
 
       if revocation_visible
-        sleep 5
+        # The Certificates API can stop listing the revoked certificate before
+        # Apple's certificate-creation quota has actually released the slot.
+        # A five-second delay was not enough in CI. Give the backend a full
+        # propagation window before asking for a replacement certificate.
+        UI.message("Certificate disappeared from the API. Waiting 90 seconds for Apple's creation quota to release the slot…")
+        sleep 90
       else
-        UI.important("The revoked certificate is still visible after 60 seconds. Waiting 30 more seconds before one final creation attempt; no additional certificates will be revoked.")
-        sleep 30
+        UI.important("The revoked certificate is still visible after 60 seconds. Waiting 90 more seconds before one final creation attempt; no additional certificates will be revoked.")
+        sleep 90
       end
 
       cert(**cert_args)
