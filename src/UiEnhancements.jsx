@@ -225,8 +225,8 @@ function applyWavesProductLabels() {
     if (headingRow && !headingRow.querySelector('.wavo-open-waves')) {
       const link = document.createElement('a')
       link.className = 'wavo-open-waves'
-      link.href = '/waves'
-      link.textContent = 'Open Waves'
+      link.href = '/waves/video'
+      link.textContent = 'Video Waves'
       headingRow.insertBefore(link, action || null)
     }
   }
