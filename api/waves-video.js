@@ -56,8 +56,8 @@ export default async function handler(req, res) {
     if (!requestedRange) {
       range = `bytes=0-${CHUNK_BYTES - 1}`;
     } else {
-      const match = /^bytes=(\\d+)-(\\d*)$/i.exec(requestedRange);
-      const suffix = /^bytes=-(\\d+)$/i.exec(requestedRange);
+      const match = /^bytes=(\d+)-(\d*)$/i.exec(requestedRange);
+      const suffix = /^bytes=-(\d+)$/i.exec(requestedRange);
       if (match) {
         const start = Number(match[1]);
         const end = match[2] ? Number(match[2]) : start + CHUNK_BYTES - 1;
