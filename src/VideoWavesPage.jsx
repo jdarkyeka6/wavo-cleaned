@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
-import { ArrowLeft, Bookmark, Flag, Heart, LogOut, MessageCircle, Plus, Send, Share2, SlidersHorizontal, Volume2, VolumeX, X } from 'lucide-react'
+import { ArrowLeft, Bookmark, Flag, Heart, LogOut, MessageCircle, Play, Plus, Send, Share2, SlidersHorizontal, Volume2, VolumeX, X } from 'lucide-react'
 import { supabase } from './supabaseClient'
 import { createPost, deletePost, getFriends, getPosts, reactToPost, sendDmMessage } from './wavoData'
 import './video-waves.css'
