@@ -41,6 +41,15 @@ export default async function handler(req, res) {
     .select("video_provider,video_asset_id,status,moderation_state")
     .eq("id", clipId).eq("status", "published").maybeSingle();
   if (error || !clip || clip.moderation_state !== "clear" || clip.video_provider !== "google_drive" || !clip.video_asset_id) {
+    // Status-only request logs cannot distinguish an invalid clip from an
+    // inaccessible Drive asset. Avoid logging user tokens, clip IDs or URLs.
+    console.warn("[waves-video] clip unavailable", {
+      lookupError: error?.code || null,
+      found: Boolean(clip),
+      moderation: clip?.moderation_state || null,
+      provider: clip?.video_provider || null,
+      hasAsset: Boolean(clip?.video_asset_id),
+    });
     return send(res, 404, { error: "Video not found" });
   }
 
@@ -86,7 +95,10 @@ export default async function handler(req, res) {
     if (contentRange) res.setHeader("Content-Range", contentRange);
     return send(res, 416, { error: "Video range unavailable" });
   }
-  if (!drive.ok) return send(res, drive.status === 404 ? 404 : 502, { error: "Could not load video" });
+  if (!drive.ok) {
+    console.warn("[waves-video] Google Drive rejected media request", { status: drive.status });
+    return send(res, drive.status === 404 ? 404 : 502, { error: "Could not load video" });
+  }
   // Do not accidentally stream an entire multi-megabyte file as HTTP 200.
   if (req.method === "GET" && drive.status !== 206) {
     await drive.body?.cancel().catch(() => {});
