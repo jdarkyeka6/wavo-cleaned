@@ -206,7 +206,12 @@ function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onR
   const videoRef = useRef(null)
   const watch = useWavesWatchSignals(videoRef, post, active, onSignal)
   const [playing, setPlaying] = useState(false)
+  const [mediaError, setMediaError] = useState('')
+  const [retryIndex, setRetryIndex] = useState(0)
+  const [playbackUrl, setPlaybackUrl] = useState(post.media_url_signed)
   const curated = post.kind === 'curated'
+  const hlsUrl = curated && post.video_provider === 'google_drive' ? null : post.media_hls_url
+  useEffect(() => { setPlaybackUrl(post.media_url_signed) }, [post.media_url_signed])
   const channel = curated ? channelBySlug[post.channel_slug] : null
   const mine = !curated && post.author_id === userId
   const myReaction = (post.reactions || []).find((reaction) => reaction.user_id === userId)
@@ -214,22 +219,37 @@ function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onR
 
   useEffect(() => {
     const video = videoRef.current
-    if (!video || !post.media_hls_url) return
+    if (!video || !hlsUrl) return
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = post.media_hls_url
+      video.src = hlsUrl
       return
     }
-    if (!Hls.isSupported()) return
+    if (!Hls.isSupported()) {
+      if (playbackUrl) video.src = playbackUrl
+      else setMediaError('This video format is not supported on this device.')
+      return
+    }
     const hls = new Hls({
       maxBufferLength: 12,
       maxMaxBufferLength: 24,
       startLevel: -1,
       capLevelToPlayerSize: true,
     })
-    hls.loadSource(post.media_hls_url)
+    hls.loadSource(hlsUrl)
     hls.attachMedia(video)
+    hls.on(Hls.Events.ERROR, (_event, data) => {
+      if (!data.fatal) return
+      if (playbackUrl) {
+        hls.destroy()
+        video.src = playbackUrl
+        video.load()
+        if (active) video.play().catch(() => setPlaying(false))
+      } else {
+        setMediaError('This video could not be streamed. Try again.')
+      }
+    })
     return () => hls.destroy()
-  }, [post.media_hls_url])
+  }, [hlsUrl, playbackUrl, retryIndex])
 
   useEffect(() => {
     const video = videoRef.current
@@ -239,7 +259,7 @@ function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onR
     } else {
       video.pause()
     }
-  }, [active])
+  }, [active, retryIndex, playbackUrl])
 
   useEffect(() => {
     const video = videoRef.current
@@ -258,7 +278,23 @@ function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onR
     return () => document.removeEventListener('visibilitychange', visibilityChanged)
   }, [active])
 
+  async function retryPlayback() {
+    setMediaError('')
+    setPlaying(false)
+    if (curated && post.video_provider === 'google_drive') {
+      const { data, error } = await supabase.auth.refreshSession()
+      if (error || !data.session?.access_token) {
+        setMediaError('Your session expired. Sign in again to watch this video.')
+        return
+      }
+      const origin = isNativeApp ? 'https://wavowaves.lol' : ''
+      setPlaybackUrl(`${origin}/api/waves-video?id=${encodeURIComponent(post.id)}&token=${encodeURIComponent(data.session.access_token)}`)
+    }
+    setRetryIndex((value) => value + 1)
+  }
+
   function togglePlay() {
+    if (mediaError) { void retryPlayback(); return }
     const video = videoRef.current
     if (!video) return
     if (video.paused) video.play().catch(() => setPlaying(false))
@@ -279,10 +315,15 @@ function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onR
   }
 
   return <article className="video-wave-card">
-    <video ref={videoRef} className="video-wave-player" src={post.media_hls_url ? undefined : post.media_url_signed} preload={active ? 'auto' : 'metadata'} playsInline loop muted={muted}
-      onClick={togglePlay} onPlay={() => { setPlaying(true); watch.onPlay() }} onTimeUpdate={watch.onTimeUpdate} onPause={() => setPlaying(false)} aria-label={post.body || 'Wave video'} />
+    <video key={retryIndex} ref={videoRef} className="video-wave-player" src={hlsUrl ? undefined : playbackUrl} preload={active ? 'auto' : 'metadata'} playsInline loop muted={muted} referrerPolicy="no-referrer"
+      onClick={togglePlay} onLoadedData={() => setMediaError('')} onError={(event) => {
+        const code = event.currentTarget.error?.code
+        setPlaying(false)
+        setMediaError(code === 4 ? 'This video format is not supported on your device.' : 'Could not load this video. Check your connection and try again.')
+      }} onPlay={() => { setPlaying(true); watch.onPlay() }} onTimeUpdate={watch.onTimeUpdate} onPause={() => setPlaying(false)} aria-label={post.body || 'Wave video'} />
     <div className="video-wave-scrim" />
-    {!playing && <button className="video-wave-play" onClick={togglePlay} aria-label="Play video"><Play size={34} fill="currentColor" /></button>}
+    {mediaError ? <div className="video-wave-media-error" role="alert"><strong>Video unavailable</strong><span>{mediaError}</span><button type="button" onClick={() => { void retryPlayback() }}>Retry video</button></div>
+      : !playing && <button className="video-wave-play" onClick={togglePlay} aria-label="Play video"><Play size={34} fill="currentColor" /></button>}
     <button className="video-wave-sound" onClick={() => setMuted((value) => !value)} aria-label={muted ? 'Unmute' : 'Mute'}>
       {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
     </button>
