@@ -47,22 +47,59 @@ export default async function handler(req, res) {
   const googleToken = await googleAccessToken();
   if (!googleToken) return send(res, 503, { error: "Video storage is unavailable" });
 
+  // iOS AVPlayer requires byte-range responses. A full Google Drive video can
+  // exceed the serverless response size limit, so never proxy an unbounded GET.
+  const CHUNK_BYTES = 1024 * 1024;
+  const requestedRange = String(req.headers.range || "").trim();
+  let range = null;
+  if (req.method === "GET") {
+    if (!requestedRange) {
+      range = `bytes=0-${CHUNK_BYTES - 1}`;
+    } else {
+      const match = /^bytes=(\\d+)-(\\d*)$/i.exec(requestedRange);
+      const suffix = /^bytes=-(\\d+)$/i.exec(requestedRange);
+      if (match) {
+        const start = Number(match[1]);
+        const end = match[2] ? Number(match[2]) : start + CHUNK_BYTES - 1;
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || end < start) {
+          return send(res, 416, { error: "Invalid video range" });
+        }
+        range = `bytes=${start}-${Math.min(end, start + CHUNK_BYTES - 1)}`;
+      } else if (suffix) {
+        const count = Number(suffix[1]);
+        if (!Number.isSafeInteger(count) || count < 1) return send(res, 416, { error: "Invalid video range" });
+        range = `bytes=-${Math.min(count, CHUNK_BYTES)}`;
+      } else {
+        return send(res, 416, { error: "Unsupported video range" });
+      }
+    }
+  }
   const headers = { Authorization: `Bearer ${googleToken}` };
-  const range = String(req.headers.range || "");
   if (range) headers.Range = range;
   const drive = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(clip.video_asset_id)}?alt=media&supportsAllDrives=true`, {
     method: req.method,
     headers,
   });
 
-  if (!drive.ok && drive.status !== 206) return send(res, drive.status === 404 ? 404 : 502, { error: "Could not load video" });
+  if (drive.status === 416) {
+    const contentRange = drive.headers.get("content-range");
+    if (contentRange) res.setHeader("Content-Range", contentRange);
+    return send(res, 416, { error: "Video range unavailable" });
+  }
+  if (!drive.ok) return send(res, drive.status === 404 ? 404 : 502, { error: "Could not load video" });
+  // Do not accidentally stream an entire multi-megabyte file as HTTP 200.
+  if (req.method === "GET" && drive.status !== 206) {
+    await drive.body?.cancel().catch(() => {});
+    return send(res, 502, { error: "Video storage did not honour byte-range requests" });
+  }
 
   res.status(drive.status);
   for (const name of ["content-type", "content-length", "content-range", "accept-ranges", "etag", "last-modified"]) {
     const value = drive.headers.get(name);
     if (value) res.setHeader(name, value);
   }
-  res.setHeader("Cache-Control", "private, max-age=300");
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("X-Content-Type-Options", "nosniff");
   if (req.method === "HEAD" || !drive.body) return res.end();
 
