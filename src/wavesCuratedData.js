@@ -76,9 +76,11 @@ export async function loadCuratedWaves(page = 0) {
       ? null
       : (clip.playback_url || null)
     if (clip.video_provider === 'google_drive' && clip.video_asset_id) {
-      if (!token) return null
+      // Published curated clips support guest playback. Add the session token
+      // only when one exists so the same feed works signed in and signed out.
       const proxyOrigin = isNativeApp ? 'https://wavowaves.lol' : ''
-      playbackUrl = `${proxyOrigin}/api/waves-video?id=${encodeURIComponent(clip.id)}&token=${encodeURIComponent(token)}`
+      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : ''
+      playbackUrl = `${proxyOrigin}/api/waves-video?id=${encodeURIComponent(clip.id)}${tokenParam}`
     }
     if (!playbackUrl && clip.media_path) {
       const { data: url, error: signError } = await supabase.storage.from('waves-curated')
