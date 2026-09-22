@@ -38,7 +38,7 @@ export default async function handler(req, res) {
   if (!userData?.user) return send(res, 401, { error: "Session expired" });
 
   const { data: clip, error } = await admin.from("waves_curated_clips")
-    .select("video_provider,video_asset_id,status,moderation_state")
+    .select("video_provider,video_asset_id,source_drive_id,status,moderation_state")
     .eq("id", clipId).eq("status", "published").maybeSingle();
   if (error || !clip || clip.moderation_state !== "clear" || clip.video_provider !== "google_drive" || !clip.video_asset_id) {
     // Status-only request logs cannot distinguish an invalid clip from an
@@ -85,10 +85,22 @@ export default async function handler(req, res) {
   }
   const headers = { Authorization: `Bearer ${googleToken}` };
   if (range) headers.Range = range;
-  const drive = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(clip.video_asset_id)}?alt=media&supportsAllDrives=true`, {
-    method: req.method,
-    headers,
-  });
+  async function fetchDriveMedia(assetId) {
+    return fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(assetId)}?alt=media&supportsAllDrives=true`, {
+      method: req.method,
+      headers,
+    });
+  }
+
+  let drive = await fetchDriveMedia(clip.video_asset_id);
+  // Older curated rows can point at a copied asset that is no longer visible
+  // to the current Drive OAuth identity. The original source file is retained
+  // specifically so playback can recover without breaking the published Wave.
+  if (drive.status === 404 && clip.source_drive_id && clip.source_drive_id !== clip.video_asset_id) {
+    await drive.body?.cancel().catch(() => {});
+    console.warn("[waves-video] copied asset unavailable; trying source asset");
+    drive = await fetchDriveMedia(clip.source_drive_id);
+  }
 
   if (drive.status === 416) {
     const contentRange = drive.headers.get("content-range");
