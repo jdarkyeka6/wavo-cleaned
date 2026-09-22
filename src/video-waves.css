@@ -150,3 +150,18 @@
   .video-waves-topbar>span{display:none}
   .video-waves-topbar strong{font-size:19px}
 }
+
+
+/* Playback feedback: buffering is normal network/storage work, not a codec
+   error. Keep it tiny so the video remains the focus while a range arrives. */
+.video-wave-buffering{
+  position:absolute;z-index:5;inset:0;display:grid;place-items:center;
+  pointer-events:none;background:radial-gradient(circle at center,#05080d38 0,#05080d00 34%);
+}
+.video-wave-buffering span{
+  width:34px;height:34px;border-radius:50%;border:3px solid #ffffff42;
+  border-top-color:#fff;animation:waves-buffer-spin .72s linear infinite;
+  filter:drop-shadow(0 2px 8px #0009);
+}
+@keyframes waves-buffer-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.video-wave-buffering span{animation-duration:1.6s}}
