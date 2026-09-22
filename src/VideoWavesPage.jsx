@@ -623,7 +623,6 @@ export default function VideoWavesPage() {
   }
 
   if (booting) return <div className="video-waves-loading">Loading Wavo Waves…</div>
-  if (!userId) return <Login onLogin={setSession} />
   if (manageOpen && isAdmin) return <WavesCuratedManager userId={userId} onClose={() => setManageOpen(false)} onChanged={refresh} />
 
   return <main className="video-waves-shell">
