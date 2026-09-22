@@ -28,14 +28,18 @@ export default async function handler(req, res) {
 
   const auth = String(req.headers.authorization || "");
   const userToken = auth.startsWith("Bearer ") ? auth.slice(7).trim() : String(req.query?.token || "").trim();
-  if (!userToken) return send(res, 401, { error: "Sign in to watch Waves" });
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceKey) return send(res, 500, { error: "Server auth is not configured" });
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { data: userData } = await admin.auth.getUser(userToken);
-  if (!userData?.user) return send(res, 401, { error: "Session expired" });
+  // Published, moderation-cleared curated Waves are intentionally viewable by
+  // guests. Authentication is still validated when supplied, but playback of
+  // this public feed must not depend on having a Wavo account.
+  if (userToken) {
+    const { data: userData } = await admin.auth.getUser(userToken);
+    if (!userData?.user) return send(res, 401, { error: "Session expired" });
+  }
 
   const { data: clip, error } = await admin.from("waves_curated_clips")
     .select("video_provider,video_asset_id,source_drive_id,status,moderation_state")
