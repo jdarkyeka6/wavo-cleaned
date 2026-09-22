@@ -172,10 +172,12 @@ platform :ios do
       targets: ["WavoLiveActivity"]
     )
 
-    # Use a UTC timestamp for a unique, monotonically increasing CI build number.
-    # This avoids blocking releases when App Store Connect's build-number lookup
-    # endpoint temporarily returns a 500.
-    next_build = Time.now.utc.strftime("%y%m%d%H%M%S").to_i
+    # Wavo 1.1 starts a fresh build train. Keep the human-readable sequence.
+    next_build = 55
+    increment_version_number(
+      xcodeproj: "App.xcodeproj",
+      version_number: "1.1"
+    )
     increment_build_number(
       xcodeproj: "App.xcodeproj",
       build_number: next_build
@@ -186,7 +188,7 @@ platform :ios do
       plist_path: "WavoLiveActivity/Info.plist",
       block: proc do |plist|
         plist["CFBundleVersion"] = next_build.to_s
-        plist["CFBundleShortVersionString"] = "1.0"
+        plist["CFBundleShortVersionString"] = "1.1"
       end
     )
 
