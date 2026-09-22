@@ -207,11 +207,15 @@ function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onR
   const watch = useWavesWatchSignals(videoRef, post, active, onSignal)
   const [playing, setPlaying] = useState(false)
   const [mediaError, setMediaError] = useState('')
+  const [loadingMedia, setLoadingMedia] = useState(true)
   const [retryIndex, setRetryIndex] = useState(0)
   const [playbackUrl, setPlaybackUrl] = useState(post.media_url_signed)
   const curated = post.kind === 'curated'
   const hlsUrl = curated && post.video_provider === 'google_drive' ? null : post.media_hls_url
-  useEffect(() => { setPlaybackUrl(post.media_url_signed) }, [post.media_url_signed])
+  // A Wave can arrive before its first media range is ready. Keep that state
+  // separate from a genuine playback failure so slow storage never masquerades
+  // as an unsupported video format.
+  useEffect(() => { setPlaybackUrl(post.media_url_signed); setLoadingMedia(true); setMediaError('') }, [post.media_url_signed])
   const channel = curated ? channelBySlug[post.channel_slug] : null
   const mine = !curated && post.author_id === userId
   const myReaction = (post.reactions || []).find((reaction) => reaction.user_id === userId)
@@ -280,6 +284,7 @@ function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onR
 
   async function retryPlayback() {
     setMediaError('')
+    setLoadingMedia(true)
     setPlaying(false)
     if (curated && post.video_provider === 'google_drive') {
       const { data, error } = await supabase.auth.refreshSession()
@@ -316,13 +321,16 @@ function VideoCard({ post, userId, active, muted, setMuted, onLike, onShare, onR
 
   return <article className="video-wave-card">
     <video key={retryIndex} ref={videoRef} className="video-wave-player" src={hlsUrl ? undefined : playbackUrl} preload={active ? 'auto' : 'metadata'} playsInline loop muted={muted} referrerPolicy="no-referrer"
-      onClick={togglePlay} onLoadedData={() => setMediaError('')} onError={(event) => {
-        const code = event.currentTarget.error?.code
+      onClick={togglePlay} onLoadStart={() => setLoadingMedia(true)} onWaiting={() => setLoadingMedia(true)} onCanPlay={() => setLoadingMedia(false)} onLoadedData={() => { setLoadingMedia(false); setMediaError('') }} onError={() => {
+        setLoadingMedia(false)
         setPlaying(false)
-        setMediaError(code === 4 ? 'This video format is not supported on your device.' : 'Could not load this video. Check your connection and try again.')
-      }} onPlay={() => { setPlaying(true); watch.onPlay() }} onTimeUpdate={watch.onTimeUpdate} onPause={() => setPlaying(false)} aria-label={post.body || 'Wave video'} />
+        // The proxy can transiently fail while Drive is preparing a range.
+        // The same MP4 often succeeds on retry, so don't falsely blame codec support.
+        setMediaError('This Wave could not load yet. Try it again.')
+      }} onPlay={() => { setLoadingMedia(false); setPlaying(true); watch.onPlay() }} onTimeUpdate={watch.onTimeUpdate} onPause={() => setPlaying(false)} aria-label={post.body || 'Wave video'} />
     <div className="video-wave-scrim" />
-    {mediaError ? <div className="video-wave-media-error" role="alert"><strong>Video unavailable</strong><span>{mediaError}</span><button type="button" onClick={() => { void retryPlayback() }}>Retry video</button></div>
+    {mediaError ? <div className="video-wave-media-error" role="alert"><strong>Wave didn’t load</strong><span>{mediaError}</span><button type="button" onClick={() => { void retryPlayback() }}>Try again</button></div>
+      : loadingMedia && active ? <div className="video-wave-buffering" role="status" aria-label="Loading video"><span /></div>
       : !playing && <button className="video-wave-play" onClick={togglePlay} aria-label="Play video"><Play size={34} fill="currentColor" /></button>}
     <button className="video-wave-sound" onClick={() => setMuted((value) => !value)} aria-label={muted ? 'Unmute' : 'Mute'}>
       {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
