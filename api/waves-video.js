@@ -6,7 +6,7 @@ function send(res, status, body) {
   return res.json(body);
 }
 
-async function googleAccessToken() {
+let cachedGoogleToken = null;\nlet cachedGoogleTokenUntil = 0;\nconst preferSourceAssets = new Set();\n\nasync function googleAccessToken() {\n  if (cachedGoogleToken && Date.now() < cachedGoogleTokenUntil) return cachedGoogleToken;
   const clientId = process.env.GOOGLE_DRIVE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_DRIVE_CLIENT_SECRET;
   const refreshToken = process.env.GOOGLE_DRIVE_REFRESH_TOKEN;
@@ -17,7 +17,7 @@ async function googleAccessToken() {
     body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken, grant_type: "refresh_token" }),
   });
   const payload = await response.json().catch(() => ({}));
-  return response.ok ? payload.access_token || null : null;
+  if (!response.ok || !payload.access_token) return null;\n  cachedGoogleToken = payload.access_token;\n  cachedGoogleTokenUntil = Date.now() + Math.max(60, Number(payload.expires_in || 3600) - 120) * 1000;\n  return cachedGoogleToken;
 }
 
 export default async function handler(req, res) {
@@ -58,7 +58,7 @@ export default async function handler(req, res) {
 
   // iOS AVPlayer requires byte-range responses. A full Google Drive video can
   // exceed the serverless response size limit, so never proxy an unbounded GET.
-  const CHUNK_BYTES = 1024 * 1024;
+  // Most curated clips are only a few MB. Four MiB usually lets AVPlayer\n  // start or finish a clip in one request instead of repeatedly crossing\n  // iPhone -> Vercel -> Drive for 1 MiB fragments.\n  const CHUNK_BYTES = 4 * 1024 * 1024;
   const requestedRange = String(req.headers.range || "").trim();
   let range = null;
   if (req.method === "GET") {
@@ -96,7 +96,7 @@ export default async function handler(req, res) {
   // Older curated rows can point at a copied asset that is no longer visible
   // to the current Drive OAuth identity. The original source file is retained
   // specifically so playback can recover without breaking the published Wave.
-  if (drive.status === 404 && clip.source_drive_id && clip.source_drive_id !== clip.video_asset_id) {
+  if (!sourcePreferred && drive.status === 404 && clip.source_drive_id && clip.source_drive_id !== clip.video_asset_id) {
     await drive.body?.cancel().catch(() => {});
     console.warn("[waves-video] copied asset unavailable; trying source asset");
     drive = await fetchDriveMedia(clip.source_drive_id);
@@ -122,7 +122,7 @@ export default async function handler(req, res) {
     const value = drive.headers.get(name);
     if (value) res.setHeader(name, value);
   }
-  res.setHeader("Cache-Control", "private, no-store");
+  // The URL is already viewer-authenticated. Let AVPlayer reuse byte ranges for\n  // a few minutes instead of throwing them away immediately.\n  res.setHeader("Cache-Control", "private, max-age=300");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("X-Content-Type-Options", "nosniff");
   if (req.method === "HEAD" || !drive.body) return res.end();
