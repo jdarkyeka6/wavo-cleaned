@@ -428,7 +428,7 @@ export default function VideoWavesPage() {
   }, [])
 
   useEffect(() => {
-    if (!userId) { setPosts([]); setLoading(false); setIsAdmin(false); return }
+    if (!userId) { setIsAdmin(false); return }
     let active = true
     supabase.from('profiles').select('is_admin').eq('id', userId).single()
       .then(async ({ data }) => {
@@ -483,22 +483,22 @@ export default function VideoWavesPage() {
   }
 
   async function refresh() {
-    if (!userId) return
     setLoading(true)
     setError('')
     try {
-      const [friendsResult, curatedResult] = await Promise.allSettled([loadVideoWaves(userId), loadCuratedWaves()])
+      // Guests get the published curated feed; account-only friend posts stay private.
+      const [friendsResult, curatedResult] = await Promise.allSettled([userId ? loadVideoWaves(userId) : Promise.resolve([]), loadCuratedWaves()])
       if (friendsResult.status === 'rejected' && curatedResult.status === 'rejected') throw friendsResult.reason
       if (friendsResult.status === 'rejected') console.warn('[waves] friend feed unavailable', friendsResult.reason)
       if (curatedResult.status === 'rejected') console.warn('[waves] curated feed unavailable', curatedResult.reason)
       const friends = friendsResult.status === 'fulfilled' ? friendsResult.value : []
       const curated = curatedResult.status === 'fulfilled' ? curatedResult.value : []
-      const [signalsResult, choicesResult] = await Promise.all([
+      const [signalsResult, choicesResult] = userId ? await Promise.all([
         supabase.from('waves_video_signals')
           .select('video_key,channel_slug,tags,watched_ms,plays,completions,skips,rewatches,liked,saved,updated_at')
           .eq('user_id', userId).order('updated_at', { ascending: false }).limit(1000),
         supabase.from('waves_channel_choices').select('channel_slug,visits').eq('user_id', userId),
-      ])
+      ]) : [{ data: [], error: null }, { data: [], error: null }]
       if (signalsResult.error) console.warn('[waves] preferences unavailable', signalsResult.error.message)
       if (choicesResult.error) console.warn('[waves] channel choices unavailable', choicesResult.error.message)
       interestsRef.current = { signals: signalsResult.data || [], choices: choicesResult.data || [] }
@@ -521,7 +521,7 @@ export default function VideoWavesPage() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { if (userId) refresh() }, [userId])
+  useEffect(() => { if (!booting) refresh() }, [userId, booting])
 
   async function loadMore() {
     if (!userId || !hasMoreRef.current || loadingMoreRef.current || loading) return
@@ -632,11 +632,11 @@ export default function VideoWavesPage() {
       <span>{channel === 'all' ? 'For You' : channel === 'friends' ? 'Friends' : channelBySlug[channel]?.name || 'Channels'}</span>
       <div className="video-waves-top-actions">
         {isAdmin && <button onClick={() => setManageOpen(true)} aria-label="Open Waves Studio"><SlidersHorizontal size={18} /> <span>Studio</span></button>}
-        <button onClick={() => setUploadOpen(true)} aria-label="Post a video"><Plus size={20} /> <span>Post</span></button>
-        <button onClick={() => supabase.auth.signOut()} aria-label="Sign out"><LogOut size={18} /></button>
+        {userId && <button onClick={() => setUploadOpen(true)} aria-label="Post a video"><Plus size={20} /> <span>Post</span></button>}
+        {userId && <button onClick={() => supabase.auth.signOut()} aria-label="Sign out"><LogOut size={18} /></button>}
       </div>
     </header>
-    <nav className="video-waves-channels" aria-label="Waves channels"><button className={channel === 'all' ? 'chosen' : ''} onClick={() => chooseChannel('all')}>✨ For You</button><button className={channel === 'friends' ? 'chosen' : ''} onClick={() => chooseChannel('friends')}>👥 Friends</button>{CURATED_CHANNELS.map((entry) => <button key={entry.slug} className={channel === entry.slug ? 'chosen' : ''} onClick={() => chooseChannel(entry.slug)}>{entry.emoji} {entry.name}</button>)}</nav>
+    <nav className="video-waves-channels" aria-label="Waves channels"><button className={channel === 'all' ? 'chosen' : ''} onClick={() => chooseChannel('all')}>✨ For You</button>{userId && <button className={channel === 'friends' ? 'chosen' : ''} onClick={() => chooseChannel('friends')}>👥 Friends</button>}{CURATED_CHANNELS.map((entry) => <button key={entry.slug} className={channel === entry.slug ? 'chosen' : ''} onClick={() => chooseChannel(entry.slug)}>{entry.emoji} {entry.name}</button>)}</nav>
     {loading && <div className="video-waves-loading">Loading video Waves…</div>}
     {error && <div className="video-waves-error" role="alert">{error}<button onClick={refresh}>Retry</button></div>}
     {!loading && !error && !shownPosts.length && <div className="video-waves-empty">
@@ -648,7 +648,7 @@ export default function VideoWavesPage() {
       </> : <>
         <strong>{channel === 'all' ? 'No video Waves yet.' : 'Nothing in this channel yet.'}</strong>
         <span>{channel === 'all' ? 'Your friends and approved curated videos will appear here.' : 'Try For You or another channel while we add more clips.'}</span>
-        <button className="video-waves-primary" onClick={() => setUploadOpen(true)}>Post a video</button>
+        {userId && <button className="video-waves-primary" onClick={() => setUploadOpen(true)}>Post a video</button>}
       </>}
     </div>}
     <section className="video-waves-feed" ref={feedRef} aria-label="Video Waves">
