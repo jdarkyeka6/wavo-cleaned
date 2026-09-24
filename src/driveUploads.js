@@ -3,6 +3,8 @@ import { supabase } from "./supabaseClient";
 export const DRIVE_HARD_MAX_BYTES = 500 * 1024 * 1024;
 
 const UPLOAD_UI_ID = "wavo-drive-upload-status";
+const REQUEST_TIMEOUT_MS = 30000;
+const UPLOAD_IDLE_TIMEOUT_MS = 45000;
 let uploadUiTimer = null;
 
 function formatBytes(bytes) {
@@ -70,14 +72,25 @@ async function authedRequest(path, body) {
   const token = data?.session?.access_token;
   if (!token) throw new Error("You're not signed in.");
 
-  const response = await fetch(path, {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let response;
+  try {
+    response = await fetch(path, {
+      signal: controller.signal,
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify(body),
-  });
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("Wavo storage did not respond. Please retry.");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -101,51 +114,70 @@ async function resolveDriveFile(fileName, size) {
 function putResumableFile(uploadUrl, file, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("PUT", uploadUrl, true);
-
-    xhr.upload.onprogress = (event) => {
-      if (!event.lengthComputable) return;
-      onProgress?.((event.loaded / event.total) * 100, event.loaded, event.total);
+    let settled = false;
+    let idleTimer;
+    const cleanup = () => clearTimeout(idleTimer);
+    const finish = (error, value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) reject(error);
+      else resolve(value);
+    };
+    const armIdleTimer = () => {
+      cleanup();
+      idleTimer = setTimeout(() => {
+        const error = new Error("Google Drive upload stopped responding. Please retry.");
+        error.code = "DRIVE_UPLOAD_TIMEOUT";
+        finish(error);
+        xhr.abort();
+      }, UPLOAD_IDLE_TIMEOUT_MS);
     };
 
+    xhr.open("PUT", uploadUrl, true);
+    // The timer measures inactivity, not total upload duration, so large files
+    // can finish on slow connections as long as bytes keep moving.
+    armIdleTimer();
+    xhr.upload.onprogress = (event) => {
+      armIdleTimer();
+      if (event.lengthComputable && event.total > 0) {
+        onProgress?.((event.loaded / event.total) * 100, event.loaded, event.total);
+      }
+    };
     xhr.onload = () => {
       let payload = {};
       try {
         payload = JSON.parse(xhr.responseText || "{}");
       } catch {
-        payload = {};
+        // Some iOS WebViews return an empty body after a successful PUT.
       }
-
-      // Google can legitimately return a successful 200/201 with an empty or
-      // unreadable response body in some embedded browsers. A 2xx means the
-      // bytes reached Drive; Wavo can recover the created file ID server-side.
       if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(payload);
+        finish(null, payload);
         return;
       }
-
       const error = new Error(
         xhr.status
           ? `Google Drive couldn't finish uploading that file (${xhr.status}).`
           : "Google Drive couldn't finish uploading that file.",
       );
       error.code = "DRIVE_UPLOAD_FAILED";
-      reject(error);
+      finish(error);
     };
-
     xhr.onerror = () => {
       const error = new Error("The upload connection to Google Drive failed. Try again.");
       error.code = "DRIVE_UPLOAD_NETWORK";
-      reject(error);
+      finish(error);
     };
-
     xhr.onabort = () => {
       const error = new Error("The upload was cancelled.");
       error.code = "DRIVE_UPLOAD_CANCELLED";
-      reject(error);
+      finish(error);
     };
-
-    xhr.send(file);
+    try {
+      xhr.send(file);
+    } catch (error) {
+      finish(error);
+    }
   });
 }
 
