@@ -59,7 +59,7 @@ import {
 } from "./wavoData";
 import "./styles.css";
 import "./mobile-ux.css";
-import { OfflineBanner, Onboarding, UniversalSearch, CatchUpCard, QuickAccess, ChatTools, ReactionSettings, PullToRefresh } from "./MobileUX";
+import { OfflineBanner, Onboarding, UniversalSearch, QuickAccess, ChatTools, ReactionSettings, PullToRefresh } from "./MobileUX";
 import { cacheAppData, loadCachedAppData, cacheMessages, loadCachedMessages, getDraft, setDraft, getUxPrefs, updateUxPrefs, rememberRecent, queueOutbox, getOutbox, removeOutboxItem } from "./offline";
 import { getChatPins, setChatPinned, getNicknames, setNickname, deleteDmMessage, deleteSpaceMessage, scheduleDmMessage, markDmRead } from "./uxData";
 
@@ -183,19 +183,16 @@ function AuthScreen({ onReady }) {
   );
 }
 
-function BottomNav({ tab, setTab, openCreate }) {
+function BottomNav({ tab, setTab }) {
   const items = [
     ["home", "Home", Home],
     ["spaces", "Spaces", Users],
-    ["create", "Create", Plus],
     ["inbox", "Inbox", MessageCircle],
     ["you", "You", User],
   ];
   return (
     <nav className="bottom-nav">
-      {items.map(([id, label, Icon]) => id === "create" ? (
-        <button key={id} className="nav-create" onClick={openCreate} aria-label="Create"><Icon size={24} /></button>
-      ) : (
+      {items.map(([id, label, Icon]) => (
         <button key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
           <Icon size={20} />
           <span>{label}</span>
@@ -205,16 +202,16 @@ function BottomNav({ tab, setTab, openCreate }) {
   );
 }
 
-function Header({ profile, pendingCount, onBell, onSearch }) {
+function Header({ pendingCount, onBell, onSearch, onCreate }) {
   return (
     <header className="app-header">
       <div className="brand-lockup"><div className="mini-mark">W</div><strong>Wavo</strong></div>
       <button className="mobile-search-trigger" onClick={onSearch} aria-label="Search Wavo"><Search size={19} /></button>
+      <button className="icon-button header-create" onClick={onCreate} aria-label="Create"><Plus size={20} /></button>
       <button className="icon-button" onClick={onBell} aria-label="Notifications">
         <Bell size={20} />
         {pendingCount > 0 && <span className="badge-dot">{pendingCount > 9 ? "9+" : pendingCount}</span>}
       </button>
-      <Avatar profile={profile} size="sm" />
     </header>
   );
 }
@@ -314,12 +311,13 @@ function HomeScreen({ profile, friends, spaces, posts, waves, plans, polls, requ
   const needsVote = polls.filter((p) => !(p.votes || []).some((v) => v.user_id === userId)).slice(0, 2);
   return (
     <div className="screen home-screen">
-      <section className="hero-card">
-        <span className="eyebrow">YOUR PEOPLE, RIGHT NOW</span>
-        <h1>Hey {profile?.username || "there"}.</h1>
-        <p>{spaces.length} Space{spaces.length === 1 ? "" : "s"} · {upcoming.length} upcoming plan{upcoming.length === 1 ? "" : "s"} · {posts.length} friend post{posts.length === 1 ? "" : "s"}</p>
+      <section className="home-summary">
+        <div>
+          <span className="eyebrow">HOME</span>
+          <h1>Hey {profile?.username || "there"}.</h1>
+        </div>
+        <span>{spaces.length} Spaces · {upcoming.length} plans</span>
       </section>
-      <CatchUpCard requests={requests} plans={plans} polls={polls} userId={userId} />
       <QuickAccess userId={userId} friends={friends} spaces={spaces} pins={pins || []} onFriend={actions.openFriend} onSpace={actions.openSpace} />
 
       {(requests.length > 0 || needsVote.length > 0) && (
@@ -340,17 +338,25 @@ function HomeScreen({ profile, friends, spaces, posts, waves, plans, polls, requ
       {needsVote.map((poll) => <PollCard key={poll.id} poll={poll} userId={userId} onVote={actions.vote} />)}
 
 
-      <section>
-        <div className="section-heading"><div><span className="eyebrow">POSTS</span><h2>From friends</h2></div><button className="text-btn" onClick={() => actions.openCreate("post")}>New post</button></div>
-        {posts.length ? <div className="cards-stack">{posts.map((post) => <PostCard key={post.id} post={post} userId={userId} onReact={actions.reactPost} onDelete={actions.deletePost} />)}</div> : <div className="empty-card"><MessageCircle /><strong>No posts yet</strong><span>Posts stay around, and you choose which friends get to see each one.</span><button onClick={() => actions.openCreate("post")}>Post something</button></div>}
-      </section>
+      <details className="secondary-panel">
+        <summary>
+          <div><strong>More</strong><span>Posts, Waves and activities</span></div>
+          <Plus size={18} />
+        </summary>
+        <div className="secondary-panel-content">
+          <section>
+            <div className="section-heading"><div><span className="eyebrow">POSTS</span><h2>From friends</h2></div><button className="text-btn" onClick={() => actions.openCreate("post")}>New post</button></div>
+            {posts.length ? <div className="cards-stack">{posts.map((post) => <PostCard key={post.id} post={post} userId={userId} onReact={actions.reactPost} onDelete={actions.deletePost} />)}</div> : <div className="empty-card"><MessageCircle /><strong>No posts yet</strong><span>Posts stay around, and you choose which friends get to see each one.</span><button onClick={() => actions.openCreate("post")}>Post something</button></div>}
+          </section>
 
-      <section>
-        <div className="section-heading"><div><span className="eyebrow">WAVES</span><h2>From your people</h2></div><button className="text-btn" onClick={() => actions.openCreate("wave")}>Send Wave</button></div>
-        {waves.length ? <div className="cards-stack">{waves.map((wave) => <WaveCard key={wave.id} wave={wave} onReact={actions.react} />)}</div> : <div className="empty-card"><Sparkles /><strong>No Waves yet</strong><span>A Wave is a quick update for friends or a Space, not a public performance.</span><button onClick={() => actions.openCreate("wave")}>Send the first one</button></div>}
-      </section>
+          <section>
+            <div className="section-heading"><div><span className="eyebrow">WAVES</span><h2>From your people</h2></div><button className="text-btn" onClick={() => actions.openCreate("wave")}>Send Wave</button></div>
+            {waves.length ? <div className="cards-stack">{waves.map((wave) => <WaveCard key={wave.id} wave={wave} onReact={actions.react} />)}</div> : <div className="empty-card"><Sparkles /><strong>No Waves yet</strong><span>A Wave is a quick update for friends or a Space, not a public performance.</span><button onClick={() => actions.openCreate("wave")}>Send the first one</button></div>}
+          </section>
 
-      {activities.length > 0 && <section><div className="section-heading"><div><span className="eyebrow">ACTIVE</span><h2>Things your Spaces started</h2></div></div><div className="mini-grid">{activities.slice(0, 4).map((a) => <div className="mini-card" key={a.id}><Gamepad2 /><strong>{a.title}</strong><span>{a.type.replaceAll("_", " ")}</span></div>)}</div></section>}
+          {activities.length > 0 && <section><div className="section-heading"><div><span className="eyebrow">ACTIVE</span><h2>Things your Spaces started</h2></div></div><div className="mini-grid">{activities.slice(0, 4).map((a) => <div className="mini-card" key={a.id}><Gamepad2 /><strong>{a.title}</strong><span>{a.type.replaceAll("_", " ")}</span></div>)}</div></section>}
+        </div>
+      </details>
     </div>
   );
 }
@@ -367,12 +373,15 @@ function SpacesScreen({ spaces, selectedSpace, setSelectedSpace, messages, messa
           <div className="space-emoji large">{selectedSpace.emoji || "🌊"}</div>
           <div><span className="eyebrow">SPACE</span><h1>{selectedSpace.name}</h1><p>{selectedSpace.description || "Your shared corner of Wavo."}</p></div>
         </section>
-        <div className="quick-actions">
-          <button onClick={() => actions.openCreate("plan", selectedSpace.id)}><CalendarDays />Plan</button>
-          <button onClick={() => actions.openCreate("poll", selectedSpace.id)}><Check />Poll</button>
-          <button onClick={() => actions.openCreate("activity", selectedSpace.id)}><Gamepad2 />Activity</button>
-          <button onClick={() => actions.openCreate("wave", selectedSpace.id)}><Sparkles />Wave</button>
-        </div>
+        <details className="compact-action-menu">
+          <summary><Plus size={18} /><span>Create in this Space</span></summary>
+          <div className="compact-action-grid">
+            <button onClick={() => actions.openCreate("plan", selectedSpace.id)}><CalendarDays />Plan</button>
+            <button onClick={() => actions.openCreate("poll", selectedSpace.id)}><Check />Poll</button>
+            <button onClick={() => actions.openCreate("activity", selectedSpace.id)}><Gamepad2 />Activity</button>
+            <button onClick={() => actions.openCreate("wave", selectedSpace.id)}><Sparkles />Wave</button>
+          </div>
+        </details>
         {spacePlans.length > 0 && <section><div className="section-heading"><h2>Plans</h2></div><div className="cards-stack">{spacePlans.slice(0, 3).map((p) => <PlanCard key={p.id} plan={p} userId={userId} onRsvp={actions.rsvp} onShareLocation={actions.shareLocation} />)}</div></section>}
         {spacePolls.length > 0 && <section><div className="section-heading"><h2>Decisions</h2></div>{spacePolls.slice(0, 2).map((p) => <PollCard key={p.id} poll={p} userId={userId} onVote={actions.vote} />)}</section>}
         {spaceActivities.length > 0 && <section><div className="section-heading"><h2>Activities</h2></div><div className="mini-grid">{spaceActivities.map((a) => <div key={a.id} className="mini-card"><Gamepad2 /><strong>{a.title}</strong><span>{a.type.replaceAll("_", " ")}</span></div>)}</div></section>}
@@ -424,7 +433,10 @@ function InboxScreen({ friends, requests, selectedFriend, setSelectedFriend, mes
     <div className="screen">
       <div className="screen-title"><div><span className="eyebrow">MESSAGES</span><h1>Inbox</h1><p>Persistent conversations with people you actually added.</p></div></div>
       {requests.length > 0 && <section><div className="section-heading"><h2>Friend requests</h2></div><div className="request-list">{requests.map((r) => <div className="friend-row" key={r.id}><Avatar profile={r.sender} size="sm" /><div><strong>{r.sender?.username}</strong><span>wants to connect</span></div><button className="chip active" onClick={() => actions.respondRequest(r.id, "accepted")}>Accept</button><button className="chip" onClick={() => actions.respondRequest(r.id, "declined")}>Decline</button></div>)}</div></section>}
-      <section className="add-friend-card"><div><UserPlus /><strong>Add someone</strong></div><form onSubmit={runSearch}><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search username" /><button>{searching ? "…" : "Search"}</button></form>{results.map((p) => <div className="friend-row search-result" key={p.id}><Avatar profile={p} size="sm" /><div><strong>{p.username}</strong><span>{p.status || "Wavo user"}</span></div><button onClick={() => actions.addFriend(p.id)}>Add</button></div>)}</section>
+      <details className="compact-action-menu add-friend-menu">
+        <summary><UserPlus size={18} /><span>Add someone</span></summary>
+        <div className="add-friend-card"><form onSubmit={runSearch}><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search username" /><button>{searching ? "…" : "Search"}</button></form>{results.map((p) => <div className="friend-row search-result" key={p.id}><Avatar profile={p} size="sm" /><div><strong>{p.username}</strong><span>{p.status || "Wavo user"}</span></div><button onClick={() => actions.addFriend(p.id)}>Add</button></div>)}</div>
+      </details>
       <section><div className="section-heading"><h2>Friends</h2><span className="tiny-pill">{friends.length}</span></div>{friends.length ? <div className="friend-list">{friends.map((friend) => <button className="friend-row friend-button" key={friend.id} onClick={() => setSelectedFriend(friend)}><Avatar profile={friend} size="md" /><div><strong>{friend.username}</strong><span>{friend.status || "Tap to message"}</span></div><MessageCircle size={18} /></button>)}</div> : <div className="empty-card"><MessageCircle /><strong>No conversations yet</strong><span>Add a friend above, then messages stay here instead of disappearing.</span></div>}</section>
     </div>
   );
@@ -453,20 +465,25 @@ function ProfileScreen({ profile, posts, userId, onPostReact, onPostDelete, onNe
         <div className="section-heading"><div><span className="eyebrow">YOUR POSTS</span><h2>What you've shared</h2></div><button className="text-btn" onClick={onNewPost}>New post</button></div>
         {posts.length ? <div className="cards-stack">{posts.map((post) => <PostCard key={post.id} post={post} userId={userId} onReact={onPostReact} onDelete={onPostDelete} />)}</div> : <div className="empty-card"><MessageCircle /><strong>Nothing posted yet</strong><span>Your persistent friend posts will live here.</span></div>}
       </section>
-      <form className="settings-card" onSubmit={saveProfile}><div className="settings-head"><Sparkles /><div><strong>Identity</strong><span>Keep it lightweight. You're here for people, not follower counts.</span></div></div><label>Status<input value={status} onChange={(e) => setStatus(e.target.value)} placeholder="Gaming, studying, out…" /></label><label>Bio<textarea value={bio} onChange={(e) => setBio(e.target.value)} maxLength={180} placeholder="A sentence about you" /></label><ReactionSettings userId={userId} /><button className="secondary-btn">{saving ? "Saving…" : "Save profile"}</button></form>
+      <details className="profile-settings-menu">
+        <summary><div><Settings size={19} /><strong>Settings</strong></div><span>Profile, privacy and notifications</span></summary>
+        <div className="settings-stack">
+          <form className="settings-card" onSubmit={saveProfile}><div className="settings-head"><Sparkles /><div><strong>Identity</strong><span>Status, bio and reactions.</span></div></div><label>Status<input value={status} onChange={(e) => setStatus(e.target.value)} placeholder="Gaming, studying, out…" /></label><label>Bio<textarea value={bio} onChange={(e) => setBio(e.target.value)} maxLength={180} placeholder="A sentence about you" /></label><ReactionSettings userId={userId} /><button className="secondary-btn">{saving ? "Saving…" : "Save profile"}</button></form>
 
-      <section className="settings-card"><div className="settings-head"><Shield /><div><strong>Privacy Centre</strong><span>You decide what Wavo exposes.</span></div></div>
-        {privacy && <>
-          <ToggleRow label="Show online status" value={privacy.show_online} onChange={(value) => onPrivacy({ show_online: value })} />
-          <ToggleRow label="Read receipts" value={privacy.read_receipts} onChange={(value) => onPrivacy({ read_receipts: value })} />
-          <ToggleRow label="Allow friend requests" value={privacy.allow_friend_requests} onChange={(value) => onPrivacy({ allow_friend_requests: value })} />
-          <label>Default location sharing<select value={privacy.location_default} onChange={(e) => onPrivacy({ location_default: e.target.value })}><option value="off">Off</option><option value="approximate">Approximate</option><option value="precise">Precise</option></select></label>
-        </>}
-      </section>
+          <section className="settings-card"><div className="settings-head"><Shield /><div><strong>Privacy Centre</strong><span>Online status, receipts and requests.</span></div></div>
+            {privacy && <>
+              <ToggleRow label="Show online status" value={privacy.show_online} onChange={(value) => onPrivacy({ show_online: value })} />
+              <ToggleRow label="Read receipts" value={privacy.read_receipts} onChange={(value) => onPrivacy({ read_receipts: value })} />
+              <ToggleRow label="Allow friend requests" value={privacy.allow_friend_requests} onChange={(value) => onPrivacy({ allow_friend_requests: value })} />
+              <label>Default location sharing<select value={privacy.location_default} onChange={(e) => onPrivacy({ location_default: e.target.value })}><option value="off">Off</option><option value="approximate">Approximate</option><option value="precise">Precise</option></select></label>
+            </>}
+          </section>
 
-      <section className="settings-card"><div className="settings-head"><MapPin /><div><strong>Location sharing</strong><span>{locations.length ? `${locations.length} active share${locations.length === 1 ? "" : "s"}` : "Nothing is being shared"}</span></div></div>{locations.length > 0 && <button className="danger-soft" onClick={onStopLocations}>Stop all location sharing</button>}</section>
-      <section className="settings-card"><div className="settings-head"><Bell /><div><strong>Notifications</strong><span>Enable message and plan alerts when you want them.</span></div></div><button className="secondary-btn" onClick={onEnableNotifications}>Enable notifications</button></section>
-      <button className="logout-button" onClick={onLogout}><LogOut size={18} /> Log out</button>
+          <section className="settings-card"><div className="settings-head"><MapPin /><div><strong>Location sharing</strong><span>{locations.length ? `${locations.length} active share${locations.length === 1 ? "" : "s"}` : "Nothing is being shared"}</span></div></div>{locations.length > 0 && <button className="danger-soft" onClick={onStopLocations}>Stop all location sharing</button>}</section>
+          <section className="settings-card"><div className="settings-head"><Bell /><div><strong>Notifications</strong><span>Message and plan alerts.</span></div></div><button className="secondary-btn" onClick={onEnableNotifications}>Enable notifications</button></section>
+          <button className="logout-button" onClick={onLogout}><LogOut size={18} /> Log out</button>
+        </div>
+      </details>
     </div>
   );
 }
@@ -760,14 +777,14 @@ export default function App() {
   return (
     <main className="app-shell">
       <OfflineBanner online={online} queued={getOutbox(userId).length} />
-      {!isDeepView && <Header profile={data.profile} pendingCount={data.requests.length} onBell={() => setTab("inbox")} onSearch={() => setSearchOpen(true)} />}
+      {!isDeepView && <Header pendingCount={data.requests.length} onBell={() => setTab("inbox")} onSearch={() => setSearchOpen(true)} onCreate={() => actions.openCreate()} />}
       <PullToRefresh onRefresh={refresh}><div className="app-content">
         {tab === "home" && <HomeScreen {...data} userId={userId} actions={actions} />}
         {tab === "spaces" && <SpacesScreen spaces={data.spaces} selectedSpace={selectedSpace} setSelectedSpace={setSelectedSpace} messages={messages} messageText={messageText} setMessageText={setMessageText} sendMessage={sendCurrentMessage} plans={data.plans} polls={data.polls} activities={data.activities} userId={userId} actions={actions} />}
         {tab === "inbox" && <InboxScreen friends={data.friends} requests={data.requests} selectedFriend={selectedFriend} setSelectedFriend={setSelectedFriend} messages={messages} messageText={messageText} setMessageText={setMessageText} sendMessage={sendCurrentMessage} userId={userId} actions={actions} nicknames={data.nicknames} />}
         {tab === "you" && <ProfileScreen profile={data.profile} posts={data.posts.filter((p) => p.author_id === userId)} userId={userId} onPostReact={actions.reactPost} onPostDelete={actions.deletePost} onNewPost={() => actions.openCreate("post")} privacy={data.privacy} locations={data.locations.filter((l) => l.owner_id === userId)} onPrivacy={updatePrivacy} onProfileSaved={refresh} onEnableNotifications={enableNotifications} onStopLocations={stopLocations} onLogout={() => supabase.auth.signOut()} />}
       </div></PullToRefresh>
-      {!isDeepView && <BottomNav tab={tab} setTab={(next) => { setTab(next); if (next !== "spaces") setSelectedSpace(null); if (next !== "inbox") setSelectedFriend(null); }} openCreate={() => actions.openCreate()} />}
+      {!isDeepView && <BottomNav tab={tab} setTab={(next) => { setTab(next); if (next !== "spaces") setSelectedSpace(null); if (next !== "inbox") setSelectedFriend(null); }} />}
       {createMode && <CreateModal mode={createMode === true ? null : createMode} setMode={setCreateMode} spaces={data.spaces} friends={data.friends} presetSpace={presetSpace} onClose={() => { setCreateMode(false); setPresetSpace(null); }} onCreated={refresh} userId={userId} />}
       <Onboarding userId={userId} onCreateSpace={() => actions.openCreate("space")} onAddFriend={() => setTab("inbox")} />
       <UniversalSearch open={searchOpen} onClose={() => setSearchOpen(false)} data={data} messages={messages} onOpenFriend={actions.openFriend} onOpenSpace={actions.openSpace} onOpenTab={setTab} />
