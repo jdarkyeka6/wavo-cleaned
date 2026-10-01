@@ -172,8 +172,16 @@ platform :ios do
       targets: ["WavoLiveActivity"]
     )
 
-    # Wavo 1.1 starts a fresh build train. Keep the human-readable sequence.
-    next_build = 55
+    # Always advance the 1.1 TestFlight train instead of reusing a hard-coded build.
+    latest_build = latest_testflight_build_number(
+      api_key: api_key,
+      app_identifier: APP_IDENTIFIER,
+      version: "1.1",
+      initial_build_number: 55
+    )
+    next_build = [latest_build.to_i + 1, 56].max
+    UI.message("Using TestFlight build #{next_build} (latest uploaded: #{latest_build}).")
+
     increment_version_number(
       xcodeproj: "App.xcodeproj",
       version_number: "1.1"
