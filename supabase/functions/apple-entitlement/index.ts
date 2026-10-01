@@ -5,12 +5,13 @@ import { Buffer } from "node:buffer";
 
 const BUNDLE_ID = "lol.wavo.app";
 const APPLE_APP_ID = 6792405668;
-const PRODUCTS: Record<string, "premium" | "plus" | "pro"> = {
+const PRODUCTS: Record<string, "premium" | "plus" | "pro" | "black"> = {
   "lol.wavo.premium.monthly": "premium",
   "lol.wavo.plus.monthly": "plus",
   "lol.wavo.pro.monthly": "pro",
+  "lol.wavo.black.monthly": "black",
 };
-const TIER_RANK: Record<string, number> = { premium: 1, plus: 2, pro: 3, vip: 3 };
+const TIER_RANK: Record<string, number> = { premium: 1, plus: 2, pro: 3, vip: 3, black: 4 };
 const cors = {
   "access-control-allow-origin": "*",
   "access-control-allow-headers": "authorization, x-client-info, apikey, content-type",
@@ -78,18 +79,34 @@ Deno.serve(async (req: Request) => {
     const revoked = Number(tx?.revocationDate || 0) > 0;
     if (revoked || !Number.isFinite(expiresMs) || expiresMs <= Date.now()) return json({ error: "subscription_inactive" }, 400);
 
-    const { data: current } = await admin.from("profiles").select("tier,is_premium,premium_until").eq("id", user.id).maybeSingle();
+    const { data: current } = await admin
+      .from("profiles")
+      .select("tier,is_premium,premium_until,entitlement_source")
+      .eq("id", user.id)
+      .maybeSingle();
     const currentTier = String(current?.tier || "").toLowerCase();
-    const currentActive = Boolean(current?.is_premium) && (!current?.premium_until || new Date(current.premium_until).getTime() > Date.now());
-    const tier = currentActive && (TIER_RANK[currentTier] || 0) > (TIER_RANK[purchasedTier] || 0)
-      ? (currentTier === "vip" ? "pro" : currentTier)
-      : purchasedTier;
-    const premiumUntil = new Date(expiresMs).toISOString();
+    const currentSource = String(current?.entitlement_source || "").toLowerCase();
+    const currentUntilMs = current?.premium_until ? new Date(current.premium_until).getTime() : 0;
+    const currentActive = Boolean(current?.is_premium) && (!current?.premium_until || currentUntilMs > Date.now());
+    const currentRank = currentActive && currentSource === "apple_black" ? 4 : (TIER_RANK[currentTier] || 0);
+    const purchasedRank = TIER_RANK[purchasedTier] || 0;
+    const keepCurrent = currentActive && currentRank > purchasedRank;
+    const featureTier = purchasedTier === "black" ? "pro" : purchasedTier;
+    const tier = keepCurrent ? (currentTier === "vip" ? "pro" : currentTier) : featureTier;
+    const entitlementSource = keepCurrent
+      ? currentSource
+      : purchasedTier === "black"
+        ? "apple_black"
+        : "apple";
+    const effectiveExpiryMs = keepCurrent && Number.isFinite(currentUntilMs)
+      ? Math.max(expiresMs, currentUntilMs)
+      : expiresMs;
+    const premiumUntil = new Date(effectiveExpiryMs).toISOString();
     const { error: profileError } = await admin.from("profiles").update({
       is_premium: true,
       tier,
       premium_until: premiumUntil,
-      entitlement_source: "apple",
+      entitlement_source: entitlementSource,
     }).eq("id", user.id);
     if (profileError) throw profileError;
     const { error: entitlementError } = await admin.from("store_entitlements").upsert({
@@ -99,12 +116,12 @@ Deno.serve(async (req: Request) => {
       transaction_id: String(tx?.transactionId || ""),
       original_transaction_id: String(tx?.originalTransactionId || tx?.transactionId || ""),
       environment: String(tx?.environment || environment),
-      expires_at: premiumUntil,
+      expires_at: new Date(expiresMs).toISOString(),
       active: true,
       verified_at: new Date().toISOString(),
     }, { onConflict: "provider,transaction_id" });
     if (entitlementError) throw entitlementError;
-    return json({ ok: true, tier, premiumUntil, productId });
+    return json({ ok: true, tier, membership: entitlementSource === "apple_black" ? "black" : tier, premiumUntil, productId });
   } catch (error) {
     console.error("apple-entitlement verify", error);
     return json({ error: "verification_failed", message: "Apple could not verify this subscription." }, 400);
