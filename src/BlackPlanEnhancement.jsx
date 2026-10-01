@@ -4,7 +4,13 @@ import { Check, Crown } from 'lucide-react'
 import { supabase } from './supabaseClient'
 import { PLANS } from './lib/pricing'
 import { isNativeApp } from './lib/platform'
-import { startWebCheckout } from './storePurchases'
+import {
+  APPLE_PRODUCTS,
+  isNativeIOS,
+  loadStoreProducts,
+  purchaseAppleTier,
+  startWebCheckout,
+} from './storePurchases'
 import './black-plan.css'
 
 const HOST_ATTR = 'data-wavo-black-plan-host'
@@ -14,13 +20,25 @@ function premiumIsActive(profile) {
   return !profile.premium_until || new Date(profile.premium_until) > new Date()
 }
 
-function patchWebProCard(isBlack) {
-  if (isNativeApp) return
+async function readProfile(userId) {
+  if (!userId) return null
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id,is_premium,premium_until,tier,entitlement_source')
+    .eq('id', userId)
+    .single()
+  if (error) throw error
+  return data
+}
+
+function patchPlanUi(isBlack) {
   const cards = [...document.querySelectorAll('.wpp-plan')]
   const proCard = cards.find((card) => card.querySelector('.wpp-plan-title strong')?.textContent?.trim().toLowerCase() === 'pro')
   if (proCard) {
-    const price = proCard.querySelector('.wpp-plan-title small')
-    if (price && price.textContent !== 'A$19.99/month') price.textContent = 'A$19.99/month'
+    if (!isNativeApp) {
+      const price = proCard.querySelector('.wpp-plan-title small')
+      if (price && price.textContent !== 'A$19.99/month') price.textContent = 'A$19.99/month'
+    }
 
     if (isBlack) {
       proCard.classList.remove('current')
@@ -52,16 +70,20 @@ function patchWebProCard(isBlack) {
 export default function BlackPlanEnhancement() {
   const [host, setHost] = useState(null)
   const [profile, setProfile] = useState(null)
+  const [storeProducts, setStoreProducts] = useState([])
+  const [storeError, setStoreError] = useState('')
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
 
   const activePaid = useMemo(() => premiumIsActive(profile), [profile])
-  const isBlack = activePaid && String(profile?.entitlement_source || '').toLowerCase() === 'stripe_black'
+  const source = String(profile?.entitlement_source || '').toLowerCase()
+  const isBlack = activePaid && (source === 'stripe_black' || source === 'apple_black')
   const blockedByCurrentPlan = activePaid && !isBlack
+  const native = isNativeIOS()
+  const blackProduct = storeProducts.find((item) => item?.identifier === APPLE_PRODUCTS.black)
+  const nativeBlackReady = Boolean(blackProduct)
 
   useEffect(() => {
-    if (isNativeApp) return undefined
-
     const sync = () => {
       const plans = document.querySelector('.wpp-plans')
       if (!plans) {
@@ -85,7 +107,6 @@ export default function BlackPlanEnhancement() {
   }, [])
 
   useEffect(() => {
-    if (isNativeApp) return undefined
     let alive = true
 
     async function load(nextSession) {
@@ -94,18 +115,13 @@ export default function BlackPlanEnhancement() {
         if (alive) setProfile(null)
         return
       }
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id,is_premium,premium_until,tier,entitlement_source')
-        .eq('id', userId)
-        .single()
-      if (!alive) return
-      if (error) {
+      try {
+        const nextProfile = await readProfile(userId)
+        if (alive) setProfile(nextProfile)
+      } catch (error) {
         console.error('[wavo black] profile', error)
-        setProfile(null)
-        return
+        if (alive) setProfile(null)
       }
-      setProfile(data)
     }
 
     supabase.auth.getSession().then(({ data }) => load(data.session || null))
@@ -117,11 +133,26 @@ export default function BlackPlanEnhancement() {
   }, [])
 
   useEffect(() => {
-    if (isNativeApp) return undefined
+    if (!native) return undefined
+    let alive = true
+    loadStoreProducts({ retries: 1 })
+      .then((products) => {
+        if (!alive) return
+        setStoreProducts(products || [])
+        setStoreError('')
+      })
+      .catch((error) => {
+        if (!alive) return
+        setStoreError(error?.message || 'App Store subscriptions could not be loaded.')
+      })
+    return () => { alive = false }
+  }, [native])
+
+  useEffect(() => {
     let queued = false
     const apply = () => {
       queued = false
-      patchWebProCard(isBlack)
+      patchPlanUi(isBlack)
     }
     const schedule = () => {
       if (queued) return
@@ -139,6 +170,15 @@ export default function BlackPlanEnhancement() {
     setBusy(true)
     setNotice('')
     try {
+      if (native) {
+        if (!nativeBlackReady) throw new Error('Wavo Black is ready in the app, but its App Store subscription product is not available yet.')
+        if (!profile?.id) throw new Error('Sign in before subscribing.')
+        await purchaseAppleTier('black', profile.id)
+        setProfile(await readProfile(profile.id))
+        setNotice('Wavo Black is active.')
+        setBusy(false)
+        return
+      }
       await startWebCheckout('black')
     } catch (error) {
       setNotice(error?.message || 'Wavo Black checkout could not start.')
@@ -146,9 +186,14 @@ export default function BlackPlanEnhancement() {
     }
   }
 
-  if (isNativeApp || !host) return null
+  if (!host) return null
 
   const black = PLANS.black
+  const priceLabel = native
+    ? blackProduct?.priceString
+      ? `${blackProduct.priceString}/month`
+      : 'App Store setup pending'
+    : `A$${black.price.toFixed(2)}/month`
   const features = [
     'Everything in Wavo Pro',
     'Exclusive Black member profile treatment',
@@ -161,7 +206,7 @@ export default function BlackPlanEnhancement() {
     <article className={`wpp-plan wavo-black-plan ${isBlack ? 'current' : ''}`}>
       <div className="wpp-plan-title">
         <span className="wavo-black-icon"><Crown size={18}/></span>
-        <div><strong>Black</strong><small>A${black.price.toFixed(2)}/month</small></div>
+        <div><strong>Black</strong><small>{priceLabel}</small></div>
         {isBlack && <em>Current</em>}
       </div>
       <p className="wavo-black-copy">The luxury supporter tier. Normal Wavo stays normal-priced; Black is for people who want the top membership.</p>
@@ -172,10 +217,12 @@ export default function BlackPlanEnhancement() {
         <div className="wpp-plan-included">Wavo Black is active</div>
       ) : blockedByCurrentPlan ? (
         <div className="wpp-plan-included">Available after your current paid period ends</div>
+      ) : native && !nativeBlackReady ? (
+        <div className="wpp-plan-included">Waiting for Wavo Black in App Store Connect</div>
       ) : (
         <button type="button" disabled={busy} onClick={buyBlack}>{busy ? 'Opening…' : 'Get Wavo Black'}</button>
       )}
-      {notice && <small className="wavo-black-note" role="status">{notice}</small>}
+      {(notice || (native && storeError)) && <small className="wavo-black-note" role="status">{notice || storeError}</small>}
     </article>,
     host,
   )
