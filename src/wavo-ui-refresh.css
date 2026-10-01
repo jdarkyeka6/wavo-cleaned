@@ -1,0 +1,526 @@
+/* Wavo UI refresh: chat-first hierarchy, layered depth, and contextual power tools. */
+:root {
+  --wavo-depth-bg: #07111d;
+  --wavo-depth-surface: rgba(18, 30, 49, .82);
+  --wavo-depth-surface-strong: rgba(23, 37, 60, .94);
+  --wavo-depth-border: rgba(181, 205, 235, .10);
+  --wavo-depth-border-strong: rgba(181, 205, 235, .16);
+  --wavo-depth-text: #f4f7fb;
+  --wavo-depth-muted: #98a7bc;
+  --wavo-depth-accent: #7c6cff;
+  --wavo-depth-cyan: #8fe8ff;
+  --wavo-sheet-shadow: 0 28px 90px rgba(0, 0, 0, .48);
+}
+
+/* The conversation is the product. Keep the viewport to header / messages / composer. */
+.chat-screen {
+  position: relative !important;
+  grid-template-rows: auto minmax(0, 1fr) auto !important;
+  background:
+    radial-gradient(110% 55% at 50% -10%, rgba(80, 118, 185, .10), transparent 58%),
+    var(--wavo-depth-bg) !important;
+  color: var(--wavo-depth-text);
+}
+
+.chat-screen .chat-topbar {
+  position: relative !important;
+  top: auto !important;
+  z-index: 45 !important;
+  min-height: calc(58px + env(safe-area-inset-top)) !important;
+  padding: calc(8px + env(safe-area-inset-top)) 12px 8px !important;
+  gap: 9px !important;
+  align-items: center !important;
+  border-bottom: 1px solid var(--wavo-depth-border) !important;
+  background: rgba(7, 17, 29, .86) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.15);
+  backdrop-filter: blur(24px) saturate(1.15);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .10);
+}
+
+.chat-screen .chat-topbar > button,
+.chat-screen .chat-topbar .mobile-tools-button,
+.chat-screen .chat-topbar .wavo-call-button,
+.chat-screen .chat-topbar .wavo-video-call-button {
+  width: 40px !important;
+  min-width: 40px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  padding: 0 !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  border: 1px solid var(--wavo-depth-border) !important;
+  border-radius: 14px !important;
+  background: rgba(255, 255, 255, .045) !important;
+  color: #d9e4f3 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035) !important;
+}
+
+.chat-screen .chat-topbar > button:active,
+.chat-screen .chat-topbar .mobile-tools-button:active {
+  transform: scale(.96);
+  background: rgba(255, 255, 255, .075) !important;
+}
+
+.chat-screen .chat-topbar > button:first-child,
+.chat-screen .chat-topbar .chat-back-button {
+  min-width: 40px !important;
+  width: 40px !important;
+  color: var(--wavo-depth-cyan) !important;
+}
+
+.chat-screen .chat-topbar .chat-back-button span {
+  display: none !important;
+}
+
+.chat-screen .chat-topbar .avatar,
+.chat-screen .chat-topbar .avatar-sm {
+  width: 42px !important;
+  height: 42px !important;
+  min-width: 42px !important;
+  border-radius: 15px !important;
+  border: 1px solid rgba(143, 232, 255, .14);
+  box-shadow: 0 7px 18px rgba(0, 0, 0, .18), inset 0 1px 0 rgba(255, 255, 255, .06);
+}
+
+.chat-screen .chat-topbar > div:not(.avatar) {
+  min-width: 0 !important;
+  display: grid !important;
+  gap: 1px !important;
+  align-content: center !important;
+}
+
+.chat-screen .chat-topbar strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px !important;
+  line-height: 1.18 !important;
+  letter-spacing: -.015em;
+}
+
+.chat-screen .chat-topbar span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--wavo-depth-muted) !important;
+  font-size: 11px !important;
+  line-height: 1.3 !important;
+}
+
+/* Make the existing settings button read as a conventional More menu. */
+.chat-screen .chat-topbar .mobile-tools-button svg {
+  display: none !important;
+}
+
+.chat-screen .chat-topbar .mobile-tools-button::after {
+  content: '•••';
+  transform: translateY(-2px);
+  font-size: 15px;
+  font-weight: 850;
+  letter-spacing: 1px;
+  color: #dbe6f5;
+}
+
+.chat-screen .dm-messages {
+  padding: 14px 13px 22px !important;
+  gap: 7px !important;
+  background: transparent !important;
+  scrollbar-width: none;
+}
+
+.chat-screen .dm-messages::-webkit-scrollbar {
+  display: none;
+}
+
+.chat-screen .dm-row {
+  padding-inline: 1px;
+}
+
+.chat-screen .dm-bubble {
+  max-width: min(78%, 560px) !important;
+  padding: 9px 12px 7px !important;
+  border-radius: 18px !important;
+  border: 1px solid rgba(255, 255, 255, .055) !important;
+  background: rgba(24, 37, 57, .90) !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .13), inset 0 1px 0 rgba(255, 255, 255, .025);
+}
+
+.chat-screen .dm-row.mine .dm-bubble {
+  border-color: rgba(var(--wpp-accent, 112, 91, 255), .24) !important;
+  background:
+    linear-gradient(145deg, rgba(var(--wpp-accent, 112, 91, 255), .94), rgba(var(--wpp-accent, 112, 91, 255), .79)) !important;
+  box-shadow: 0 9px 24px rgba(var(--wpp-accent, 112, 91, 255), .13), inset 0 1px 0 rgba(255, 255, 255, .12);
+}
+
+.chat-screen .dm-bubble p {
+  margin: 0 !important;
+  font-size: 15px !important;
+  line-height: 1.35 !important;
+}
+
+.chat-screen .dm-bubble > span {
+  display: block;
+  margin-top: 3px;
+  color: rgba(230, 238, 249, .58) !important;
+  font-size: 9px !important;
+  line-height: 1.1 !important;
+}
+
+/* Premium controls stay available in Profile Studio and desktop side rail; never consume mobile chat height. */
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .wpp-chat-host {
+  display: none !important;
+}
+
+/* Wavo AI is now a contextual launcher rather than a permanent card. */
+.chat-screen .wavo-plus-ai-host {
+  position: absolute !important;
+  z-index: 54 !important;
+  right: 13px !important;
+  bottom: calc(70px + env(safe-area-inset-bottom)) !important;
+  width: auto !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  pointer-events: none;
+}
+
+.wavo-ai-trigger {
+  pointer-events: auto;
+  min-width: 40px;
+  height: 40px;
+  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgba(151, 131, 255, .26);
+  border-radius: 14px;
+  background: rgba(19, 28, 47, .94);
+  color: #dcd5ff;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .28), inset 0 1px 0 rgba(255, 255, 255, .055);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  font-size: 11px;
+  font-weight: 820;
+}
+
+.wavo-ai-trigger:active {
+  transform: scale(.96);
+}
+
+.wavo-ai-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 14px 12px max(12px, env(safe-area-inset-bottom));
+  background: rgba(0, 5, 14, .55);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  animation: wavoFadeIn .16s ease both;
+}
+
+.wavo-ai-sheet {
+  width: min(560px, 100%);
+  max-height: min(78dvh, 690px);
+  overflow-y: auto;
+  display: grid;
+  gap: 14px;
+  padding: 10px 14px 16px;
+  border: 1px solid var(--wavo-depth-border-strong);
+  border-radius: 28px;
+  background:
+    radial-gradient(120% 80% at 80% -10%, rgba(125, 99, 255, .16), transparent 46%),
+    rgba(12, 22, 38, .985);
+  color: var(--wavo-depth-text);
+  box-shadow: var(--wavo-sheet-shadow);
+  -webkit-overflow-scrolling: touch;
+  animation: wavoSheetUp .22s cubic-bezier(.22,.75,.2,1) both;
+}
+
+.wavo-ai-grabber {
+  width: 38px;
+  height: 4px;
+  margin: 2px auto 0;
+  border-radius: 999px;
+  background: rgba(202, 215, 233, .24);
+}
+
+.wavo-ai-sheet-head {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 38px;
+  gap: 10px;
+  align-items: center;
+}
+
+.wavo-ai-sheet-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  background: linear-gradient(145deg, rgba(119, 91, 255, .26), rgba(78, 153, 255, .14));
+  border: 1px solid rgba(145, 126, 255, .22);
+  color: #cabfff;
+}
+
+.wavo-ai-sheet-head > div:nth-child(2) {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.wavo-ai-sheet-head strong {
+  font-size: 17px;
+}
+
+.wavo-ai-sheet-head small {
+  color: var(--wavo-depth-muted);
+  font-size: 11px;
+}
+
+.wavo-ai-sheet-close {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--wavo-depth-border);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .045);
+  color: #cbd7e8;
+}
+
+.wavo-ai-summary {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(144, 124, 255, .21);
+  border-radius: 17px;
+  background: linear-gradient(135deg, rgba(119, 84, 255, .16), rgba(72, 139, 255, .09));
+  color: #ece9ff;
+  font-weight: 800;
+}
+
+.wavo-ai-summary small {
+  color: #aaa0df;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.wavo-ai-question {
+  display: grid;
+  gap: 7px;
+}
+
+.wavo-ai-question label {
+  color: #a8b5c9;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.wavo-ai-question-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 5px 5px 5px 12px;
+  border: 1px solid var(--wavo-depth-border);
+  border-radius: 17px;
+  background: rgba(255, 255, 255, .045);
+}
+
+.wavo-ai-question-row input {
+  min-width: 0;
+  border: 0 !important;
+  outline: 0 !important;
+  padding: 9px 0 !important;
+  background: transparent !important;
+  color: #eef4fb !important;
+  box-shadow: none !important;
+  font-size: 14px !important;
+}
+
+.wavo-ai-question-row input::placeholder {
+  color: #72839a;
+}
+
+.wavo-ai-question-row button {
+  min-width: 58px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #765cff, #5b8eff);
+  color: white;
+  font-weight: 800;
+}
+
+.wavo-ai-question-row button:disabled,
+.wavo-ai-summary:disabled {
+  opacity: .45;
+}
+
+.wavo-ai-answer {
+  margin: 0;
+  padding: 12px 13px;
+  border: 1px solid rgba(149, 131, 255, .15);
+  border-radius: 16px;
+  background: rgba(123, 97, 255, .07);
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.wavo-ai-audio {
+  display: grid;
+  gap: 8px;
+  padding-top: 3px;
+}
+
+.wavo-ai-audio > strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.wavo-ai-audio-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .035);
+  border: 1px solid rgba(255, 255, 255, .055);
+}
+
+.wavo-ai-audio-item button {
+  justify-self: start;
+  border: 0;
+  border-radius: 11px;
+  padding: 8px 10px;
+  background: rgba(126, 101, 255, .13);
+  color: #d8d0ff;
+  font-size: 11px;
+  font-weight: 780;
+}
+
+.wavo-ai-audio-item p {
+  margin: 0;
+  color: #b6c2d3;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* Composer is a raised work surface, not another giant panel. */
+.chat-screen .composer,
+.chat-screen .dm-composer {
+  z-index: 50 !important;
+  gap: 8px !important;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom)) !important;
+  border-top: 1px solid var(--wavo-depth-border) !important;
+  background: rgba(7, 17, 29, .91) !important;
+  -webkit-backdrop-filter: blur(25px) saturate(1.12);
+  backdrop-filter: blur(25px) saturate(1.12);
+  box-shadow: 0 -12px 34px rgba(0, 0, 0, .10);
+}
+
+.chat-screen .composer input,
+.chat-screen .composer textarea,
+.chat-screen .dm-composer input,
+.chat-screen .dm-composer textarea {
+  min-height: 46px !important;
+  border: 1px solid var(--wavo-depth-border-strong) !important;
+  border-radius: 18px !important;
+  background: rgba(24, 38, 61, .90) !important;
+  color: #f0f5fc !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .025) !important;
+}
+
+.chat-screen .composer input::placeholder,
+.chat-screen .composer textarea::placeholder {
+  color: #8b99ad !important;
+}
+
+.chat-screen .composer > button,
+.chat-screen .dm-composer > button {
+  width: 44px !important;
+  min-width: 44px !important;
+  height: 44px !important;
+  padding: 0 !important;
+  border-radius: 15px !important;
+  border: 1px solid rgba(117, 145, 255, .21) !important;
+  background: rgba(79, 122, 255, .13) !important;
+  color: #a9edff !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04) !important;
+}
+
+/* The inbox gets depth from spacing and surfaces, not dozens of hard outlines. */
+.screen .friend-list,
+.screen .request-list {
+  gap: 7px;
+}
+
+.screen .friend-button,
+.screen .friend-row {
+  border-color: rgba(180, 203, 232, .075) !important;
+  background: rgba(255, 255, 255, .028) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .018);
+}
+
+@media (min-width: 721px) {
+  .chat-screen .wavo-plus-ai-host {
+    right: 18px !important;
+    bottom: 76px !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .wavo-ai-trigger span {
+    display: none;
+  }
+  .wavo-ai-trigger {
+    width: 40px;
+    min-width: 40px;
+    padding: 0;
+  }
+  .chat-screen .chat-topbar {
+    gap: 7px !important;
+    padding-inline: 10px !important;
+  }
+  .chat-screen .chat-topbar > button,
+  .chat-screen .chat-topbar .mobile-tools-button {
+    width: 38px !important;
+    min-width: 38px !important;
+    height: 38px !important;
+  }
+  .chat-screen .chat-topbar .avatar,
+  .chat-screen .chat-topbar .avatar-sm {
+    width: 40px !important;
+    min-width: 40px !important;
+    height: 40px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wavo-ai-backdrop,
+  .wavo-ai-sheet,
+  .wavo-ai-trigger,
+  .chat-screen .chat-topbar > button {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@keyframes wavoFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes wavoSheetUp {
+  from { opacity: 0; transform: translateY(18px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
