@@ -14,7 +14,7 @@ function premiumIsActive(profile) {
 function isStripeSubscription(profile) {
   if (!premiumIsActive(profile)) return false
   const source = String(profile?.entitlement_source || '').toLowerCase()
-  return source === 'stripe' || source === 'stripe_plus'
+  return source === 'stripe' || source === 'stripe_plus' || source === 'stripe_black'
 }
 
 function formatEndDate(value) {
