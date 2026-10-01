@@ -1,0 +1,108 @@
+/* Final mobile chat polish.
+ * Loaded after wavo-ui-refresh.css so these rules are the last word on the
+ * compact conversation layout shown in the native app.
+ */
+
+/* Pull-to-refresh is useful on feed screens, but a live DM should not show a
+ * floating Refresh pill over the conversation header. */
+.app-shell:has(.chat-screen) .pull-indicator {
+  display: none !important;
+}
+
+/* Keep short conversations attached to the header instead of pushing the
+ * first message toward the composer and leaving a huge empty chamber above it. */
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .dm-messages > :first-child {
+  margin-top: 0 !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .chat-topbar {
+  min-height: calc(54px + var(--wavo-safe-top, 0px)) !important;
+  padding: calc(6px + var(--wavo-safe-top, 0px)) 10px 6px !important;
+  gap: 7px !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .chat-topbar > button,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .chat-topbar .mobile-tools-button,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .chat-topbar .wavo-call-button,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .chat-topbar .wavo-video-call-button {
+  width: 38px !important;
+  min-width: 38px !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  border-radius: 13px !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .chat-topbar .avatar,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .chat-topbar .avatar-sm {
+  width: 40px !important;
+  height: 40px !important;
+  min-width: 40px !important;
+  border-radius: 14px !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .dm-messages {
+  padding: 11px 12px 76px !important;
+  gap: 7px !important;
+}
+
+/* Give media messages more image and less coloured frame. */
+.chat-screen .dm-bubble:has(> img) {
+  padding: 6px 6px 7px !important;
+}
+
+.chat-screen .dm-bubble > img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: min(72vw, 440px);
+  border-radius: 14px;
+  object-fit: cover;
+}
+
+/* Timestamps were getting lost against both the navy and accent bubbles. */
+.chat-screen .dm-bubble > span {
+  margin-top: 4px !important;
+  font-size: 10px !important;
+  line-height: 1.15 !important;
+  color: rgba(232, 240, 250, .72) !important;
+}
+
+.chat-screen .dm-row.mine .dm-bubble > span {
+  color: rgba(255, 255, 255, .74) !important;
+}
+
+/* Keep the AI launcher above the composer and reserve matching scroll space so
+ * the newest message can always be brought fully clear of it. */
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .wavo-plus-ai-host {
+  right: 12px !important;
+  bottom: calc(84px + var(--wavo-safe-bottom, env(safe-area-inset-bottom))) !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .wavo-ai-trigger {
+  min-width: 42px;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: 14px;
+}
+
+/* Slightly tighten the native composer so its controls read as one unit. */
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .dm-composer {
+  gap: 8px !important;
+  padding: 8px 10px calc(8px + var(--wavo-safe-bottom, 0px)) !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .dm-composer > input:not(.attachment-input) {
+  min-height: 44px !important;
+  border-radius: 16px !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .dm-composer .composer-tool,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .dm-composer .composer-send,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .dm-composer > button {
+  width: 44px !important;
+  min-width: 44px !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  border-radius: 14px !important;
+}
