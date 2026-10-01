@@ -5,10 +5,11 @@ const PLANS = {
   standard: { label: "Wavo Premium", amount: 499, tier: "premium" },
   student: { label: "Wavo Premium — Student", amount: 349, tier: "premium" },
   plus: { label: "Wavo Plus", amount: 999, tier: "plus", priceId: "price_1UESMPLytdJimLtBn6gVW7Qy" },
-  pro: { label: "Wavo Pro", amount: 1499, tier: "pro" },
+  pro: { label: "Wavo Pro", amount: 1999, tier: "pro" },
+  black: { label: "Wavo Black", amount: 9999, tier: "black" },
 };
 
-const TIER_RANK = { free: 0, premium: 1, plus: 2, pro: 3, vip: 3 };
+const TIER_RANK = { free: 0, premium: 1, plus: 2, pro: 3, vip: 3, black: 4 };
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
@@ -50,10 +51,31 @@ export default async function handler(req, res) {
 
     const stillActive = profile.is_premium && (!profile.premium_until || new Date(profile.premium_until) > new Date());
     const rawTier = String(profile.tier || "free").toLowerCase();
-    const currentTier = stillActive && String(profile.entitlement_source || "").toLowerCase() === "stripe_plus" ? "plus" : rawTier;
+    const source = String(profile.entitlement_source || "").toLowerCase();
+    const currentTier = stillActive && source === "stripe_black"
+      ? "black"
+      : stillActive && source === "stripe_plus"
+        ? "plus"
+        : rawTier;
+
     if (stillActive && (TIER_RANK[currentTier] ?? 0) >= (TIER_RANK[selected.tier] ?? 0)) {
-      const label = currentTier === "pro" || currentTier === "vip" ? "Wavo Pro" : currentTier === "plus" ? "Wavo Plus" : "Wavo Premium";
+      const label = currentTier === "black"
+        ? "Wavo Black"
+        : currentTier === "pro" || currentTier === "vip"
+          ? "Wavo Pro"
+          : currentTier === "plus"
+            ? "Wavo Plus"
+            : "Wavo Premium";
       return res.status(400).json({ error: `You're already on ${label}.` });
+    }
+
+    // Do not create a second concurrent Stripe subscription just to move an
+    // existing paid customer onto Black. They can switch once the current paid
+    // period ends; new/free customers can buy Black immediately.
+    if (plan === "black" && stillActive && source.startsWith("stripe")) {
+      return res.status(400).json({
+        error: "You already have an active Wavo subscription. Cancel its renewal first; you can move to Wavo Black when the current paid period ends.",
+      });
     }
 
     let customerId = profile.stripe_customer_id;
