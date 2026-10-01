@@ -39,11 +39,22 @@ export const PLANS = {
     id: 'pro',
     label: 'Pro',
     name: 'Wavo Pro',
-    price: 14.99,
-    priceAud: 14.99,
-    priceLabel: '$14.99 AUD / month',
+    price: 19.99,
+    priceAud: 19.99,
+    priceLabel: '$19.99 AUD / month',
     blurb: 'Everything in Plus plus serious Space tools.',
     tier: 'pro',
+    requiresStudentDeclaration: false,
+  },
+  black: {
+    id: 'black',
+    label: 'Black',
+    name: 'Wavo Black',
+    price: 99.99,
+    priceAud: 99.99,
+    priceLabel: '$99.99 AUD / month',
+    blurb: 'Everything in Pro plus the highest limits, early access and an exclusive Black member identity.',
+    tier: 'black',
     requiresStudentDeclaration: false,
   },
 }
@@ -51,6 +62,7 @@ export const PLANS = {
 export const DEFAULT_PLAN = 'standard'
 export const PLUS_PLAN = 'plus'
 export const PRO_PLAN = 'pro'
+export const BLACK_PLAN = 'black'
 
 export function getPlan(id) {
   return PLANS[id] ?? PLANS[DEFAULT_PLAN]
