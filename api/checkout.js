@@ -69,10 +69,9 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: `You're already on ${label}.` });
     }
 
-    // Do not create a second concurrent Stripe subscription just to move an
-    // existing paid customer onto Black. They can switch once the current paid
-    // period ends; new/free customers can buy Black immediately.
-    if (plan === "black" && stillActive && source.startsWith("stripe")) {
+    // Black is intentionally never stacked on top of another active paid plan.
+    // That prevents double-billing across Stripe and App Store subscriptions.
+    if (plan === "black" && stillActive) {
       return res.status(400).json({
         error: "You already have an active Wavo subscription. Cancel its renewal first; you can move to Wavo Black when the current paid period ends.",
       });
