@@ -6,15 +6,18 @@ export const APPLE_PRODUCTS = {
   premium: 'lol.wavo.premium.monthly',
   plus: 'lol.wavo.plus.monthly',
   pro: 'lol.wavo.pro.monthly',
+  black: 'lol.wavo.black.monthly',
 }
 
 const APPLE_TIER_RANK = {
   [APPLE_PRODUCTS.premium]: 1,
   [APPLE_PRODUCTS.plus]: 2,
   [APPLE_PRODUCTS.pro]: 3,
+  [APPLE_PRODUCTS.black]: 4,
 }
 
 const STORE_PRODUCT_IDS = Object.values(APPLE_PRODUCTS)
+const REQUIRED_STORE_PRODUCT_IDS = [APPLE_PRODUCTS.premium, APPLE_PRODUCTS.plus, APPLE_PRODUCTS.pro]
 const STOREKIT_SUPPORT_TIMEOUT_MS = 5000
 const STOREKIT_PRODUCTS_TIMEOUT_MS = 8000
 let storeProductCache = null
@@ -67,8 +70,10 @@ async function fetchStoreProductsOnce() {
     'The App Store took too long to load Wavo subscriptions.',
   )
   const products = Array.isArray(result?.products) ? result.products : []
-  const missing = STORE_PRODUCT_IDS.filter((id) => !products.some((product) => product?.identifier === id))
-  if (missing.length) throw new Error('The App Store has not returned all Wavo subscriptions yet. Try again in a moment.')
+  // Black is optional until its App Store Connect product has been created.
+  // Never let an unavailable Black SKU break Premium/Plus/Pro purchasing.
+  const missing = REQUIRED_STORE_PRODUCT_IDS.filter((id) => !products.some((product) => product?.identifier === id))
+  if (missing.length) throw new Error('The App Store has not returned all core Wavo subscriptions yet. Try again in a moment.')
   return products
 }
 
