@@ -59,6 +59,7 @@ import './wavo-ui-refresh.css'
 import './chat-polish.css'
 import './ui-layout-final.css'
 import './ui-mobile-cleanup.css'
+import './ui-bottom-nav-fix.css'
 
 installAuthBootResilience()
 installUiMode()
