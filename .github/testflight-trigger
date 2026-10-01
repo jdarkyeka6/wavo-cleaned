@@ -4,3 +4,4 @@
 2026-09-24 iOS Drive attachment timeout fix 0fe0ac16955fea8372e2ec3d7bb1841441d72a98
 2026-10-01 Wavo UI refresh chat-first redesign 3e49269fdad56acb1f414084d1d98f145addf466
 2026-10-01 Secure password reset and recovery email 647178b81131c320fe17591bad53766e58a628be
+2026-10-01 Automatic TestFlight build numbering ee1e4330dce15bc7b41aa132f1df9157449dc855
