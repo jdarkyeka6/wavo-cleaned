@@ -20,7 +20,7 @@
   <div class="wrap">
     <a class="back" href="/">← Back to Wavo</a>
     <h1>Wavo Privacy Policy</h1>
-    <p class="updated">Last updated: 13 September 2026</p>
+    <p class="updated">Last updated: 1 October 2026</p>
 
     <p>Wavo is a social messaging app. This policy explains what information Wavo processes, why it is needed, which services help us run the app, and the controls available to you.</p>
 
@@ -30,6 +30,8 @@
     <h2>What we collect</h2>
     <ul>
       <li><strong>Account information</strong>, including your chosen username and the authentication information needed to sign you in. Password authentication is handled by Supabase Auth; Wavo does not receive your password as readable plain text.</li>
+      <li><strong>Optional recovery email</strong> when you choose to add one for account recovery. Wavo stores the verified recovery address separately from your public-facing profile and uses it to send account-verification and password-reset messages.</li>
+      <li><strong>Account-security records</strong>, such as one-time password-reset token hashes, expiry and usage status, and limited rate-limit records used to reduce automated reset abuse. Wavo stores hashes rather than the usable reset token itself.</li>
       <li><strong>Profile information</strong> you choose to add, such as a profile photo, bio or status.</li>
       <li><strong>Content and social activity</strong>, such as messages, group or Space content, posts, Waves, plans, polls, reactions, nicknames, friendships and files or media you upload.</li>
       <li><strong>App and device information needed for features</strong>, such as last-active information, feature usage records and push-notification device tokens.</li>
@@ -43,6 +45,7 @@
     <h2>How we use it</h2>
     <ul>
       <li>To create and secure accounts and keep you signed in.</li>
+      <li>To verify optional recovery addresses, deliver requested password-reset links and let you regain access to an account.</li>
       <li>To deliver messages and media and provide Spaces, posts, Waves, plans, polls, calls, notifications and other Wavo features.</li>
       <li>To provide features you explicitly enable, including location sharing, connected services and Wavo AI features.</li>
       <li>To operate, troubleshoot and improve Wavo.</li>
@@ -55,7 +58,8 @@
 
     <h2>Services we rely on</h2>
     <ul>
-      <li><strong>Supabase</strong> provides authentication, database, realtime and file-storage services used by Wavo.</li>
+      <li><strong>Supabase</strong> provides authentication, database, realtime, Edge Functions and file-storage services used by Wavo.</li>
+      <li><strong>Resend</strong> may process your recovery email address when Wavo sends a recovery-address verification or password-reset email.</li>
       <li><strong>Vercel</strong> hosts Wavo's web services.</li>
       <li><strong>Apple</strong> provides iOS platform services, push notifications and App Store in-app purchase processing.</li>
       <li><strong>Stripe</strong> may process purchases made through Wavo's website. Wavo does not receive your full card details.</li>
@@ -69,6 +73,7 @@
 
     <h2>Your choices and rights</h2>
     <ul>
+      <li><strong>Account recovery:</strong> adding a recovery email is optional. You can change it from Account security after confirming your current password.</li>
       <li><strong>Privacy controls:</strong> Wavo includes controls for features such as online status, read receipts, friend requests and location sharing.</li>
       <li><strong>AI choice:</strong> you can decline the AI consent notice and continue using Wavo's non-AI features.</li>
       <li><strong>Block and report:</strong> you can block people you do not want to interact with and report safety issues.</li>
@@ -78,13 +83,13 @@
     <p>Shared Spaces or other collaborative containers may remain for their other members after you delete your account, but your membership and user-linked content are removed as part of the deletion process.</p>
 
     <h2>Data retention</h2>
-    <p>We generally keep account information while your account exists or while it is needed to provide the feature that created it. When you complete in-app account deletion, Wavo removes the active account and associated user data. Limited safety, security, transaction or legal records may be retained when reasonably necessary or required, and records that remain may be detached from the deleted profile where appropriate. Backup copies can also remain temporarily until normal backup retention cycles complete.</p>
+    <p>We generally keep account information while your account exists or while it is needed to provide the feature that created it. Password-reset links expire after a short period and cannot be reused after a successful reset. When you complete in-app account deletion, Wavo removes the active account and associated user data. Limited safety, security, transaction or legal records may be retained when reasonably necessary or required, and records that remain may be detached from the deleted profile where appropriate. Backup copies can also remain temporarily until normal backup retention cycles complete.</p>
 
     <h2>Children and families</h2>
     <p>Wavo may be used by younger users where permitted by the App Store, applicable law and any required parent or guardian permission. If a parent or guardian has a privacy question about a young person's Wavo account, contact <a href="mailto:contact@builtbyjake.site">contact@builtbyjake.site</a>.</p>
 
     <h2>Security</h2>
-    <p>We use access controls and platform security features intended to limit access to Wavo data. No online service can promise absolute security, so we also work to remove or fix issues when they are identified.</p>
+    <p>We use access controls and platform security features intended to limit access to Wavo data. Recovery addresses are kept out of public-facing profile records, reset links use short-lived one-time tokens, and password changes require either a valid reset token or confirmation of the current password. No online service can promise absolute security, so we also work to remove or fix issues when they are identified.</p>
 
     <h2>Changes to this policy</h2>
     <p>If we make meaningful changes, we'll update the date at the top of this page. The current version will remain available from Wavo's privacy link.</p>
