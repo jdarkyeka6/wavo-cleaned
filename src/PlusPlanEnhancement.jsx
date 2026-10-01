@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Bot, Check, Mic2, Sparkles } from 'lucide-react'
+import { Bot, Check, Mic2, Sparkles, X } from 'lucide-react'
 import { supabase } from './supabaseClient'
 import { proAi } from './premiumProData'
 import { APPLE_PRODUCTS, isNativeIOS, loadStoreProducts, purchaseAppleTier, startWebCheckout } from './storePurchases'
@@ -43,6 +43,7 @@ export default function PlusPlanEnhancement() {
   const [profile, setProfile] = useState(null)
   const [planHost, setPlanHost] = useState(null)
   const [aiHost, setAiHost] = useState(null)
+  const [aiOpen, setAiOpen] = useState(false)
   const [busy, setBusy] = useState('')
   const [notice, setNotice] = useState('')
   const [question, setQuestion] = useState('')
@@ -124,7 +125,10 @@ export default function PlusPlanEnhancement() {
           composer.before(host)
         }
         setAiHost(host)
-      } else setAiHost(null)
+      } else {
+        setAiHost(null)
+        setAiOpen(false)
+      }
 
       const proCard = [...document.querySelectorAll('.wpp-plan')].find((card) => card.querySelector('.wpp-plan-title strong')?.textContent?.trim().toLowerCase() === 'pro')
       if (proCard) proCard.classList.add('wavo-most-features')
@@ -134,6 +138,13 @@ export default function PlusPlanEnhancement() {
     observer.observe(document.body, { childList: true, subtree: true })
     return () => observer.disconnect()
   }, [])
+
+  useEffect(() => {
+    if (!aiOpen) return
+    const onKey = (event) => { if (event.key === 'Escape') setAiOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [aiOpen])
 
   useEffect(() => {
     if (!aiEntitled || !userId || !aiHost) { setMessages([]); return }
@@ -220,6 +231,36 @@ export default function PlusPlanEnhancement() {
     }
   }
 
+  const aiSheet = aiOpen && typeof document !== 'undefined' ? createPortal(
+    <div className="wavo-ai-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setAiOpen(false)}>
+      <section className="wavo-ai-sheet" role="dialog" aria-modal="true" aria-label="Wavo AI">
+        <div className="wavo-ai-grabber" />
+        <div className="wavo-ai-sheet-head">
+          <div className="wavo-ai-sheet-icon"><Bot size={19}/></div>
+          <div><strong>Wavo AI</strong><small>{pro ? 'Pro' : 'Plus'} · only here when you want it</small></div>
+          <button type="button" className="wavo-ai-sheet-close" onClick={() => setAiOpen(false)} aria-label="Close Wavo AI"><X size={18}/></button>
+        </div>
+
+        <button type="button" className="wavo-ai-summary" disabled={busy || !messages.length} onClick={() => runAi('summary')}>
+          <span>{busy === 'summary' ? 'Thinking…' : 'Summarise conversation'}</span><small>{messages.length ? `${messages.length} messages loaded` : 'No messages yet'}</small>
+        </button>
+
+        <div className="wavo-ai-question">
+          <label htmlFor="wavo-ai-question-input">Ask about this chat</label>
+          <div className="wavo-ai-question-row">
+            <input id="wavo-ai-question-input" value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="What did we decide?" onKeyDown={(e) => { if (e.key === 'Enter' && question.trim() && !busy) runAi('ask') }}/>
+            <button type="button" disabled={busy || !question.trim()} onClick={() => runAi('ask')}>{busy === 'ask' ? '…' : 'Ask'}</button>
+          </div>
+        </div>
+
+        {answer && <p className="wavo-ai-answer">{answer}</p>}
+
+        {audio.length > 0 && <div className="wavo-ai-audio"><strong><Mic2 size={14}/> Voice transcription</strong>{audio.map((message) => <div className="wavo-ai-audio-item" key={message.id}><button type="button" onClick={() => transcribe(message)}>Transcribe voice note</button>{transcripts[message.id] && <p>{transcripts[message.id]}</p>}</div>)}</div>}
+      </section>
+    </div>,
+    document.body,
+  ) : null
+
   return <>
     {planHost && createPortal(
       <article className={`wpp-plan wavo-plus-card ${plus ? 'current' : ''}`}>
@@ -238,16 +279,9 @@ export default function PlusPlanEnhancement() {
     )}
 
     {aiEntitled && aiHost && createPortal(
-      <section className="wavo-plus-ai-panel">
-        <div className="wavo-plus-ai-title"><Bot size={16}/><strong>Wavo AI</strong><span>{pro ? 'PRO' : 'PLUS'}</span></div>
-        <div className="wavo-plus-ai-actions">
-          <button disabled={busy || !messages.length} onClick={() => runAi('summary')}>{busy === 'summary' ? 'Thinking…' : 'Summarise this chat'}</button>
-          <div><input value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Ask about this conversation"/><button disabled={busy || !question.trim()} onClick={() => runAi('ask')}>Ask Wavo</button></div>
-        </div>
-        {answer && <p className="wavo-plus-ai-answer">{answer}</p>}
-        {audio.length > 0 && <div className="wavo-plus-audio"><strong><Mic2 size={14}/> Voice transcription</strong>{audio.map((message) => <div key={message.id}><button onClick={() => transcribe(message)}>Transcribe voice note</button>{transcripts[message.id] && <p>{transcripts[message.id]}</p>}</div>)}</div>}
-      </section>,
+      <button type="button" className="wavo-ai-trigger" onClick={() => setAiOpen(true)} aria-label="Open Wavo AI"><Sparkles size={16}/><span>Wavo AI</span></button>,
       aiHost,
     )}
+    {aiSheet}
   </>
 }
