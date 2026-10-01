@@ -16,6 +16,7 @@ import AccountDeletion from './AccountDeletion.jsx'
 import AccountRecoveryEnhancement from './AccountRecoveryEnhancement.jsx'
 import App from './App.jsx'
 import AdminRoute from './AdminRoute.jsx'
+import BlackPlanEnhancement from './BlackPlanEnhancement.jsx'
 import CallContinuityBridge from './CallContinuityBridge.jsx'
 import CallKitCoordinator from './CallKitCoordinator.jsx'
 import CallQualityOverlay from './CallQualityOverlay.jsx'
@@ -73,6 +74,7 @@ function WavoApp() {
       <AccountRecoveryEnhancement />
       {paidFeaturesEnabled && <PremiumProEnhancement />}
       {paidFeaturesEnabled && <PlusPlanEnhancement />}
+      {paidFeaturesEnabled && <BlackPlanEnhancement />}
       {paidFeaturesEnabled && <NativeStoreKitBridge />}
       <NativeReviewHardening />
       <NativeContentSafety />
