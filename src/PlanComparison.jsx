@@ -6,21 +6,23 @@ import './plan-comparison.css'
 const HOST_ATTR = 'data-wavo-plan-compare-host'
 
 const FEATURES = [
-  ['Unlimited messaging, Spaces and calls', true, true, true, true],
-  ['Waves, media, GIFs and reactions', true, true, true, true],
-  ['Polls, plans and shared activities', true, true, true, true],
-  ['One-off scheduled messages', true, true, true, true],
-  ['Chat search + core safety tools', true, true, true, true],
-  ['Profile Studio + custom themes', false, true, true, true],
-  ['Chat themes + bubble styles', false, true, true, true],
-  ['Message effects + animated reactions', false, true, true, true],
-  ['Chat folders + advanced search', false, true, true, true],
-  ['Recurring messages + streak protection', false, true, true, true],
-  ['Wavo Labs', false, true, true, true],
-  ['AI chat summaries + Ask Wavo', false, false, true, true],
-  ['Voice-note transcription', false, false, true, true],
-  ['Space analytics + advanced roles', false, false, false, true],
-  ['Scheduled Space announcements', false, false, false, true],
+  ['Unlimited messaging, Spaces and calls', true, true, true, true, true],
+  ['Waves, media, GIFs and reactions', true, true, true, true, true],
+  ['Polls, plans and shared activities', true, true, true, true, true],
+  ['One-off scheduled messages', true, true, true, true, true],
+  ['Chat search + core safety tools', true, true, true, true, true],
+  ['Profile Studio + custom themes', false, true, true, true, true],
+  ['Chat themes + bubble styles', false, true, true, true, true],
+  ['Message effects + animated reactions', false, true, true, true, true],
+  ['Chat folders + advanced search', false, true, true, true, true],
+  ['Recurring messages + streak protection', false, true, true, true, true],
+  ['Wavo Labs', false, true, true, true, true],
+  ['AI chat summaries + Ask Wavo', false, false, true, true, true],
+  ['Voice-note transcription', false, false, true, true, true],
+  ['Space analytics + advanced roles', false, false, false, true, true],
+  ['Scheduled Space announcements', false, false, false, true, true],
+  ['Black member profile treatment', false, false, false, false, true],
+  ['Black membership status', false, false, false, false, true],
 ]
 
 function featureIcon(value) {
@@ -33,19 +35,21 @@ function readPlanMeta() {
   const premium = byName('premium')
   const plus = byName('plus')
   const pro = byName('pro')
+  const black = byName('black')
   const current = cards.find((card) => card.classList.contains('current'))?.querySelector('.wpp-plan-title strong')?.textContent?.trim() || 'Free'
   return {
     current,
     premiumPrice: premium?.querySelector('.wpp-plan-title small')?.textContent?.trim() || 'A$4.99/month',
     plusPrice: plus?.querySelector('.wpp-plan-title small')?.textContent?.trim() || 'A$9.99/month',
-    proPrice: pro?.querySelector('.wpp-plan-title small')?.textContent?.trim() || 'A$14.99/month',
+    proPrice: pro?.querySelector('.wpp-plan-title small')?.textContent?.trim() || 'A$19.99/month',
+    blackPrice: black?.querySelector('.wpp-plan-title small')?.textContent?.trim() || 'A$99.99/month',
   }
 }
 
 export default function PlanComparison() {
   const [host, setHost] = useState(null)
   const [open, setOpen] = useState(false)
-  const [meta, setMeta] = useState(() => ({ current: 'Free', premiumPrice: 'A$4.99/month', plusPrice: 'A$9.99/month', proPrice: 'A$14.99/month' }))
+  const [meta, setMeta] = useState(() => ({ current: 'Free', premiumPrice: 'A$4.99/month', plusPrice: 'A$9.99/month', proPrice: 'A$19.99/month', blackPrice: 'A$99.99/month' }))
 
   useEffect(() => {
     const sync = () => {
@@ -89,7 +93,7 @@ export default function PlanComparison() {
       <button className="wpc-trigger" type="button" onClick={() => setOpen(true)}>
         <Sparkles size={16} />
         <span>Compare plans</span>
-        <small>Free vs Premium vs Plus vs Pro</small>
+        <small>Free vs Premium vs Plus vs Pro vs Black</small>
       </button>,
       host,
     )}
@@ -104,7 +108,7 @@ export default function PlanComparison() {
             <div>
               <span>WAVO PLANS</span>
               <h2 id="wpc-title">Pick your level</h2>
-              <p>Free is already full Wavo. Paid plans add customisation, AI and power tools.</p>
+              <p>Free is already full Wavo. Paid plans add customisation, AI, power tools and an optional luxury supporter tier.</p>
             </div>
             <button className="wpc-close" type="button" aria-label="Close comparison" onClick={() => setOpen(false)}><X size={19} /></button>
           </header>
@@ -132,15 +136,21 @@ export default function PlanComparison() {
                 <strong>Pro</strong><small>{meta.proPrice}</small>
                 {currentKey === 'pro' && <em>Current</em>}
               </div>
+              <div className={`wpc-plan-head black ${currentKey === 'black' ? 'current' : ''}`}>
+                <span className="wpc-plan-icon black"><Crown size={17}/></span>
+                <strong>Black</strong><small>{meta.blackPrice}</small>
+                {currentKey === 'black' && <em>Current</em>}
+              </div>
             </div>
 
             <div className="wpc-rows">
-              {FEATURES.map(([label, free, premium, plus, pro]) => <div className="wpc-grid wpc-row" key={label}>
+              {FEATURES.map(([label, free, premium, plus, pro, black]) => <div className="wpc-grid wpc-row" key={label}>
                 <div className="wpc-feature">{label}</div>
                 <div className={free ? 'yes' : 'no'}>{featureIcon(free)}</div>
                 <div className={premium ? 'yes' : 'no'}>{featureIcon(premium)}</div>
                 <div className={plus ? 'yes' : 'no'}>{featureIcon(plus)}</div>
                 <div className={pro ? 'yes' : 'no'}>{featureIcon(pro)}</div>
+                <div className={black ? 'yes' : 'no'}>{featureIcon(black)}</div>
               </div>)}
             </div>
           </div>
