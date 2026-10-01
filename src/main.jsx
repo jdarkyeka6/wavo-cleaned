@@ -13,6 +13,7 @@ import './chat-keyboard-viewport.js'
 import './chat-scroll-anchor.js'
 import './place-markers.js'
 import AccountDeletion from './AccountDeletion.jsx'
+import AccountRecoveryEnhancement from './AccountRecoveryEnhancement.jsx'
 import App from './App.jsx'
 import AdminRoute from './AdminRoute.jsx'
 import CallContinuityBridge from './CallContinuityBridge.jsx'
@@ -68,6 +69,7 @@ function WavoApp() {
   return (
     <>
       <App />
+      <AccountRecoveryEnhancement />
       {paidFeaturesEnabled && <PremiumProEnhancement />}
       {paidFeaturesEnabled && <PlusPlanEnhancement />}
       {paidFeaturesEnabled && <NativeStoreKitBridge />}
