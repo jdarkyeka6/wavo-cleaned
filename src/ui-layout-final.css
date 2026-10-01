@@ -1,0 +1,368 @@
+/*
+ * Wavo final layout contract
+ *
+ * The app shell owns the viewport. Individual screens, chat message panes and
+ * sheets own their own scrolling. Nothing should grow the document itself.
+ * Keep this file loaded LAST.
+ */
+
+:root {
+  --wavo-shell-h: var(--wavo-viewport-height, 100dvh);
+  --wavo-ui-gap: 12px;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+html:has(.app-shell),
+body:has(.app-shell),
+#root:has(.app-shell) {
+  height: var(--wavo-shell-h);
+  min-height: 0;
+  max-height: var(--wavo-shell-h);
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body:has(.app-shell) {
+  position: fixed;
+  inset: 0;
+}
+
+/* One viewport. Header and navigation stay put; the active screen scrolls. */
+.app-shell {
+  width: 100% !important;
+  height: var(--wavo-shell-h) !important;
+  min-height: 0 !important;
+  max-height: var(--wavo-shell-h) !important;
+  padding-bottom: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  overscroll-behavior: none;
+}
+
+.app-shell > .app-header,
+.app-shell > .offline-banner {
+  flex: 0 0 auto;
+}
+
+.app-shell > .pull-shell {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  flex: 1 1 auto;
+  overflow: hidden !important;
+}
+
+.app-shell > .pull-shell > .app-content,
+.app-shell .app-content {
+  width: 100%;
+  min-width: 0;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+}
+
+/* Standard app pages scroll inside their content pane, never the document. */
+.app-content > .screen,
+.app-content > [class$="-screen"]:not(.chat-screen) {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable both-edges;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .app-content > .screen {
+  padding-bottom: calc(var(--wavo-nav-height, 66px) + var(--wavo-safe-bottom, 0px) + 22px) !important;
+}
+
+/* Never let a child force the app wider than the phone. */
+.app-shell *,
+.app-shell *::before,
+.app-shell *::after {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.app-shell img,
+.app-shell video,
+.app-shell canvas,
+.app-shell svg:not([width]) {
+  max-width: 100%;
+}
+
+.app-shell p,
+.app-shell li,
+.app-shell a,
+.app-shell code,
+.app-shell pre,
+.app-shell .dm-bubble {
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Chat ---------- */
+.app-shell:has(.chat-screen) {
+  padding: 0 !important;
+}
+
+.app-shell:has(.chat-screen) > .pull-shell,
+.app-shell:has(.chat-screen) .app-content {
+  flex: 1 1 auto !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+}
+
+.chat-screen {
+  position: relative !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  align-content: stretch !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen {
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) auto !important;
+}
+
+.chat-screen .chat-topbar {
+  position: relative !important;
+  inset: auto !important;
+  align-self: start;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 0 auto;
+  overflow: hidden;
+}
+
+/* The identity block takes leftover width, controls never get shoved off-screen. */
+.chat-screen .chat-topbar > div:not(.avatar):not(.avatar-sm) {
+  min-width: 0 !important;
+  overflow: hidden;
+}
+
+.chat-screen .chat-topbar strong,
+.chat-screen .chat-topbar span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-screen .dm-messages,
+.chat-screen .space-messages {
+  position: relative;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  margin: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scrollbar-width: none;
+}
+
+.chat-screen .dm-messages::-webkit-scrollbar,
+.chat-screen .space-messages::-webkit-scrollbar {
+  display: none;
+}
+
+/* Short conversations begin directly below the header. No giant empty void. */
+.chat-screen .dm-messages {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  align-content: initial !important;
+  gap: 7px !important;
+  padding: 11px 12px 14px !important;
+}
+
+.chat-screen .dm-messages > :first-child {
+  margin-top: 0 !important;
+}
+
+.chat-screen .dm-row {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  flex: 0 0 auto !important;
+}
+
+.chat-screen .dm-bubble {
+  width: fit-content;
+  min-width: 0;
+  max-width: min(82%, 560px) !important;
+}
+
+.chat-screen .dm-bubble p,
+.chat-screen .dm-bubble a {
+  max-width: 100%;
+  overflow-wrap: anywhere !important;
+  word-break: break-word;
+}
+
+/* Composer is a fixed row of the chat grid. It never participates in page scroll. */
+.chat-screen .dm-composer,
+.chat-screen .composer {
+  position: relative !important;
+  inset: auto !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  flex: 0 0 auto !important;
+  overflow: hidden;
+}
+
+.chat-screen .dm-composer > input:not(.attachment-input),
+.chat-screen .composer > input:not(.attachment-input),
+.chat-screen .dm-composer textarea,
+.chat-screen .composer textarea {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  flex: 1 1 auto !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .dm-composer {
+  padding: 8px calc(10px + var(--wavo-safe-right, 0px)) calc(8px + var(--wavo-safe-bottom, 0px)) calc(10px + var(--wavo-safe-left, 0px)) !important;
+}
+
+/* Floating chat tools must float. They may not create another grid row. */
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen .wpp-chat-host {
+  display: none !important;
+}
+
+.chat-screen .wavo-plus-ai-host {
+  position: absolute !important;
+  z-index: 60 !important;
+  pointer-events: none;
+}
+
+.chat-screen .wavo-plus-ai-host > * {
+  pointer-events: auto;
+}
+
+/* ---------- Sheets / modals ---------- */
+.modal-backdrop,
+.waves-modal-backdrop,
+.ux-overlay,
+.wavo-ai-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: var(--wavo-shell-h) !important;
+  min-height: 0 !important;
+  max-height: var(--wavo-shell-h) !important;
+  overflow: hidden !important;
+  overscroll-behavior: none;
+}
+
+.create-modal,
+.modal-card,
+.create-card,
+.ux-sheet,
+.search-sheet,
+.wavo-ai-sheet,
+.waves-composer,
+.waves-reply {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  max-height: calc(var(--wavo-shell-h) - var(--wavo-safe-top, 0px) - 8px) !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Horizontal data should scroll itself instead of widening the entire screen. */
+.table-wrap,
+.admin-table-wrap,
+.settings-table-wrap,
+[role="table"] {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+/* ---------- Mobile fit polish ---------- */
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .screen-title,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .mobile-detail-bar,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .section-head {
+  width: 100%;
+  min-width: 0;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .screen-title > div,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .mobile-detail-bar > div,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .section-head > div {
+  min-width: 0;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .screen-title h1,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .screen-title p {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .bottom-nav {
+  overflow: hidden !important;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .bottom-nav > button {
+  min-width: 0 !important;
+  overflow: hidden;
+}
+
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .bottom-nav > button span,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .bottom-nav > button small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Inputs should never trigger a horizontal page jump on iOS. */
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) input,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) textarea,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) select {
+  width: 100%;
+  min-width: 0 !important;
+  max-width: 100%;
+}
+
+/* Motion should not leave transformed wrappers visually outside the viewport. */
+@media (prefers-reduced-motion: reduce) {
+  .app-shell *,
+  .app-shell *::before,
+  .app-shell *::after {
+    scroll-behavior: auto !important;
+  }
+}
