@@ -19,6 +19,10 @@ function tierForPlan(active, plan, explicitTier) {
   if (!active) return "free";
   const requested = String(explicitTier || "").toLowerCase();
   const p = String(plan || "").toLowerCase();
+  // Black deliberately receives the existing Pro feature tier. Its luxury
+  // membership identity is carried by entitlement_source="stripe_black" so
+  // every established Pro permission keeps working without widening DB enums.
+  if (requested === "black" || p === "black") return "pro";
   if (requested === "pro" || p === "pro" || p.startsWith("pro") || p.startsWith("vip")) return "pro";
   // Plus deliberately inherits the Premium feature tier. Its extra AI entitlement
   // is identified by entitlement_source so the rest of the existing Premium UI
@@ -30,6 +34,7 @@ function entitlementSource(active, plan, explicitTier) {
   if (!active) return null;
   const requested = String(explicitTier || "").toLowerCase();
   const p = String(plan || "").toLowerCase();
+  if (requested === "black" || p === "black") return "stripe_black";
   return requested === "plus" || p === "plus" ? "stripe_plus" : "stripe";
 }
 
