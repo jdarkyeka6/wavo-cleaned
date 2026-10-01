@@ -57,6 +57,7 @@ import './chat-keyboard-viewport.css'
 import './chat-viewport-final.css'
 import './wavo-ui-refresh.css'
 import './chat-polish.css'
+import './ui-layout-final.css'
 
 installAuthBootResilience()
 installUiMode()
