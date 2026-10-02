@@ -19,7 +19,7 @@ const APPLE_TIER_RANK = {
 const STORE_PRODUCT_IDS = Object.values(APPLE_PRODUCTS)
 const REQUIRED_STORE_PRODUCT_IDS = [APPLE_PRODUCTS.premium, APPLE_PRODUCTS.plus, APPLE_PRODUCTS.pro]
 const STOREKIT_SUPPORT_TIMEOUT_MS = 5000
-const STOREKIT_PRODUCTS_TIMEOUT_MS = 8000
+const STOREKIT_PRODUCTS_TIMEOUT_MS = 12000
 let storeProductCache = null
 let storeProductPromise = null
 
@@ -61,17 +61,18 @@ async function fetchStoreProductsOnce() {
   )
   if (!billing?.isBillingSupported) throw new Error('App Store purchases are not available on this device.')
 
+  // Only ask StoreKit for products that actually exist in App Store Connect.
+  // Black is intentionally still pending, and including an unconfigured SKU in
+  // the same native query can make the whole product request fail on-device.
   const result = await withTimeout(
     NativePurchases.getProducts({
-      productIdentifiers: STORE_PRODUCT_IDS,
+      productIdentifiers: REQUIRED_STORE_PRODUCT_IDS,
       productType: PURCHASE_TYPE.SUBS,
     }),
     STOREKIT_PRODUCTS_TIMEOUT_MS,
     'The App Store took too long to load Wavo subscriptions.',
   )
   const products = Array.isArray(result?.products) ? result.products : []
-  // Black is optional until its App Store Connect product has been created.
-  // Never let an unavailable Black SKU break Premium/Plus/Pro purchasing.
   const missing = REQUIRED_STORE_PRODUCT_IDS.filter((id) => !products.some((product) => product?.identifier === id))
   if (missing.length) throw new Error('The App Store has not returned all core Wavo subscriptions yet. Try again in a moment.')
   return products
