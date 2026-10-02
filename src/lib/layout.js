@@ -26,27 +26,38 @@ export function isCompactUi() {
 
 function applyViewportVars(root) {
   if (typeof window === 'undefined') return
+
   const vv = window.visualViewport
-  const width = Math.round(vv?.width || window.innerWidth || 0)
+  const visualWidth = Math.round(vv?.width || window.innerWidth || 0)
   const visualHeight = Math.round(vv?.height || window.innerHeight || 0)
-  const layoutHeight = Math.round(Math.max(
-    window.innerHeight || 0,
-    document.documentElement?.clientHeight || 0,
-    visualHeight,
-  ))
+  const innerHeight = Math.round(window.innerHeight || 0)
+  const clientHeight = Math.round(document.documentElement?.clientHeight || 0)
+  const layoutViewportHeight = Math.max(innerHeight, clientHeight, visualHeight)
   const offsetTop = Math.max(0, Math.round(vv?.offsetTop || 0))
-  const coveredHeight = Math.max(0, layoutHeight - visualHeight - offsetTop)
-  const keyboardOpen = coveredHeight > 120
 
-  // visualViewport on iOS can exclude the status/home safe-area even when the
-  // keyboard is closed. Using that shorter value as the app-shell height made
-  // Wavo end early and left a large black slab below the UI. Use the full
-  // layout viewport while closed, and only shrink to visualViewport while the
-  // keyboard is genuinely covering the app.
-  const height = keyboardOpen ? visualHeight : layoutHeight
-  const keyboard = keyboardOpen ? coveredHeight : 0
+  // Capacitor/WKWebView can report innerHeight/clientHeight shorter than the
+  // physical native screen even with the keyboard closed. That is exactly the
+  // gap that was leaving Wavo's nav floating above a large empty strip.
+  // screen.height is the reliable full-screen CSS height inside the native app.
+  const nativeScreenHeight = isNativeApp
+    ? Math.round(window.screen?.height || layoutViewportHeight)
+    : layoutViewportHeight
+  const fullHeight = Math.max(layoutViewportHeight, nativeScreenHeight)
 
-  root.style.setProperty('--wavo-viewport-width', `${width}px`)
+  // Detect only the keyboard-caused shrink. Do not count the permanent native
+  // viewport-vs-screen difference as keyboard coverage.
+  const keyboardOverlap = Math.max(0, layoutViewportHeight - visualHeight - offsetTop)
+  const keyboardOpen = keyboardOverlap > 120
+
+  // When the keyboard is closed, own the full native screen. When it opens,
+  // reduce by the actual keyboard overlap while preserving the full-screen
+  // baseline so the composer sits directly above the keyboard.
+  const height = keyboardOpen
+    ? Math.max(visualHeight, fullHeight - keyboardOverlap)
+    : fullHeight
+  const keyboard = keyboardOpen ? keyboardOverlap : 0
+
+  root.style.setProperty('--wavo-viewport-width', `${visualWidth}px`)
   root.style.setProperty('--wavo-viewport-height', `${height}px`)
   root.style.setProperty('--wavo-keyboard-height', `${keyboard}px`)
   root.dataset.wavoKeyboard = keyboardOpen ? 'open' : 'closed'
