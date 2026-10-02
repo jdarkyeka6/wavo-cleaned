@@ -28,13 +28,28 @@ function applyViewportVars(root) {
   if (typeof window === 'undefined') return
   const vv = window.visualViewport
   const width = Math.round(vv?.width || window.innerWidth || 0)
-  const height = Math.round(vv?.height || window.innerHeight || 0)
-  const keyboard = Math.max(0, Math.round((window.innerHeight || height) - height - (vv?.offsetTop || 0)))
+  const visualHeight = Math.round(vv?.height || window.innerHeight || 0)
+  const layoutHeight = Math.round(Math.max(
+    window.innerHeight || 0,
+    document.documentElement?.clientHeight || 0,
+    visualHeight,
+  ))
+  const offsetTop = Math.max(0, Math.round(vv?.offsetTop || 0))
+  const coveredHeight = Math.max(0, layoutHeight - visualHeight - offsetTop)
+  const keyboardOpen = coveredHeight > 120
+
+  // visualViewport on iOS can exclude the status/home safe-area even when the
+  // keyboard is closed. Using that shorter value as the app-shell height made
+  // Wavo end early and left a large black slab below the UI. Use the full
+  // layout viewport while closed, and only shrink to visualViewport while the
+  // keyboard is genuinely covering the app.
+  const height = keyboardOpen ? visualHeight : layoutHeight
+  const keyboard = keyboardOpen ? coveredHeight : 0
 
   root.style.setProperty('--wavo-viewport-width', `${width}px`)
   root.style.setProperty('--wavo-viewport-height', `${height}px`)
   root.style.setProperty('--wavo-keyboard-height', `${keyboard}px`)
-  root.dataset.wavoKeyboard = keyboard > 120 ? 'open' : 'closed'
+  root.dataset.wavoKeyboard = keyboardOpen ? 'open' : 'closed'
 }
 
 export function applyUiMode() {
