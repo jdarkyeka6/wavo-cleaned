@@ -13,3 +13,4 @@
 2026-10-01 Mobile inbox cleanup and compact controls 0a3032b17ca2da1503fa6784ec8e2b19527ecac6
 2026-10-01 Bottom navigation safe-area fix 1002220b7ca76647e727c9eb46e12d2bfa91eb31
 2026-10-02 Mobile bottom gap, pull refresh centering, and StoreKit product loading 40ee36686fd3bf6fe91511e6a09461b0dc721b6f
+2026-10-02 Native viewport height fix 05fe540581e4a745faf5a37491dc130d65f85a3f
