@@ -25,6 +25,7 @@ import ChatMotionCalls from './ChatMotionCalls.js'
 import ConfigError from './ConfigError.jsx'
 import DropInVoice from './DropInVoice.jsx'
 import EmployeeWorkTracking from './EmployeeWorkTrackingSafe.jsx'
+import GroupMemberManager from './GroupMemberManager.jsx'
 import GroupVideoCalls from './GroupVideoCalls.jsx'
 import LiveActivityCoordinator from './LiveActivityCoordinator.jsx'
 import NativeContentSafety from './NativeContentSafety.jsx'
@@ -89,6 +90,7 @@ function WavoApp() {
       <PersonalizedCore />
       <NotificationSetup />
       <UiEnhancements />
+      <GroupMemberManager />
       <ChatMotionCalls />
       <CallTimeoutGuard />
       <CallQualityOverlay />
