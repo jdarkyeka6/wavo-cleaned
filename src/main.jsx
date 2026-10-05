@@ -22,6 +22,7 @@ import CallKitCoordinator from './CallKitCoordinator.jsx'
 import CallQualityOverlay from './CallQualityOverlay.jsx'
 import CallTimeoutGuard from './CallTimeoutGuard.jsx'
 import ChatMotionCalls from './ChatMotionCalls.js'
+import ColourPolish from './ColourPolish.jsx'
 import ConfigError from './ConfigError.jsx'
 import DropInVoice from './DropInVoice.jsx'
 import EmployeeWorkTracking from './EmployeeWorkTrackingSafe.jsx'
@@ -61,6 +62,7 @@ import './chat-polish.css'
 import './ui-layout-final.css'
 import './ui-mobile-cleanup.css'
 import './ui-bottom-nav-fix.css'
+import './colour-polish.css'
 
 installAuthBootResilience()
 installUiMode()
@@ -90,6 +92,7 @@ function WavoApp() {
       <PersonalizedCore />
       <NotificationSetup />
       <UiEnhancements />
+      <ColourPolish />
       <GroupMemberManager />
       <ChatMotionCalls />
       <CallTimeoutGuard />
