@@ -2,6 +2,8 @@ import { getPlatform, isNativeApp } from './platform'
 
 export const MOBILE_BREAKPOINT = 760
 
+let stableViewportHeight = 0
+
 export function getUiMode() {
   if (isNativeApp) return 'mobile-app'
   if (typeof window === 'undefined') return 'desktop-web'
@@ -30,31 +32,28 @@ function applyViewportVars(root) {
   const vv = window.visualViewport
   const visualWidth = Math.round(vv?.width || window.innerWidth || 0)
   const visualHeight = Math.round(vv?.height || window.innerHeight || 0)
-  const innerHeight = Math.round(window.innerHeight || 0)
-  const clientHeight = Math.round(document.documentElement?.clientHeight || 0)
-  const layoutViewportHeight = Math.max(innerHeight, clientHeight, visualHeight)
+  const innerHeight = Math.round(window.innerHeight || visualHeight || 0)
   const offsetTop = Math.max(0, Math.round(vv?.offsetTop || 0))
 
-  // Capacitor/WKWebView can report innerHeight/clientHeight shorter than the
-  // physical native screen even with the keyboard closed. That is exactly the
-  // gap that was leaving Wavo's nav floating above a large empty strip.
-  // screen.height is the reliable full-screen CSS height inside the native app.
-  const nativeScreenHeight = isNativeApp
-    ? Math.round(window.screen?.height || layoutViewportHeight)
-    : layoutViewportHeight
-  const fullHeight = Math.max(layoutViewportHeight, nativeScreenHeight)
+  // WKWebView's screen.height can include native space that the web view cannot
+  // actually draw into. Using it as the app height makes the bottom navigation
+  // stop above the real bottom edge and leaves a large empty strip underneath.
+  // visualViewport/innerHeight describe the drawable CSS viewport instead.
+  const visibleViewportHeight = Math.max(1, visualHeight + offsetTop)
+  const currentViewportHeight = Math.max(visibleViewportHeight, innerHeight)
 
-  // Detect only the keyboard-caused shrink. Do not count the permanent native
-  // viewport-vs-screen difference as keyboard coverage.
-  const keyboardOverlap = Math.max(0, layoutViewportHeight - visualHeight - offsetTop)
+  if (!stableViewportHeight) stableViewportHeight = currentViewportHeight
+
+  const keyboardOverlap = Math.max(0, stableViewportHeight - visibleViewportHeight)
   const keyboardOpen = keyboardOverlap > 120
 
-  // When the keyboard is closed, own the full native screen. When it opens,
-  // reduce by the actual keyboard overlap while preserving the full-screen
-  // baseline so the composer sits directly above the keyboard.
-  const height = keyboardOpen
-    ? Math.max(visualHeight, fullHeight - keyboardOverlap)
-    : fullHeight
+  if (!keyboardOpen) {
+    stableViewportHeight = currentViewportHeight
+  }
+
+  // When the keyboard is open, follow the visual viewport so composers sit
+  // immediately above it. Otherwise, own exactly the drawable app viewport.
+  const height = keyboardOpen ? visibleViewportHeight : currentViewportHeight
   const keyboard = keyboardOpen ? keyboardOverlap : 0
 
   root.style.setProperty('--wavo-viewport-width', `${visualWidth}px`)
@@ -81,7 +80,6 @@ export function applyUiMode() {
 
   applyViewportVars(root)
 
-  // Handy when checking a real device with Safari/Chrome dev tools.
   window.__WAVO_UI_MODE__ = mode
   window.__WAVO_PLATFORM__ = platform
   window.dispatchEvent(new CustomEvent('wavo:ui-mode', { detail: { mode, platform } }))
