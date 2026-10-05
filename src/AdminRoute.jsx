@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import Admin from "./Admin";
+import AdminPasswordReset from "./AdminPasswordReset";
 
 export default function AdminRoute() {
   const [state, setState] = useState({ loading: true, profile: null, error: "" });
@@ -86,5 +87,10 @@ export default function AdminRoute() {
     );
   }
 
-  return <Admin me={state.profile} onBack={() => { window.location.href = "/"; }} />;
+  return (
+    <>
+      <Admin me={state.profile} onBack={() => { window.location.href = "/"; }} />
+      <AdminPasswordReset />
+    </>
+  );
 }
