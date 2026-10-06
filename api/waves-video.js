@@ -6,18 +6,62 @@ function send(res, status, body) {
   return res.json(body);
 }
 
+let googleTokenCache = { token: null, expiresAt: 0, pending: null };
+const clipCache = new Map();
+const CLIP_CACHE_MS = 2 * 60 * 1000;
+
 async function googleAccessToken() {
-  const clientId = process.env.GOOGLE_DRIVE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_DRIVE_CLIENT_SECRET;
-  const refreshToken = process.env.GOOGLE_DRIVE_REFRESH_TOKEN;
-  if (!clientId || !clientSecret || !refreshToken) return null;
-  const response = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken, grant_type: "refresh_token" }),
-  });
-  const payload = await response.json().catch(() => ({}));
-  return response.ok ? payload.access_token || null : null;
+  const now = Date.now();
+  if (googleTokenCache.token && googleTokenCache.expiresAt > now + 60_000) {
+    return googleTokenCache.token;
+  }
+  if (googleTokenCache.pending) return googleTokenCache.pending;
+
+  googleTokenCache.pending = (async () => {
+    const clientId = process.env.GOOGLE_DRIVE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_DRIVE_CLIENT_SECRET;
+    const refreshToken = process.env.GOOGLE_DRIVE_REFRESH_TOKEN;
+    if (!clientId || !clientSecret || !refreshToken) return null;
+
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: "refresh_token",
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.access_token) return null;
+
+    const expiresInMs = Math.max(60, Number(payload.expires_in) || 3600) * 1000;
+    googleTokenCache.token = payload.access_token;
+    googleTokenCache.expiresAt = Date.now() + expiresInMs;
+    return googleTokenCache.token;
+  })();
+
+  try {
+    return await googleTokenCache.pending;
+  } finally {
+    googleTokenCache.pending = null;
+  }
+}
+
+async function loadPublishedClip(admin, clipId) {
+  const cached = clipCache.get(clipId);
+  if (cached && cached.expiresAt > Date.now()) return cached.clip;
+
+  const { data: clip, error } = await admin.from("waves_curated_clips")
+    .select("video_provider,video_asset_id,source_drive_id,status,moderation_state")
+    .eq("id", clipId)
+    .eq("status", "published")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (clip) clipCache.set(clipId, { clip, expiresAt: Date.now() + CLIP_CACHE_MS });
+  return clip || null;
 }
 
 export default async function handler(req, res) {
@@ -33,22 +77,25 @@ export default async function handler(req, res) {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceKey) return send(res, 500, { error: "Server auth is not configured" });
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
-  // Published, moderation-cleared curated Waves are intentionally viewable by
-  // guests. Authentication is still validated when supplied, but playback of
-  // this public feed must not depend on having a Wavo account.
+
+  // Published, moderation-cleared curated Waves are intentionally public.
+  // Old clients may still send a token; validate it when supplied, while new
+  // clients avoid this extra round trip entirely.
   if (userToken) {
     const { data: userData } = await admin.auth.getUser(userToken);
     if (!userData?.user) return send(res, 401, { error: "Session expired" });
   }
 
-  const { data: clip, error } = await admin.from("waves_curated_clips")
-    .select("video_provider,video_asset_id,source_drive_id,status,moderation_state")
-    .eq("id", clipId).eq("status", "published").maybeSingle();
-  if (error || !clip || clip.moderation_state !== "clear" || clip.video_provider !== "google_drive" || !clip.video_asset_id) {
-    // Status-only request logs cannot distinguish an invalid clip from an
-    // inaccessible Drive asset. Avoid logging user tokens, clip IDs or URLs.
+  let clip;
+  try {
+    clip = await loadPublishedClip(admin, clipId);
+  } catch (error) {
+    console.warn("[waves-video] clip lookup failed", { code: error?.code || null });
+    return send(res, 502, { error: "Could not load video metadata" });
+  }
+
+  if (!clip || clip.moderation_state !== "clear" || clip.video_provider !== "google_drive" || !clip.video_asset_id) {
     console.warn("[waves-video] clip unavailable", {
-      lookupError: error?.code || null,
       found: Boolean(clip),
       moderation: clip?.moderation_state || null,
       provider: clip?.video_provider || null,
@@ -60,11 +107,13 @@ export default async function handler(req, res) {
   const googleToken = await googleAccessToken();
   if (!googleToken) return send(res, 503, { error: "Video storage is unavailable" });
 
-  // iOS AVPlayer requires byte-range responses. A full Google Drive video can
-  // exceed the serverless response size limit, so never proxy an unbounded GET.
-  const CHUNK_BYTES = 1024 * 1024;
+  // iOS AVPlayer depends heavily on byte ranges. Two-megabyte chunks cut the
+  // request count roughly in half while staying comfortably below normal
+  // serverless response-size ceilings.
+  const CHUNK_BYTES = 2 * 1024 * 1024;
   const requestedRange = String(req.headers.range || "").trim();
   let range = null;
+
   if (req.method === "GET") {
     if (!requestedRange) {
       range = `bytes=0-${CHUNK_BYTES - 1}`;
@@ -87,8 +136,10 @@ export default async function handler(req, res) {
       }
     }
   }
+
   const headers = { Authorization: `Bearer ${googleToken}` };
   if (range) headers.Range = range;
+
   async function fetchDriveMedia(assetId) {
     return fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(assetId)}?alt=media&supportsAllDrives=true`, {
       method: req.method,
@@ -97,9 +148,6 @@ export default async function handler(req, res) {
   }
 
   let drive = await fetchDriveMedia(clip.video_asset_id);
-  // Older curated rows can point at a copied asset that is no longer visible
-  // to the current Drive OAuth identity. The original source file is retained
-  // specifically so playback can recover without breaking the published Wave.
   if (drive.status === 404 && clip.source_drive_id && clip.source_drive_id !== clip.video_asset_id) {
     await drive.body?.cancel().catch(() => {});
     console.warn("[waves-video] copied asset unavailable; trying source asset");
@@ -115,7 +163,6 @@ export default async function handler(req, res) {
     console.warn("[waves-video] Google Drive rejected media request", { status: drive.status });
     return send(res, drive.status === 404 ? 404 : 502, { error: "Could not load video" });
   }
-  // Do not accidentally stream an entire multi-megabyte file as HTTP 200.
   if (req.method === "GET" && drive.status !== 206) {
     await drive.body?.cancel().catch(() => {});
     return send(res, 502, { error: "Video storage did not honour byte-range requests" });
@@ -126,9 +173,14 @@ export default async function handler(req, res) {
     const value = drive.headers.get(name);
     if (value) res.setHeader(name, value);
   }
-  res.setHeader("Cache-Control", "private, no-store");
+
+  // These clips are published public content. Allow short CDN/browser reuse of
+  // byte ranges so replaying or swiping back does not immediately hit Drive.
+  res.setHeader("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=3600");
+  res.setHeader("Vary", "Range");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("X-Content-Type-Options", "nosniff");
+
   if (req.method === "HEAD" || !drive.body) return res.end();
 
   const reader = drive.body.getReader();
