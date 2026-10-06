@@ -1,0 +1,194 @@
+/*
+ * Native/mobile layout reset.
+ *
+ * This file is intentionally loaded LAST. Older responsive/layout files grew
+ * over time and several of them reserve bottom-nav space in different ways.
+ * Normal screens now have one owner for viewport geometry:
+ *   header -> one scrolling content pane -> fixed bottom navigation.
+ * Chat keeps its dedicated keyboard/viewport rules.
+ */
+
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) {
+  --wavo-mobile-nav-h: 68px;
+  --wavo-mobile-nav-gap: 10px;
+  --wavo-mobile-gutter: 12px;
+}
+
+/* ---------- Full viewport ownership ---------- */
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]),
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) body,
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) #root {
+  width: 100% !important;
+  height: 100dvh !important;
+  min-height: 100dvh !important;
+  max-height: 100dvh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  background: var(--bg, #06111d) !important;
+}
+
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) body:has(.app-shell) {
+  position: fixed !important;
+  inset: 0 !important;
+}
+
+/* Normal app screens do not use the JS-measured shell height anymore. The
+ * browser's dynamic viewport is the real drawable viewport on iPhone. */
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .app-shell:not(:has(.chat-screen)) {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100dvh !important;
+  min-height: 100dvh !important;
+  max-height: 100dvh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  align-content: stretch !important;
+  overflow: hidden !important;
+  background:
+    radial-gradient(circle at 50% -10%, rgba(54, 118, 170, .10), transparent 34%),
+    var(--bg, #06111d) !important;
+}
+
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .app-shell:not(:has(.chat-screen)) > .app-header,
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .app-shell:not(:has(.chat-screen)) > .offline-banner {
+  grid-row: 1 !important;
+  position: relative !important;
+  top: auto !important;
+  flex: none !important;
+  z-index: 80 !important;
+}
+
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .app-shell:not(:has(.chat-screen)) > .pull-shell {
+  grid-row: 2 !important;
+  position: relative !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  flex: none !important;
+}
+
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .app-shell:not(:has(.chat-screen)) .app-content {
+  position: relative !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Exactly one scroll owner. No wrapper is allowed to chop the page in half. */
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .app-shell:not(:has(.chat-screen)) .app-content > .screen,
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .app-shell:not(:has(.chat-screen)) .app-content > [class$="-screen"]:not(.chat-screen) {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  margin: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior-y: contain !important;
+  -webkit-overflow-scrolling: touch !important;
+  /* One and only one nav reserve. */
+  padding-bottom: calc(var(--wavo-mobile-nav-h) + var(--wavo-mobile-nav-gap) * 2 + env(safe-area-inset-bottom, 0px) + 18px) !important;
+  scroll-padding-bottom: calc(var(--wavo-mobile-nav-h) + env(safe-area-inset-bottom, 0px) + 24px) !important;
+}
+
+/* Home keeps its tighter side/top spacing while inheriting the single bottom reserve. */
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .app-shell:not(:has(.chat-screen)) .home-screen {
+  padding-top: 14px !important;
+  padding-right: 14px !important;
+  padding-left: 14px !important;
+  gap: 14px !important;
+}
+
+/* ---------- Bottom navigation ---------- */
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .bottom-nav {
+  position: fixed !important;
+  z-index: 1000 !important;
+  left: var(--wavo-mobile-gutter) !important;
+  right: var(--wavo-mobile-gutter) !important;
+  bottom: calc(var(--wavo-mobile-nav-gap) + env(safe-area-inset-bottom, 0px)) !important;
+  width: auto !important;
+  height: var(--wavo-mobile-nav-h) !important;
+  min-height: var(--wavo-mobile-nav-h) !important;
+  max-height: var(--wavo-mobile-nav-h) !important;
+  margin: 0 !important;
+  padding: 6px !important;
+  flex: none !important;
+  align-self: auto !important;
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  align-items: stretch !important;
+  border: 1px solid color-mix(in srgb, var(--cyan) 14%, var(--line)) !important;
+  border-radius: 24px !important;
+  background: color-mix(in srgb, var(--bg) 88%, transparent) !important;
+  box-shadow: 0 16px 42px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.03) !important;
+  backdrop-filter: blur(22px) saturate(1.14) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(1.14) !important;
+  overflow: hidden !important;
+}
+
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .bottom-nav > button {
+  width: 100% !important;
+  height: 56px !important;
+  min-height: 56px !important;
+  max-height: 56px !important;
+  margin: 0 !important;
+  padding: 5px 2px !important;
+  align-self: center !important;
+  border-radius: 18px !important;
+  gap: 3px !important;
+}
+
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .bottom-nav > button svg {
+  width: 22px !important;
+  height: 22px !important;
+}
+
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .bottom-nav > button span {
+  font-size: 10px !important;
+  line-height: 1 !important;
+}
+
+/* Home already exposes these actions in Core. They are root-level siblings of
+ * App, not children of .app-shell, so descendant selectors never hid them. */
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) body:has(.home-screen) .p3-launcher,
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) body:has(.home-screen) .wt-launcher {
+  display: none !important;
+}
+
+/* On other screens, keep the launchers usable but above the fixed nav. */
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) body:not(:has(.home-screen)) .p3-launcher,
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) body:not(:has(.home-screen)) .wt-launcher {
+  bottom: calc(var(--wavo-mobile-nav-h) + var(--wavo-mobile-nav-gap) * 2 + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* The legacy shell/nav files set flex-basis, margins and measured heights.
+ * Fixed positioning means none of those values should reserve phantom space. */
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .app-shell:not(:has(.chat-screen)) > .bottom-nav {
+  grid-row: auto !important;
+  flex-basis: auto !important;
+}
+
+@media (max-width: 370px) {
+  :is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) {
+    --wavo-mobile-gutter: 9px;
+    --wavo-mobile-nav-h: 64px;
+  }
+
+  :is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .bottom-nav > button {
+    height: 52px !important;
+    min-height: 52px !important;
+    max-height: 52px !important;
+  }
+}
