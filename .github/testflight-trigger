@@ -18,3 +18,4 @@
 2026-10-06 Mobile home fit and viewport fix 64728976395524e9f6e70b669444f1a9005baee6
 2026-10-06 Native bottom gap and black slab fix eb57eae934a79f67b45e6a7957b713364a07d2a0
 2026-10-06 Replace conflicting mobile layout rules 5f3af5a5e374c4f671758a85c56407e850ff88bd
+2026-10-06 Final flex viewport reset b1189f092720388d63ae9473ea03160a11feecb4
