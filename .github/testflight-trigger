@@ -16,3 +16,4 @@
 2026-10-02 Native viewport height fix 05fe540581e4a745faf5a37491dc130d65f85a3f
 2026-10-02 Full native screen height fix 4f8dc573a3055233d89d715ec85ac52aa1928905
 2026-10-06 Mobile home fit and viewport fix 64728976395524e9f6e70b669444f1a9005baee6
+2026-10-06 Native bottom gap and black slab fix eb57eae934a79f67b45e6a7957b713364a07d2a0
