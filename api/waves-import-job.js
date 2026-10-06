@@ -12,6 +12,16 @@ const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
 
 const json = (res, status, body) => res.status(status).json(body);
 
+function settings() {
+  return {
+    supabaseUrl: process.env.SUPABASE_URL,
+    serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    userId: String(process.env.WAVES_IMPORT_USER_ID || ""),
+    sourceRoot: String(process.env.WAVES_IMPORT_SOURCE_ROOT || DEFAULT_SOURCE_ROOT),
+    targetFolder: String(process.env.WAVES_IMPORT_TARGET_FOLDER || DEFAULT_TARGET_FOLDER),
+  };
+}
+
 async function googleToken() {
   const id = process.env.GOOGLE_DRIVE_CLIENT_ID;
   const secret = process.env.GOOGLE_DRIVE_CLIENT_SECRET;
@@ -138,10 +148,9 @@ async function insertPage(admin, rawFiles, userId, folder) {
   const tags = tagsForPath(path);
   const channel = channelForPath(path);
 
-  // This job intentionally stages imported bundle media as drafts. Some bundles
-  // have licence conditions that require copying/modifying the source before it
-  // may be redistributed, so the crawler must never silently mark that review
-  // as complete or publish raw third-party assets.
+  // Stage third-party bundle media as drafts. The bundle's own licence requires
+  // copying to the licensee's storage and modifying content/presentation before
+  // distribution, so discovery/import must not silently publish untouched files.
   const rows = fresh.map((file) => ({
     source_drive_id: file.id,
     channel_slug: channel,
@@ -180,49 +189,51 @@ function rootQueue(sourceRoot) {
   return [{ id: sourceRoot, name: "275.000+ REELS MEGA BUNDLE", path: "275.000+ REELS MEGA BUNDLE" }];
 }
 
-export default async function handler(req, res) {
-  if (req.method !== "GET" && req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
-
-  const configuredSecret = String(process.env.WAVES_IMPORT_JOB_SECRET || "");
-  const auth = String(req.headers.authorization || "");
-  const suppliedSecret = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  if (!configuredSecret || suppliedSecret !== configuredSecret) return json(res, 401, { error: "Unauthorized" });
-
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const userId = String(process.env.WAVES_IMPORT_USER_ID || "");
-  const sourceRoot = String(process.env.WAVES_IMPORT_SOURCE_ROOT || DEFAULT_SOURCE_ROOT);
-  const targetFolder = String(process.env.WAVES_IMPORT_TARGET_FOLDER || DEFAULT_TARGET_FOLDER);
-
-  if (!supabaseUrl || !serviceKey || !/^[0-9a-f-]{36}$/i.test(userId)) {
-    return json(res, 503, { error: "Import job is not configured" });
+async function adminContext() {
+  const opts = settings();
+  if (!opts.supabaseUrl || !opts.serviceKey || !/^[0-9a-f-]{36}$/i.test(opts.userId)) {
+    return { error: { status: 503, body: { error: "Import job is not configured" } } };
   }
 
-  const admin = createClient(supabaseUrl, serviceKey, {
+  const admin = createClient(opts.supabaseUrl, opts.serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-
   const { data: profile, error: profileError } = await admin
     .from("profiles")
     .select("is_admin")
-    .eq("id", userId)
+    .eq("id", opts.userId)
     .maybeSingle();
-  if (profileError || !profile?.is_admin) return json(res, 403, { error: "Configured import owner is not an admin" });
+  if (profileError || !profile?.is_admin) {
+    return { error: { status: 403, body: { error: "Configured import owner is not an admin" } } };
+  }
+  return { admin, ...opts };
+}
 
-  if (req.method === "GET") {
-    const { data: progress, error } = await admin
+export async function readImportProgress() {
+  try {
+    const ctx = await adminContext();
+    if (ctx.error) return ctx.error;
+    const { data: progress, error } = await ctx.admin
       .from("waves_bulk_import_progress")
       .select("*")
-      .eq("admin_id", userId)
+      .eq("admin_id", ctx.userId)
       .maybeSingle();
-    if (error) return json(res, 500, { error: "Could not load import progress" });
-    return json(res, 200, { progress: publicProgress(progress), sourceRoot });
+    if (error) return { status: 500, body: { error: "Could not load import progress" } };
+    return { status: 200, body: { progress: publicProgress(progress), sourceRoot: ctx.sourceRoot } };
+  } catch (error) {
+    console.error("[waves-import-progress]", error?.message || error);
+    return { status: 500, body: { error: error?.message || "Could not load import progress" } };
   }
+}
 
-  const action = String(req.body?.action || "next");
-  if (!["next", "reset"].includes(action)) return json(res, 400, { error: "Unknown action" });
+export async function runImportPage(action = "next") {
+  if (!["next", "reset"].includes(action)) return { status: 400, body: { error: "Unknown action" } };
 
   try {
+    const ctx = await adminContext();
+    if (ctx.error) return ctx.error;
+    const { admin, userId, sourceRoot, targetFolder } = ctx;
+
     if (action === "reset") {
       const { error } = await admin.from("waves_bulk_import_progress").delete().eq("admin_id", userId);
       if (error) throw error;
@@ -254,12 +265,14 @@ export default async function handler(req, res) {
       progress = data;
     }
 
-    if (progress.finished) return json(res, 200, { progress: publicProgress(progress), complete: true });
+    if (progress.finished) {
+      return { status: 200, body: { progress: publicProgress(progress), complete: true, sourceRoot } };
+    }
 
     let queue = Array.isArray(progress.folder_queue) && progress.folder_queue.length
       ? progress.folder_queue
       : rootQueue(sourceRoot);
-    let folderIndex = Number(progress.folder_index || 0);
+    const folderIndex = Number(progress.folder_index || 0);
     const folder = queue[folderIndex];
 
     if (!folder) {
@@ -270,7 +283,7 @@ export default async function handler(req, res) {
         .select("admin_id,source_root_id,target_folder_id,folder_index,page_token,files_imported,files_existing,files_failed,files_ignored,folders_discovered,last_error,updated_at,finished")
         .single();
       if (error) throw error;
-      return json(res, 200, { progress: finished, complete: true });
+      return { status: 200, body: { progress: finished, complete: true, sourceRoot } };
     }
 
     const googleAccess = await googleToken();
@@ -318,14 +331,34 @@ export default async function handler(req, res) {
       .single();
     if (saveError) throw saveError;
 
-    return json(res, 200, {
-      progress: saved,
-      batch: { ...batch, folder: folder.name, path: folder.path },
-      complete,
-      sourceRoot,
-    });
+    return {
+      status: 200,
+      body: {
+        progress: saved,
+        batch: { ...batch, folder: folder.name, path: folder.path },
+        complete,
+        sourceRoot,
+      },
+    };
   } catch (error) {
     console.error("[waves-import-job]", error?.message || error);
-    return json(res, 500, { error: error?.message || "Import failed" });
+    return { status: 500, body: { error: error?.message || "Import failed" } };
   }
+}
+
+export default async function handler(req, res) {
+  if (req.method !== "GET" && req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
+
+  const configuredSecret = String(process.env.WAVES_IMPORT_JOB_SECRET || "");
+  const auth = String(req.headers.authorization || "");
+  const suppliedSecret = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!configuredSecret || suppliedSecret !== configuredSecret) return json(res, 401, { error: "Unauthorized" });
+
+  if (req.method === "GET") {
+    const result = await readImportProgress();
+    return json(res, result.status, result.body);
+  }
+
+  const result = await runImportPage(String(req.body?.action || "next"));
+  return json(res, result.status, result.body);
 }
