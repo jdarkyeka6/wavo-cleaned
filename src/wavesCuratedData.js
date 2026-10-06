@@ -31,7 +31,6 @@ export function rotateCuratedFeed(friendPosts, curatedPosts) {
   let lastChannel = null
   let rotation = 0
   while (friends.length || channels.some((slug) => pools.get(slug)?.length)) {
-    // Interleave a friend upload every fourth slot, if available.
     if (friends.length && (result.length % 4 === 0 || !channels.some((slug) => pools.get(slug)?.length))) {
       result.push(friends.shift())
       lastChannel = 'friends'
@@ -54,44 +53,50 @@ export function rotateCuratedFeed(friendPosts, curatedPosts) {
 }
 
 export async function loadCuratedWaves(page = 0) {
-  // Published clips are fetched in channel-balanced pages under RLS. A huge
-  // import in one category cannot bury every other channel behind thousands of videos.
+  // Keep the first page deliberately small. Seven channels x six clips gives a
+  // useful feed immediately without mounting 100+ video elements at startup.
+  // Infinite loading brings in more pages as the viewer approaches the end.
   const { data, error } = await supabase.rpc('waves_curated_feed_page', {
-    p_page: page, p_per_channel: 15,
+    p_page: page, p_per_channel: 6,
   })
   if (error) throw error
   const clips = data || []
   if (!clips.length) return []
+
   const { data: likes, error: likeError } = await supabase.from('waves_curated_likes')
     .select('clip_id,user_id').in('clip_id', clips.map((clip) => clip.id))
   if (likeError) throw likeError
+
   const likesByClip = new Map()
   for (const like of likes || []) {
     if (!likesByClip.has(like.clip_id)) likesByClip.set(like.clip_id, [])
     likesByClip.get(like.clip_id).push(like)
   }
-  const { data: sessionData } = await supabase.auth.getSession()
-  const token = sessionData?.session?.access_token
+
   const signed = await Promise.all(clips.map(async (clip) => {
     let playbackUrl = clip.video_provider === 'google_drive'
       ? null
       : (clip.playback_url || null)
+
     if (clip.video_provider === 'google_drive' && clip.video_asset_id) {
-      // Published curated clips support guest playback. Add the session token
-      // only when one exists so the same feed works signed in and signed out.
+      // Published curated clips are intentionally guest-viewable, so do not put
+      // a user access token in every video URL. Besides being cleaner, this also
+      // avoids a Supabase auth verification on every iOS byte-range request.
       const proxyOrigin = isNativeApp ? 'https://wavowaves.lol' : ''
-      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : ''
-      playbackUrl = `${proxyOrigin}/api/waves-video?id=${encodeURIComponent(clip.id)}${tokenParam}`
+      playbackUrl = `${proxyOrigin}/api/waves-video?id=${encodeURIComponent(clip.id)}`
     }
+
     if (!playbackUrl && clip.media_path) {
       const { data: url, error: signError } = await supabase.storage.from('waves-curated')
         .createSignedUrl(clip.media_path, 15 * 60)
       if (signError || !url?.signedUrl) return null
       playbackUrl = url.signedUrl
     }
+
     if (!playbackUrl && !clip.playback_hls_url) return null
     const channel = channelBySlug[clip.channel_slug]
     if (!channel) return null
+
     return {
       kind: 'curated',
       id: clip.id,
