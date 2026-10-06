@@ -2,6 +2,7 @@ import { supabase } from './supabaseClient'
 import { isNativeApp } from './lib/platform'
 
 export const CURATED_CHANNELS = [
+  { slug: 'viral', handle: 'wavesviral', name: 'Viral', emoji: '🔥' },
   { slug: 'funny', handle: 'wavesfunny', name: 'Funny', emoji: '😂' },
   { slug: 'animals', handle: 'wavesanimals', name: 'Animals', emoji: '🐾' },
   { slug: 'gaming', handle: 'wavesgaming', name: 'Gaming', emoji: '🎮' },
@@ -54,7 +55,7 @@ export function rotateCuratedFeed(friendPosts, curatedPosts) {
 
 export async function loadCuratedWaves(page = 0) {
   // Published clips are fetched in channel-balanced pages under RLS. A huge
-  // Funny import cannot bury every Animals or Travel clip behind 1,400 videos.
+  // import in one category cannot bury every other channel behind thousands of videos.
   const { data, error } = await supabase.rpc('waves_curated_feed_page', {
     p_page: page, p_per_channel: 15,
   })
