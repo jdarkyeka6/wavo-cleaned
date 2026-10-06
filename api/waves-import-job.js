@@ -4,8 +4,11 @@ export const config = { maxDuration: 60 };
 
 const DEFAULT_SOURCE_ROOT = "1QREdguUC-VAZ-Me_kPbbJ1u3xjc-jf6K";
 const DEFAULT_TARGET_FOLDER = "1o_KKvneQsX2hQlEzndJ4CXjM4qpeqUqD";
-const PAGE_SIZE = 250;
-const VIDEO_MIME = new Set(["video/mp4", "video/quicktime"]);
+const PAGE_SIZE = 500;
+const FOLDER_MIME = "application/vnd.google-apps.folder";
+const SHORTCUT_MIME = "application/vnd.google-apps.shortcut";
+const VIDEO_MIME = new Set(["video/mp4", "video/quicktime", "video/webm", "video/x-m4v"]);
+const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
 
 const json = (res, status, body) => res.status(status).json(body);
 
@@ -39,34 +42,10 @@ async function google(path, token) {
   return body;
 }
 
-async function sourceFolders(token, sourceRoot) {
-  const params = new URLSearchParams({
-    q: `'${sourceRoot}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
-    fields: "nextPageToken,files(id,name)",
-    pageSize: "1000",
-    orderBy: "name",
-    supportsAllDrives: "true",
-    includeItemsFromAllDrives: "true",
-  });
-  const result = await google("files?" + params, token);
-  if (result.nextPageToken) throw new Error("Source contains more than 1000 immediate subfolders");
-
-  const folders = Array.isArray(result.files) ? result.files : [];
-  if (!folders.length) return [{ id: sourceRoot, name: "root" }];
-
-  return folders.sort((a, b) => {
-    const n = (value) => Number(String(value || "").match(/\[(\d+)/)?.[1] || 0);
-    const an = n(a.name);
-    const bn = n(b.name);
-    if (an !== bn) return an - bn;
-    return String(a.name || "").localeCompare(String(b.name || ""));
-  });
-}
-
 async function listPage(token, folderId, pageToken) {
   const params = new URLSearchParams({
     q: `'${folderId}' in parents and trashed = false`,
-    fields: "nextPageToken,files(id,name,mimeType,size)",
+    fields: "nextPageToken,files(id,name,mimeType,size,shortcutDetails(targetId,targetMimeType))",
     pageSize: String(PAGE_SIZE),
     orderBy: "name",
     supportsAllDrives: "true",
@@ -82,6 +61,45 @@ function chunk(items, size) {
   return out;
 }
 
+function normalizeItem(item) {
+  if (!item?.id) return null;
+  if (item.mimeType !== SHORTCUT_MIME) return item;
+  const targetId = item.shortcutDetails?.targetId;
+  const targetMimeType = item.shortcutDetails?.targetMimeType;
+  if (!targetId || !targetMimeType) return null;
+  return { ...item, id: targetId, mimeType: targetMimeType, isShortcut: true };
+}
+
+function cleanLabel(value) {
+  const cleaned = String(value || "")
+    .replace(/^\s*\d+[+\s._-]*/g, "")
+    .replace(/\b(reels?|videos?|bundle|clips?)\b/gi, " ")
+    .replace(/[\s_-]+/g, " ")
+    .trim();
+  return (cleaned || "Viral Waves").slice(0, 120);
+}
+
+function tagsForPath(path) {
+  const stop = new Set(["reel", "reels", "video", "videos", "clip", "clips", "bundle", "mega", "the", "and", "for", "with"]);
+  const tags = String(path || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(/\s+/)
+    .filter((tag) => tag.length > 2 && !stop.has(tag) && !/^\d+$/.test(tag));
+  return [...new Set(tags)].slice(-10);
+}
+
+function channelForPath(path) {
+  const text = String(path || "").toLowerCase();
+  if (/\b(animal|animals|cat|cats|dog|dogs|pet|pets|wildlife|horse|bird)\b/.test(text)) return "animals";
+  if (/\b(car|cars|auto|vehicle|vehicles|supercar|motor|motorsport)\b/.test(text)) return "cars";
+  if (/\b(game|games|gaming|minecraft|fortnite|roblox)\b/.test(text)) return "gaming";
+  if (/\b(travel|vacation|holiday|destination|beach|landscape|scenic|nature)\b/.test(text)) return "travel";
+  if (/\b(satisfying|satisfy|asmr|cleaning|cutting|glass|oddly)\b/.test(text)) return "satisfying";
+  if (/\b(funny|fail|fails|meme|memes|prank|comedy|joke|jokes)\b/.test(text)) return "funny";
+  return "viral";
+}
+
 async function existingSourceIds(admin, ids) {
   const found = new Set();
   for (const part of chunk(ids, 80)) {
@@ -95,36 +113,47 @@ async function existingSourceIds(admin, ids) {
   return found;
 }
 
-async function insertPage(admin, files, userId) {
-  const videoFiles = files.filter((file) =>
-    file?.id && VIDEO_MIME.has(file.mimeType) && Number(file.size || 0) <= 100 * 1024 * 1024
+async function insertPage(admin, rawFiles, userId, folder) {
+  const normalized = rawFiles.map(normalizeItem).filter(Boolean);
+  const videos = normalized.filter((file) =>
+    file?.id && VIDEO_MIME.has(file.mimeType) && (!file.size || Number(file.size) <= MAX_VIDEO_BYTES)
   );
-  if (!videoFiles.length) return { imported: 0, existing: 0, ignored: files.length };
+  if (!videos.length) return { imported: 0, existing: 0, ignored: rawFiles.length };
 
-  const ids = videoFiles.map((file) => file.id);
+  const ids = [...new Set(videos.map((file) => file.id))];
   const existing = await existingSourceIds(admin, ids);
-  const fresh = videoFiles.filter((file) => !existing.has(file.id));
-  const now = new Date().toISOString();
+  const seen = new Set();
+  const fresh = videos.filter((file) => {
+    if (existing.has(file.id) || seen.has(file.id)) return false;
+    seen.add(file.id);
+    return true;
+  });
 
   if (!fresh.length) {
-    return { imported: 0, existing: videoFiles.length, ignored: files.length - videoFiles.length };
+    return { imported: 0, existing: videos.length, ignored: rawFiles.length - videos.length };
   }
 
-  // Link the original Drive asset instead of duplicating every video. The
-  // playback endpoint already streams authenticated Drive assets server-side.
-  // Clips must start as drafts because the database publication guard requires
-  // the rights/audio review to exist before a clip may become published.
+  const path = folder?.path || folder?.name || "Viral Waves";
+  const title = cleanLabel(folder?.name || path);
+  const tags = tagsForPath(path);
+  const channel = channelForPath(path);
+
+  // This job intentionally stages imported bundle media as drafts. Some bundles
+  // have licence conditions that require copying/modifying the source before it
+  // may be redistributed, so the crawler must never silently mark that review
+  // as complete or publish raw third-party assets.
   const rows = fresh.map((file) => ({
     source_drive_id: file.id,
-    channel_slug: "funny",
-    title: "Funny Waves",
+    channel_slug: channel,
+    title,
     caption: "",
     status: "draft",
     created_by: userId,
     video_provider: "google_drive",
     video_asset_id: file.id,
     playback_url: `https://drive.usercontent.google.com/download?id=${file.id}&export=download`,
-    tags: ["funny", "fails"],
+    source_credit: "PLR/MRR bundle import",
+    tags,
     tagging_status: "pending",
   }));
 
@@ -134,41 +163,21 @@ async function insertPage(admin, files, userId) {
     .select("id,source_drive_id");
   if (insertError) throw insertError;
 
-  const byId = new Map(fresh.map((file) => [file.id, file]));
-  const reviews = (inserted || []).map((clip) => ({
-    clip_id: clip.id,
-    drive_source_url: `https://drive.google.com/file/d/${clip.source_drive_id}/view`,
-    source_filename: String(byId.get(clip.source_drive_id)?.name || "").slice(0, 240),
-    decision: "yes",
-    decided_at: now,
-    decided_by: userId,
-    rights_verified: true,
-    audio_verified: true,
-    edited: false,
-    content_approved: false,
-    licence_notes: "Collection owner authorised this selected Drive collection for bulk release to Wavo Waves. Original Drive assets are linked, not duplicated. Rights are owner-attested and not independently verified by Wavo.",
-  }));
-
-  if (reviews.length) {
-    const { error: reviewError } = await admin.from("waves_curated_reviews").insert(reviews);
-    if (reviewError) throw reviewError;
-  }
-
-  const clipIds = (inserted || []).map((clip) => clip.id);
-  for (const part of chunk(clipIds, 80)) {
-    const { error: publishError } = await admin
-      .from("waves_curated_clips")
-      .update({ status: "published", published_at: now })
-      .in("id", part)
-      .eq("status", "draft");
-    if (publishError) throw publishError;
-  }
-
   return {
     imported: inserted?.length || 0,
-    existing: videoFiles.length - fresh.length,
-    ignored: files.length - videoFiles.length,
+    existing: videos.length - fresh.length,
+    ignored: rawFiles.length - videos.length,
   };
+}
+
+function publicProgress(progress) {
+  if (!progress) return null;
+  const { folder_queue: _queue, ...rest } = progress;
+  return rest;
+}
+
+function rootQueue(sourceRoot) {
+  return [{ id: sourceRoot, name: "275.000+ REELS MEGA BUNDLE", path: "275.000+ REELS MEGA BUNDLE" }];
 }
 
 export default async function handler(req, res) {
@@ -207,7 +216,7 @@ export default async function handler(req, res) {
       .eq("admin_id", userId)
       .maybeSingle();
     if (error) return json(res, 500, { error: "Could not load import progress" });
-    return json(res, 200, { progress: progress || null, sourceRoot });
+    return json(res, 200, { progress: publicProgress(progress), sourceRoot });
   }
 
   const action = String(req.body?.action || "next");
@@ -233,43 +242,69 @@ export default async function handler(req, res) {
     }
 
     if (!progress) {
+      const queue = rootQueue(sourceRoot);
       const { data, error } = await admin.from("waves_bulk_import_progress").insert({
         admin_id: userId,
         source_root_id: sourceRoot,
         target_folder_id: targetFolder,
+        folder_queue: queue,
+        folders_discovered: queue.length,
       }).select("*").single();
       if (error) throw error;
       progress = data;
     }
 
-    if (progress.finished) return json(res, 200, { progress, complete: true });
+    if (progress.finished) return json(res, 200, { progress: publicProgress(progress), complete: true });
 
-    const googleAccess = await googleToken();
-    const folders = await sourceFolders(googleAccess, sourceRoot);
-    const folder = folders[progress.folder_index];
+    let queue = Array.isArray(progress.folder_queue) && progress.folder_queue.length
+      ? progress.folder_queue
+      : rootQueue(sourceRoot);
+    let folderIndex = Number(progress.folder_index || 0);
+    const folder = queue[folderIndex];
 
     if (!folder) {
       const { data: finished, error } = await admin
         .from("waves_bulk_import_progress")
         .update({ finished: true, updated_at: new Date().toISOString() })
         .eq("admin_id", userId)
-        .select("*")
+        .select("admin_id,source_root_id,target_folder_id,folder_index,page_token,files_imported,files_existing,files_failed,files_ignored,folders_discovered,last_error,updated_at,finished")
         .single();
       if (error) throw error;
       return json(res, 200, { progress: finished, complete: true });
     }
 
+    const googleAccess = await googleToken();
     const page = await listPage(googleAccess, folder.id, progress.page_token);
-    const batch = await insertPage(admin, page.files || [], userId);
+    const normalized = (page.files || []).map(normalizeItem).filter(Boolean);
+    const childFolders = normalized.filter((file) => file.mimeType === FOLDER_MIME);
 
-    const nextFolderIndex = page.nextPageToken ? progress.folder_index : progress.folder_index + 1;
-    const complete = !page.nextPageToken && nextFolderIndex >= folders.length;
+    if (childFolders.length) {
+      const queuedIds = new Set(queue.map((entry) => entry.id));
+      const additions = [];
+      for (const child of childFolders) {
+        if (queuedIds.has(child.id)) continue;
+        queuedIds.add(child.id);
+        additions.push({
+          id: child.id,
+          name: String(child.name || "Folder").slice(0, 240),
+          path: `${folder.path || folder.name || "Bundle"}/${String(child.name || "Folder")}`.slice(0, 2000),
+        });
+      }
+      if (additions.length) queue = queue.concat(additions);
+    }
+
+    const batch = await insertPage(admin, page.files || [], userId, folder);
+    const nextFolderIndex = page.nextPageToken ? folderIndex : folderIndex + 1;
+    const complete = !page.nextPageToken && nextFolderIndex >= queue.length;
     const next = {
+      folder_queue: queue,
+      folders_discovered: queue.length,
       folder_index: nextFolderIndex,
       page_token: page.nextPageToken || null,
-      files_imported: progress.files_imported + batch.imported,
-      files_existing: progress.files_existing + batch.existing,
-      files_failed: progress.files_failed,
+      files_imported: Number(progress.files_imported || 0) + batch.imported,
+      files_existing: Number(progress.files_existing || 0) + batch.existing,
+      files_failed: Number(progress.files_failed || 0),
+      files_ignored: Number(progress.files_ignored || 0) + batch.ignored,
       finished: complete,
       last_error: null,
       updated_at: new Date().toISOString(),
@@ -279,13 +314,13 @@ export default async function handler(req, res) {
       .from("waves_bulk_import_progress")
       .update(next)
       .eq("admin_id", userId)
-      .select("*")
+      .select("admin_id,source_root_id,target_folder_id,folder_index,page_token,files_imported,files_existing,files_failed,files_ignored,folders_discovered,last_error,updated_at,finished")
       .single();
     if (saveError) throw saveError;
 
     return json(res, 200, {
       progress: saved,
-      batch: { ...batch, folder: folder.name },
+      batch: { ...batch, folder: folder.name, path: folder.path },
       complete,
       sourceRoot,
     });
