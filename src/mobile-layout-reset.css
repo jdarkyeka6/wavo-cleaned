@@ -1,10 +1,8 @@
 /*
  * Native/mobile layout reset.
- *
- * This file is intentionally loaded LAST. Older responsive/layout files grew
- * over time and several of them reserve bottom-nav space in different ways.
- * Normal screens now have one owner for viewport geometry:
- *   header -> one scrolling content pane -> fixed bottom navigation.
+ * Loaded LAST so older responsive/layout patches cannot reserve phantom space.
+ * Normal screens have one geometry owner:
+ *   header/offline banner -> one flexing scroll pane -> fixed bottom nav.
  * Chat keeps its dedicated keyboard/viewport rules.
  */
 
@@ -33,8 +31,9 @@
   inset: 0 !important;
 }
 
-/* Normal app screens do not use the JS-measured shell height anymore. The
- * browser's dynamic viewport is the real drawable viewport on iPhone. */
+/* Normal screens use the browser's actual dynamic viewport, not the older
+ * JS-measured shell height that could stop hundreds of pixels above the iPhone
+ * bottom edge. */
 :is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .app-shell:not(:has(.chat-screen)) {
   position: fixed !important;
   inset: 0 !important;
@@ -44,9 +43,8 @@
   max-height: 100dvh !important;
   margin: 0 !important;
   padding: 0 !important;
-  display: grid !important;
-  grid-template-rows: auto minmax(0, 1fr) !important;
-  align-content: stretch !important;
+  display: flex !important;
+  flex-direction: column !important;
   overflow: hidden !important;
   background:
     radial-gradient(circle at 50% -10%, rgba(54, 118, 170, .10), transparent 34%),
@@ -55,24 +53,22 @@
 
 :is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .app-shell:not(:has(.chat-screen)) > .app-header,
 :is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .app-shell:not(:has(.chat-screen)) > .offline-banner {
-  grid-row: 1 !important;
   position: relative !important;
   top: auto !important;
-  flex: none !important;
+  flex: 0 0 auto !important;
   z-index: 80 !important;
 }
 
 :is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .app-shell:not(:has(.chat-screen)) > .pull-shell {
-  grid-row: 2 !important;
   position: relative !important;
   width: 100% !important;
-  height: 100% !important;
+  height: auto !important;
   min-height: 0 !important;
   max-height: none !important;
   margin: 0 !important;
   padding: 0 !important;
   overflow: hidden !important;
-  flex: none !important;
+  flex: 1 1 0 !important;
 }
 
 :is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .app-shell:not(:has(.chat-screen)) .app-content {
@@ -98,7 +94,6 @@
   overflow-y: auto !important;
   overscroll-behavior-y: contain !important;
   -webkit-overflow-scrolling: touch !important;
-  /* One and only one nav reserve. */
   padding-bottom: calc(var(--wavo-mobile-nav-h) + var(--wavo-mobile-nav-gap) * 2 + env(safe-area-inset-bottom, 0px) + 18px) !important;
   scroll-padding-bottom: calc(var(--wavo-mobile-nav-h) + env(safe-area-inset-bottom, 0px) + 24px) !important;
 }
@@ -173,11 +168,10 @@
   bottom: calc(var(--wavo-mobile-nav-h) + var(--wavo-mobile-nav-gap) * 2 + env(safe-area-inset-bottom, 0px)) !important;
 }
 
-/* The legacy shell/nav files set flex-basis, margins and measured heights.
- * Fixed positioning means none of those values should reserve phantom space. */
+/* Old nav files gave the nav flex-basis/margins because it used to participate
+ * in the shell. It is fixed now, so it must reserve zero layout space itself. */
 :is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .app-shell:not(:has(.chat-screen)) > .bottom-nav {
-  grid-row: auto !important;
-  flex-basis: auto !important;
+  flex: 0 0 auto !important;
 }
 
 @media (max-width: 370px) {
