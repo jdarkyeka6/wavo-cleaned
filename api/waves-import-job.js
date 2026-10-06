@@ -52,8 +52,6 @@ async function sourceFolders(token, sourceRoot) {
   if (result.nextPageToken) throw new Error("Source contains more than 1000 immediate subfolders");
 
   const folders = Array.isArray(result.files) ? result.files : [];
-  // Some collections put video files directly in the selected root. Treat the
-  // root itself as a single folder when no child folders exist.
   if (!folders.length) return [{ id: sourceRoot, name: "root" }];
 
   return folders.sort((a, b) => {
@@ -112,17 +110,17 @@ async function insertPage(admin, files, userId) {
     return { imported: 0, existing: videoFiles.length, ignored: files.length - videoFiles.length };
   }
 
-  // High-volume mode deliberately links the original Drive asset instead of
-  // copying every video. /api/waves-video already streams authenticated Drive
-  // assets server-side, so this avoids duplicating potentially enormous media.
+  // Link the original Drive asset instead of duplicating every video. The
+  // playback endpoint already streams authenticated Drive assets server-side.
+  // Clips must start as drafts because the database publication guard requires
+  // the rights/audio review to exist before a clip may become published.
   const rows = fresh.map((file) => ({
     source_drive_id: file.id,
     channel_slug: "funny",
     title: "Funny Waves",
     caption: "",
-    status: "published",
+    status: "draft",
     created_by: userId,
-    published_at: now,
     video_provider: "google_drive",
     video_asset_id: file.id,
     playback_url: `https://drive.usercontent.google.com/download?id=${file.id}&export=download`,
@@ -154,6 +152,16 @@ async function insertPage(admin, files, userId) {
   if (reviews.length) {
     const { error: reviewError } = await admin.from("waves_curated_reviews").insert(reviews);
     if (reviewError) throw reviewError;
+  }
+
+  const clipIds = (inserted || []).map((clip) => clip.id);
+  for (const part of chunk(clipIds, 80)) {
+    const { error: publishError } = await admin
+      .from("waves_curated_clips")
+      .update({ status: "published", published_at: now })
+      .in("id", part)
+      .eq("status", "draft");
+    if (publishError) throw publishError;
   }
 
   return {
