@@ -1,17 +1,72 @@
 /* Mobile home-screen fit and visual pass.
- * Loaded after the older responsive/layout patches so this is the final word
- * for the Wavo home surface and bottom navigation.
+ * This file is intentionally loaded last. Native iOS owns the real dynamic
+ * viewport directly instead of trusting WKWebView's occasionally short JS
+ * height measurements.
  */
 
 :is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) {
-  --wavo-nav-height: 64px;
+  --wavo-nav-height: 66px;
 }
 
-/* The home surface should begin with Core, matching the current mobile design. */
+/* Native iOS, keyboard closed: fill the actual visible viewport. This is the
+ * critical fix for the black slab + giant unused area below the navigation. */
+html[data-wavo-ui="mobile-app"][data-wavo-keyboard="closed"],
+html[data-wavo-ui="mobile-app"][data-wavo-keyboard="closed"] body,
+html[data-wavo-ui="mobile-app"][data-wavo-keyboard="closed"] #root,
+html[data-wavo-ui="mobile-app"][data-wavo-keyboard="closed"] .app-shell {
+  height: 100dvh !important;
+  min-height: 100dvh !important;
+  max-height: 100dvh !important;
+}
+
+html[data-wavo-ui="mobile-app"][data-wavo-keyboard="closed"] body {
+  position: fixed !important;
+  inset: 0 !important;
+  overflow: hidden !important;
+}
+
+html[data-wavo-ui="mobile-app"][data-wavo-keyboard="closed"] .app-shell {
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+html[data-wavo-ui="mobile-app"][data-wavo-keyboard="closed"] .app-shell > .pull-shell {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  background: transparent !important;
+}
+
+html[data-wavo-ui="mobile-app"][data-wavo-keyboard="closed"] .app-shell .app-content {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+  background: transparent !important;
+}
+
+html[data-wavo-ui="mobile-app"][data-wavo-keyboard="closed"] .app-content > .screen {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+/* The home surface should begin with Core, matching the approved mobile look. */
 :is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .home-screen {
   gap: 14px !important;
-  padding: 14px 14px 18px !important;
-  scroll-padding-bottom: 22px;
+  padding: 14px 14px calc(var(--wavo-nav-height) + var(--wavo-safe-bottom, env(safe-area-inset-bottom, 0px)) + 30px) !important;
+  scroll-padding-bottom: calc(var(--wavo-nav-height) + 28px) !important;
+  background: transparent !important;
 }
 
 :is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .home-screen > .home-summary,
@@ -133,8 +188,6 @@
   opacity: 1 !important;
 }
 
-/* The cue was consuming valuable height while repeating something the scroll
- * gesture already communicates. Everything below Core remains scrollable. */
 :is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .core-scroll-cue {
   display: none !important;
 }
@@ -144,29 +197,36 @@
   padding-top: 12px !important;
 }
 
-/* On Home, the two legacy floating launchers duplicate features already in the
- * Core and are what made the lower edge feel cluttered in the screenshot. */
-:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .app-shell:has(.home-screen) .p3-launcher,
-:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .app-shell:has(.home-screen) .wt-launcher {
+/* WavoTogether/Phase3 are siblings of App, not children of .app-shell. Hide
+ * them through the document while Home is mounted. The previous selector could
+ * never match them, which is why both sparkle buttons were still visible. */
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) body:has(.home-screen) .p3-launcher,
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) body:has(.home-screen) .wt-launcher {
   display: none !important;
 }
 
-/* Rounded, inset navigation like the approved mockup. It remains part of the
- * shell layout, so it cannot float halfway up the screen. */
+/* Pin the nav to the actual viewport, not to a misreported flex height. */
 :is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .bottom-nav {
-  width: calc(100% - 24px) !important;
-  height: calc(var(--wavo-nav-height) + var(--wavo-safe-bottom, 0px)) !important;
-  min-height: calc(var(--wavo-nav-height) + var(--wavo-safe-bottom, 0px)) !important;
-  max-height: calc(var(--wavo-nav-height) + var(--wavo-safe-bottom, 0px)) !important;
-  flex: 0 0 calc(var(--wavo-nav-height) + var(--wavo-safe-bottom, 0px)) !important;
-  align-self: center !important;
-  margin: 7px 12px calc(8px + var(--wavo-safe-bottom, 0px)) !important;
-  padding: 5px 6px 5px !important;
+  position: fixed !important;
+  z-index: 900 !important;
+  left: 12px !important;
+  right: 12px !important;
+  bottom: calc(8px + var(--wavo-safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
+  width: auto !important;
+  height: var(--wavo-nav-height) !important;
+  min-height: var(--wavo-nav-height) !important;
+  max-height: var(--wavo-nav-height) !important;
+  flex: none !important;
+  align-self: auto !important;
+  margin: 0 !important;
+  padding: 5px 6px !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  align-items: center !important;
   border: 1px solid color-mix(in srgb, var(--cyan) 14%, var(--line)) !important;
   border-radius: 22px !important;
   overflow: hidden !important;
-  background: color-mix(in srgb, var(--bg) 90%, transparent) !important;
-  box-shadow: 0 14px 34px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.025) !important;
+  background: color-mix(in srgb, var(--bg) 92%, transparent) !important;
+  box-shadow: 0 14px 34px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.025) !important;
   backdrop-filter: blur(20px) saturate(1.12) !important;
   -webkit-backdrop-filter: blur(20px) saturate(1.12) !important;
 }
@@ -176,6 +236,7 @@
   min-height: 54px !important;
   max-height: 54px !important;
   padding: 5px 2px !important;
+  margin: 0 !important;
   border-radius: 17px !important;
   gap: 3px !important;
 }
@@ -197,9 +258,10 @@
   font-weight: 760 !important;
 }
 
-/* The nav owns its own vertical space. Screens should not reserve a second nav. */
+/* Every normal screen reserves only the fixed nav overlay, never a second
+ * phantom flex-nav slot. */
 :is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .app-content > .screen {
-  padding-bottom: 18px !important;
+  padding-bottom: calc(var(--wavo-nav-height) + var(--wavo-safe-bottom, env(safe-area-inset-bottom, 0px)) + 30px) !important;
 }
 
 @media (max-width: 370px) {
