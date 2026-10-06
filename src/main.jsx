@@ -64,6 +64,7 @@ import './ui-mobile-cleanup.css'
 import './ui-bottom-nav-fix.css'
 import './colour-polish.css'
 import './home-fit-polish.css'
+import './mobile-layout-reset.css'
 
 installAuthBootResilience()
 installUiMode()
