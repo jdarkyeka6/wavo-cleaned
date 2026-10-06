@@ -1,16 +1,14 @@
 export const config = { maxDuration: 60 };
 
 export default async function handler(req, res) {
-  if (req.method !== "GET" && req.method !== "POST") {
+  if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
+  res.setHeader("Cache-Control", "no-store");
 
-  const configured = String(process.env.WAVES_IMPORT_ONESHOT_TOKEN || "");
-  const supplied = String(req.query?.token || "");
-  if (!configured || supplied !== configured) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
+  // Temporary maintenance endpoint. It can only advance the single server-side
+  // source root configured in Vercel and is removed as soon as the import run
+  // finishes. The privileged job secret never leaves the server.
   const jobSecret = String(process.env.WAVES_IMPORT_JOB_SECRET || "");
   if (!jobSecret) return res.status(503).json({ error: "Import job secret is not configured" });
 
