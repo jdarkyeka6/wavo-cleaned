@@ -481,9 +481,9 @@ function ProfileScreen({ profile, posts, userId, onPostReact, onPostDelete, onNe
 
           <section className="settings-card"><div className="settings-head"><MapPin /><div><strong>Location sharing</strong><span>{locations.length ? `${locations.length} active share${locations.length === 1 ? "" : "s"}` : "Nothing is being shared"}</span></div></div>{locations.length > 0 && <button className="danger-soft" onClick={onStopLocations}>Stop all location sharing</button>}</section>
           <section className="settings-card"><div className="settings-head"><Bell /><div><strong>Notifications</strong><span>Message and plan alerts.</span></div></div><button className="secondary-btn" onClick={onEnableNotifications}>Enable notifications</button></section>
-          <button className="logout-button" onClick={onLogout}><LogOut size={18} /> Log out</button>
         </div>
       </details>
+      <button className="logout-button" onClick={onLogout}><LogOut size={18} /> Log out</button>
     </div>
   );
 }
