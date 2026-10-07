@@ -231,6 +231,16 @@ export default function SupportPage() {
       }));
     } catch (error) {
       console.error("[wavo support]", error);
+      let supportError = "I couldn’t answer that right now. Try again in a moment.";
+      try {
+        const response = error?.context;
+        if (response?.clone) {
+          const payload = await response.clone().json();
+          if (payload?.message) supportError = String(payload.message).slice(0, 500);
+        }
+      } catch {
+        // Keep the generic fallback if the Functions error body is unavailable.
+      }
       updateTab(tabId, (tab) => ({
         ...tab,
         updatedAt: Date.now(),
@@ -239,7 +249,7 @@ export default function SupportPage() {
           {
             role: "assistant",
             error: true,
-            content: "I couldn’t answer that right now. Try again in a moment.",
+            content: supportError,
           },
         ],
       }));
