@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 function respond(res, status, error) {
   res.setHeader("Cache-Control", "private, no-store");
@@ -132,10 +133,7 @@ export default async function handler(req, res) {
     res.setHeader("Accept-Ranges", "bytes");
 
     // Stream instead of buffering potentially large attachments in a serverless function.
-    Readable.fromWeb(drive.body).on("error", (err) => {
-      console.error("[private-drive-file] stream", err);
-      res.destroy(err);
-    }).pipe(res);
+    await pipeline(Readable.fromWeb(drive.body), res);
   } catch (error) {
     console.error("[private-drive-file] request failed", error?.message);
     if (!res.headersSent) return respond(res, 500, "Could not load attachment");
