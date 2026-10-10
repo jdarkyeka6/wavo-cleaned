@@ -150,7 +150,7 @@ export function MessageContent({ message, mine = false }) {
     return <img className="chat-shared-image" src={message.content} alt="Shared" loading="lazy" />;
   }
 
-  if (message?.type === "file" && /^\\/api\\/private-drive-file\\?id=[A-Za-z0-9_-]+$/.test(String(message.content || ""))) {
+  if (message?.type === "file" && String(message.content || "").startsWith("/api/private-drive-file?id=")) {
     return <PrivateDriveFile message={message} />;
   }
 
