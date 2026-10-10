@@ -28,7 +28,6 @@ import "./restored-chat.css";
 
 const GIPHY_API_KEY = import.meta.env.VITE_GIPHY_API_KEY;
 const TIDETRACTS_URL = import.meta.env.VITE_TIDETRACTS_URL || "https://tidetracts.lol";
-const MAX_SUPABASE_FILE_BYTES = 25 * 1024 * 1024;
 
 function safeFileName(name) {
   return String(name || "attachment").replace(/[^\w.-]/g, "_");
@@ -63,6 +62,62 @@ async function safetyCheckImage(imageUrl) {
   if (data?.allowed === false) throw new Error("This image can't be shared on Wavo.");
 }
 
+// Google Drive attachments are private by default. A link alone is never enough:
+// this request is authenticated and the server checks chat participation.
+function PrivateDriveFile({ message }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function download() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data?.session?.access_token;
+      if (!token) throw new Error("Sign in to download this attachment.");
+      const response = await fetch(message.content, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error("Attachment unavailable or you no longer have access.");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = message.file_name || "attachment";
+      link.rel = "noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (downloadError) {
+      setError(downloadError?.message || "Could not download attachment.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        className="chat-file-link"
+        onClick={download}
+        disabled={busy}
+        style={{ cursor: busy ? "wait" : "pointer", textAlign: "left", fontFamily: "inherit" }}
+      >
+        <span className="chat-file-icon"><FileIcon size={18} /></span>
+        <span className="chat-file-copy">
+          <strong>{message.file_name || "Attachment"}</strong>
+          <small>{busy ? "Downloading securely…" : "Tap to download securely"}</small>
+        </span>
+      </button>
+      {error && <small role="alert">{error}</small>}
+    </>
+  );
+}
+
 export function MessageContent({ message, mine = false }) {
   if (message?.deleted_at) return <p>Message deleted</p>;
 
@@ -93,6 +148,10 @@ export function MessageContent({ message, mine = false }) {
 
   if (message?.type === "image") {
     return <img className="chat-shared-image" src={message.content} alt="Shared" loading="lazy" />;
+  }
+
+  if (message?.type === "file" && /^\\/api\\/private-drive-file\\?id=[A-Za-z0-9_-]+$/.test(String(message.content || ""))) {
+    return <PrivateDriveFile message={message} />;
   }
 
   if (message?.type === "file") {
@@ -186,12 +245,9 @@ export function ChatComposer({ userId, friend = null, space = null, value, onCha
         }
         return;
       } catch (driveError) {
-        // Keep today's <=25 MB path working until the one-time Google OAuth
-        // credentials are connected in production. Larger files never fall
-        // back because Supabase Storage is not the backing store for them.
-        if (driveError?.code !== "DRIVE_NOT_CONFIGURED" || blob.size > MAX_SUPABASE_FILE_BYTES) {
-          throw driveError;
-        }
+        // Fail closed: private file uploads must not fall back to the public
+        // 'chat-files' bucket when Google Drive is unavailable.
+        throw driveError;
       }
     }
 
