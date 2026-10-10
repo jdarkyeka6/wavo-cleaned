@@ -28,6 +28,7 @@ import "./restored-chat.css";
 
 const GIPHY_API_KEY = import.meta.env.VITE_GIPHY_API_KEY;
 const TIDETRACTS_URL = import.meta.env.VITE_TIDETRACTS_URL || "https://tidetracts.lol";
+const MAX_SUPABASE_FILE_BYTES = 25 * 1024 * 1024;
 
 function safeFileName(name) {
   return String(name || "attachment").replace(/[^\w.-]/g, "_");
