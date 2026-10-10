@@ -257,22 +257,17 @@ export default async function handler(req, res) {
       return json(res, 413, { error: "That file is over your plan's upload limit." });
     }
 
-    const hasPublicReader = Array.isArray(meta.permissions)
-      && meta.permissions.some((permission) => permission?.type === "anyone" && permission?.role === "reader");
-
-    if (!hasPublicReader) {
-      const { response: permissionResponse, payload: permissionError } = await driveJson(
-        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/permissions?supportsAllDrives=true&sendNotificationEmail=false`,
-        googleToken,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "anyone", role: "reader", allowFileDiscovery: false }),
-        },
+    // Files used in private conversations must never be shared through public
+    // Google Drive permissions. Remove an unexpected public reader if present.
+    const publicPermissions = (meta.permissions || []).filter((permission) => permission?.type === "anyone");
+    for (const permission of publicPermissions) {
+      const revoke = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/permissions/${encodeURIComponent(permission.id)}?supportsAllDrives=true`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${googleToken}` } },
       );
-      if (!permissionResponse.ok) {
-        console.error("[drive-upload] sharing failed", permissionResponse.status, permissionError?.error?.message);
-        return json(res, 502, { error: "The file uploaded, but Wavo could not make it shareable." });
+      if (!revoke.ok) {
+        console.error("[drive-upload] could not revoke public access", revoke.status);
+        return json(res, 502, { error: "The upload could not be secured. Please retry." });
       }
     }
 
@@ -296,9 +291,9 @@ export default async function handler(req, res) {
       return json(res, 500, { error: "The file uploaded, but Wavo could not finish saving it." });
     }
 
-    const url = meta.webContentLink
-      || meta.webViewLink
-      || `https://drive.google.com/uc?export=download&id=${encodeURIComponent(fileId)}`;
+    // Only Wavo's authenticated attachment endpoint should access this file.
+    // Never persist direct Google Drive links in messages.
+    const url = `/api/private-drive-file?id=${encodeURIComponent(fileId)}`;
 
     return json(res, 200, {
       fileId,
