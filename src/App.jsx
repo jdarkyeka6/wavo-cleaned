@@ -367,7 +367,7 @@ function SpacesScreen({ spaces, selectedSpace, setSelectedSpace, messages, messa
     const spacePolls = polls.filter((p) => p.group_id === selectedSpace.id);
     const spaceActivities = activities.filter((a) => a.group_id === selectedSpace.id);
     return (
-      <div className="screen">
+      <div className="screen space-conversation-screen">
         <div className="mobile-detail-bar"><button className="back-button" onClick={() => setSelectedSpace(null)}><ChevronLeft size={18} /> Spaces</button><button className="mobile-tools-button" onClick={() => actions.openChatTools("space", selectedSpace)} aria-label="Space tools"><Settings size={18}/></button></div>
         <section className="space-hero">
           <div className="space-emoji large">{selectedSpace.emoji || "🌊"}</div>
@@ -382,9 +382,16 @@ function SpacesScreen({ spaces, selectedSpace, setSelectedSpace, messages, messa
             <button onClick={() => actions.openCreate("wave", selectedSpace.id)}><Sparkles />Wave</button>
           </div>
         </details>
-        {spacePlans.length > 0 && <section><div className="section-heading"><h2>Plans</h2></div><div className="cards-stack">{spacePlans.slice(0, 3).map((p) => <PlanCard key={p.id} plan={p} userId={userId} onRsvp={actions.rsvp} onShareLocation={actions.shareLocation} />)}</div></section>}
-        {spacePolls.length > 0 && <section><div className="section-heading"><h2>Decisions</h2></div>{spacePolls.slice(0, 2).map((p) => <PollCard key={p.id} poll={p} userId={userId} onVote={actions.vote} />)}</section>}
-        {spaceActivities.length > 0 && <section><div className="section-heading"><h2>Activities</h2></div><div className="mini-grid">{spaceActivities.map((a) => <div key={a.id} className="mini-card"><Gamepad2 /><strong>{a.title}</strong><span>{a.type.replaceAll("_", " ")}</span></div>)}</div></section>}
+        {(spacePlans.length > 0 || spacePolls.length > 0 || spaceActivities.length > 0) && (
+          <details className="space-conversation-extras">
+            <summary><span>Plans, decisions & activities</span><Plus size={16} /></summary>
+            <div className="space-conversation-extras-content">
+            {spacePlans.length > 0 && <section><div className="section-heading"><h2>Plans</h2></div><div className="cards-stack">{spacePlans.slice(0, 3).map((p) => <PlanCard key={p.id} plan={p} userId={userId} onRsvp={actions.rsvp} onShareLocation={actions.shareLocation} />)}</div></section>}
+            {spacePolls.length > 0 && <section><div className="section-heading"><h2>Decisions</h2></div>{spacePolls.slice(0, 2).map((p) => <PollCard key={p.id} poll={p} userId={userId} onVote={actions.vote} />)}</section>}
+            {spaceActivities.length > 0 && <section><div className="section-heading"><h2>Activities</h2></div><div className="mini-grid">{spaceActivities.map((a) => <div key={a.id} className="mini-card"><Gamepad2 /><strong>{a.title}</strong><span>{a.type.replaceAll("_", " ")}</span></div>)}</div></section>}
+            </div>
+          </details>
+        )}
         <section className="space-chat-card">
           <div className="section-heading"><div><span className="eyebrow">PERSISTENT CHAT</span><h2>Conversation</h2></div></div>
           <div className="space-messages">
