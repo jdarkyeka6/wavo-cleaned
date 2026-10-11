@@ -10,7 +10,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
   const isChatComposerFocus = (node) => {
     if (!(node instanceof HTMLElement)) return false
     if (!node.matches('input, textarea, [contenteditable="true"]')) return false
-    return Boolean(node.closest('.chat-screen .composer'))
+    return Boolean(node.closest('.chat-screen .composer, .space-conversation-screen .composer'))
   }
 
   const measure = () => {
