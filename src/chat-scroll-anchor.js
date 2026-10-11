@@ -3,7 +3,7 @@ const INSTALL_KEY = '__WAVO_CHAT_SCROLL_ANCHOR_INSTALLED__'
 if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[INSTALL_KEY]) {
   window[INSTALL_KEY] = true
 
-  const SELECTOR = '.chat-screen .dm-messages, .chat-screen .space-messages'
+  const SELECTOR = '.chat-screen .dm-messages, .chat-screen .space-messages, .space-conversation-screen .space-messages'
   const PIN_THRESHOLD = 120
   const active = new Set()
 
