@@ -40,6 +40,9 @@ function navigateToNotification(raw) {
 
   // The existing place-markers navigation adapter restores the right chat
   // after the UI is mounted, even if the app was cold-launched.
+  // Inform BrowserRouter too, otherwise /waves or /support could keep rendering
+  // even after pushState changed the URL.
+  window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }))
   window.dispatchEvent(new Event('wavo:navigate-place'))
 }
 
