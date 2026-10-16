@@ -414,3 +414,27 @@ html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"]
   .space-conversation-screen .composer {
   padding-bottom: 8px !important;
 }
+
+/* Keyboard open: use only the drawable visual viewport, never the full screen.
+   Keep the Spaces variant on the same geometry as direct messages. */
+html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"]
+  .app-shell:has(.space-conversation-screen) {
+  height: var(--wavo-viewport-height, 100dvh) !important;
+  max-height: var(--wavo-viewport-height, 100dvh) !important;
+  min-height: 0 !important;
+}
+html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"]
+  .app-shell:has(.space-conversation-screen) .app-content {
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+}
+/* Prevent navigation controls from floating over the iOS keyboard. */
+html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"] .bottom-nav {
+  display: none !important;
+}
+html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"] .chat-screen .composer,
+html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"] .space-conversation-screen .composer {
+  padding-bottom: 8px !important;
+}
