@@ -44,7 +44,10 @@ function applyViewportVars(root) {
 
   if (!stableViewportHeight) stableViewportHeight = currentViewportHeight
 
-  const keyboardOverlap = Math.max(0, stableViewportHeight - visibleViewportHeight)
+  // WKWebView may pan the visual viewport down when the keyboard opens.
+  // offsetTop is a position, not extra drawable height; subtract the true
+  // viewport height so a panned keyboard is not misdetected as closed.
+  const keyboardOverlap = Math.max(0, stableViewportHeight - visualHeight)
   const keyboardOpen = keyboardOverlap > 120
 
   if (!keyboardOpen) {
