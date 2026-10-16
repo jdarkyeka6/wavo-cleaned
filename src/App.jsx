@@ -681,8 +681,10 @@ export default function App() {
             const sent = item.kind === 'dm'
               ? await sendDmMessage(userId, item.targetId, item.content, 'text', options)
               : await sendSpaceMessage(item.targetId, userId, item.content, options);
-            if (!removeOutboxItem(userId, item.id)) break;
+            // Update the rendered delivery status before notifying the local
+            // Outbox store; otherwise reconciliation can remove this message.
             setMessages((previous) => previous.map((message) => message.id === item.id ? { ...message, ...sent, queued: false } : message));
+            if (!removeOutboxItem(userId, item.id)) break;
             if (sent?.id) window.dispatchEvent(new CustomEvent('wavo:message-sent', {
               detail: { id: sent.id, kind: item.kind, targetId: item.targetId, userId },
             }));
