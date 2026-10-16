@@ -27,14 +27,16 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
     const keyboardOpen = focused && keyboardShrink > 80
     const offsetTop = keyboardOpen ? Math.max(0, Math.round(viewport?.offsetTop || 0)) : 0
 
-    root.style.setProperty('--wavo-chat-viewport-offset-top', `${offsetTop}px`)
+    // The native WKWebView has one real visible rectangle above the keyboard.
+    // Give the chat shell that exact rectangle, rather than relying on 100dvh,
+    // innerHeight, or a separately computed keyboard subtraction.
+    root.style.setProperty('--wavo-chat-visible-top', `${offsetTop}px`)
+    root.style.setProperty('--wavo-chat-visible-height', `${height}px`)
     root.dataset.wavoChatKeyboard = keyboardOpen ? 'open' : 'closed'
 
-    // The chat itself owns scrolling. iOS should never leave the document
-    // scrolled after it pans the visual viewport to reveal the composer.
-    if (keyboardOpen && (window.scrollX !== 0 || window.scrollY !== 0)) {
-      window.scrollTo(0, 0)
-    }
+    // Do not call window.scrollTo here. On recent iOS versions, the native
+    // keyboard pans visualViewport and forcing a window scroll makes the
+    // entire chat jump while the keyboard animates.
   }
 
   const scheduleMeasure = () => {
