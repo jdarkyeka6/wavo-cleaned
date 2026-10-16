@@ -80,14 +80,22 @@ export function rememberRecent(userId, kind, targetId) {
   return updateUxPrefs(userId, { [field]: next });
 }
 
+function notifyOutbox() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("wavo:outbox-changed"));
+}
+
 export function queueOutbox(userId, item) {
   // The ID is also the database message ID, so a network timeout after a
   // successful send cannot cause the retry to deliver a duplicate.
   const items = read(key(userId, "outbox"), []);
   const queued = { ...item, id: item.id || crypto.randomUUID(), queuedAt: Date.now() };
-  if (!write(key(userId, "outbox"), [...items, queued])) {
+  const unique = items.some((existing) => existing.id === queued.id)
+    ? items.map((existing) => existing.id === queued.id ? { ...existing, ...queued } : existing)
+    : [...items, queued];
+  if (!write(key(userId, "outbox"), unique)) {
     throw new Error("Offline storage is full. This message was not queued.");
   }
+  notifyOutbox();
   return queued;
 }
 
@@ -96,7 +104,16 @@ export function getOutbox(userId) {
 }
 
 export function removeOutboxItem(userId, id) {
-  write(key(userId, "outbox"), getOutbox(userId).filter((item) => item.id !== id));
+  const ok = write(key(userId, "outbox"), getOutbox(userId).filter((item) => item.id !== id));
+  if (ok) notifyOutbox();
+  return ok;
+}
+
+export function updateOutboxItem(userId, id, patch) {
+  const items = getOutbox(userId).map((item) => item.id === id ? { ...item, ...patch } : item);
+  const ok = write(key(userId, "outbox"), items);
+  if (ok) notifyOutbox();
+  return ok;
 }
 
 export function clearUserOfflineData(userId) {
