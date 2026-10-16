@@ -81,9 +81,13 @@ export function rememberRecent(userId, kind, targetId) {
 }
 
 export function queueOutbox(userId, item) {
+  // The ID is also the database message ID, so a network timeout after a
+  // successful send cannot cause the retry to deliver a duplicate.
   const items = read(key(userId, "outbox"), []);
-  const queued = { id: crypto.randomUUID(), queuedAt: Date.now(), ...item };
-  write(key(userId, "outbox"), [...items, queued]);
+  const queued = { ...item, id: item.id || crypto.randomUUID(), queuedAt: Date.now() };
+  if (!write(key(userId, "outbox"), [...items, queued])) {
+    throw new Error("Offline storage is full. This message was not queued.");
+  }
   return queued;
 }
 

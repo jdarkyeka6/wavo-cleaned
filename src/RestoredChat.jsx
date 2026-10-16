@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   File as FileIcon,
   FileText,
@@ -116,7 +116,7 @@ export function MessageContent({ message, mine = false }) {
   return <p>{message?.content}</p>;
 }
 
-export function ChatComposer({ userId, friend = null, space = null, value, onChange, onSubmit }) {
+export function ChatComposer({ userId, friend = null, space = null, value, onChange, onSubmit, replyTo = null, onCancelReply }) {
   const mediaInputRef = useRef(null);
   const fileInputRef = useRef(null);
   const voice = useVoiceRecorder();
@@ -127,6 +127,42 @@ export function ChatComposer({ userId, friend = null, space = null, value, onCha
   const [gifQuery, setGifQuery] = useState("");
   const [gifs, setGifs] = useState([]);
   const [gifBusy, setGifBusy] = useState(false);
+  const [droppedFiles, setDroppedFiles] = useState([]);
+
+  const previews = useMemo(() => droppedFiles.map((file) => ({
+    file,
+    url: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+  })), [droppedFiles]);
+  useEffect(() => () => previews.forEach((entry) => { if (entry.url) URL.revokeObjectURL(entry.url); }), [previews]);
+
+  useEffect(() => {
+    const onDrop = ({ detail }) => {
+      if (!detail || detail.kind !== (friend ? "dm" : "space") || detail.targetId !== (friend?.id || space?.id)) return;
+      setDroppedFiles((current) => [...current, ...detail.files].slice(0, 20));
+      setError("");
+    };
+    window.addEventListener("wavo:chat-drop", onDrop);
+    return () => window.removeEventListener("wavo:chat-drop", onDrop);
+  }, [friend?.id, space?.id]);
+
+  async function sendDroppedFiles() {
+    if (busy || !droppedFiles.length) return;
+    setBusy(true);
+    setError("");
+    try {
+      for (const file of droppedFiles) {
+        const type = file.type.startsWith("image/") ? "image" : "file";
+        if (type === "image" && file.size > MAX_SUPABASE_FILE_BYTES) throw new Error("Images are limited to 25 MB.");
+        if (type === "file" && file.size > DRIVE_HARD_MAX_BYTES) throw new Error("Files are limited to 500 MB.");
+        await uploadBlob(file, file.name, type);
+        setDroppedFiles((current) => current.filter((item) => item !== file));
+      }
+    } catch (err) {
+      setError(err?.message || "Couldn't send attachment.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const chatId = useMemo(
     () => (friend && userId ? [userId, friend.id].sort().join("_") : null),
@@ -382,6 +418,15 @@ export function ChatComposer({ userId, friend = null, space = null, value, onCha
 
   return (
     <div className="restored-composer-wrap">
+      {replyTo && <div className="wavo-reply-preview"><span>Replying to: {String(replyTo.content || "Attachment").slice(0, 100)}</span><button type="button" onClick={onCancelReply} aria-label="Cancel reply"><X size={16}/></button></div>}
+      {droppedFiles.length > 0 && <div className="wavo-file-preview" role="region" aria-label="Files ready to send">
+        <div className="wavo-file-preview-head"><strong>{droppedFiles.length} file(s) ready</strong><button type="button" onClick={() => setDroppedFiles([])} disabled={busy}>Clear</button></div>
+        <div className="wavo-file-preview-items">{previews.map(({ file, url }, index) => <div key={index}>
+          {url ? <img src={url} alt={file.name}/> : <FileIcon size={22}/>}
+          <span title={file.name}>{file.name}</span>
+        </div>)}</div>
+        <button type="button" className="wavo-file-send" onClick={sendDroppedFiles} disabled={busy}>{busy ? "Uploading…" : "Send files"}</button>
+      </div>}
       {toolsOpen && (
         <section className="composer-plus-menu" aria-label="Add to chat">
           <div className="composer-plus-head"><strong>Add to chat</strong><button type="button" onClick={() => setToolsOpen(false)} aria-label="Close add menu"><X size={17} /></button></div>

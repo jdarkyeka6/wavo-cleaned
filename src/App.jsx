@@ -58,6 +58,8 @@ import {
   votePoll,
 } from "./wavoData";
 import "./styles.css";
+import ConversationExperience from "./ConversationExperience";
+import CommandPalette from "./CommandPalette";
 import "./mobile-ux.css";
 import { OfflineBanner, Onboarding, UniversalSearch, QuickAccess, ChatTools, ReactionSettings, PullToRefresh } from "./MobileUX";
 import { cacheAppData, loadCachedAppData, cacheMessages, loadCachedMessages, getDraft, setDraft, getUxPrefs, updateUxPrefs, rememberRecent, queueOutbox, getOutbox, removeOutboxItem } from "./offline";
@@ -392,14 +394,7 @@ function SpacesScreen({ spaces, selectedSpace, setSelectedSpace, messages, messa
             </div>
           </details>
         )}
-        <section className="space-chat-card">
-          <div className="section-heading"><div><span className="eyebrow">PERSISTENT CHAT</span><h2>Conversation</h2></div></div>
-          <div className="space-messages">
-            {messages.length === 0 && <div className="muted center">Start the conversation.</div>}
-            {messages.map((m) => <div key={m.id} className={m.sender_id === userId || m.user_id === userId ? "space-message mine" : "space-message"}><span>{m.sender?.username || (m.sender_id === userId || m.user_id === userId ? "You" : "Member")}</span><p>{m.deleted_at ? "Message deleted" : m.content}</p></div>)}
-          </div>
-          <form className="composer" onSubmit={sendMessage}><input value={messageText} onChange={(e) => setMessageText(e.target.value)} placeholder={`Message ${selectedSpace.name}`} /><button><Send size={18} /></button></form>
-        </section>
+        <ConversationExperience kind="space" space={selectedSpace} userId={userId} messages={messages} messageText={messageText} setMessageText={setMessageText} sendMessage={sendMessage} onTools={() => actions.openChatTools("space", selectedSpace)} name={selectedSpace.name} Avatar={Avatar}/>
       </div>
     );
   }
@@ -425,15 +420,12 @@ function InboxScreen({ friends, requests, selectedFriend, setSelectedFriend, mes
   }
 
   if (selectedFriend) {
-    return (
-      <div className="chat-screen">
-        <header className="chat-topbar"><button onClick={() => setSelectedFriend(null)}><ChevronLeft /></button><Avatar profile={selectedFriend} size="sm" /><div><strong>{nicknames[selectedFriend.id] || selectedFriend.username}</strong><span>{nicknames[selectedFriend.id] ? `@${selectedFriend.username}` : (selectedFriend.status || "Wavo friend")}</span></div><button className="mobile-tools-button" onClick={() => actions.openChatTools("dm", selectedFriend)} aria-label="Chat tools"><Settings size={18}/></button></header>
-        <div className="dm-messages">
-          {messages.map((m) => <div key={m.id} className={m.sender_id === userId ? "dm-row mine" : "dm-row"}><div className="dm-bubble">{m.type === "image" ? <img src={m.content} alt="Shared" /> : <p>{m.deleted_at ? "Message deleted" : m.content}</p>}<span>{formatRelative(m.created_at)}</span></div></div>)}
-        </div>
-        <form className="composer dm-composer" onSubmit={sendMessage}><input value={messageText} onChange={(e) => setMessageText(e.target.value)} placeholder={`Message ${selectedFriend.username}`} /><button><Send size={18} /></button></form>
-      </div>
-    );
+    return <ConversationExperience
+      kind="dm" friend={selectedFriend} userId={userId} messages={messages}
+      messageText={messageText} setMessageText={setMessageText} sendMessage={sendMessage}
+      onBack={() => setSelectedFriend(null)} onTools={() => actions.openChatTools("dm", selectedFriend)}
+      name={nicknames[selectedFriend.id] || selectedFriend.username} Avatar={Avatar}
+    />;
   }
 
   return (
@@ -665,9 +657,10 @@ export default function App() {
       for (const item of getOutbox(userId)) {
         if (cancelled) break;
         try {
-          if (item.kind === "dm") await sendDmMessage(userId, item.targetId, item.content);
-          else await sendSpaceMessage(item.targetId, userId, item.content);
+          const options = { id: item.id, replyTo: item.replyTo || null };
+          const sent = item.kind === "dm" ? await sendDmMessage(userId, item.targetId, item.content, "text", options) : await sendSpaceMessage(item.targetId, userId, item.content, options);
           removeOutboxItem(userId, item.id);
+          setMessages((prev) => prev.map((m) => m.id === item.id ? { ...m, ...sent, queued: false } : m));
         } catch { break; }
       }
     })();
@@ -699,31 +692,61 @@ export default function App() {
     },
   }), [userId, data.privacy]);
 
-  async function sendCurrentMessage(e) {
+  async function sendCurrentMessage(e, replyTo = null) {
     e.preventDefault();
     const content = messageText.trim();
-    if (!content) return;
+    if (!content) return false;
     const kind = selectedFriend ? "dm" : "space";
     const targetId = selectedFriend?.id || selectedSpace?.id;
-    if (!targetId) return;
+    if (!targetId) return false;
+    const id = crypto.randomUUID();
+    const optimistic = {
+      id, sender_id: userId, user_id: userId, content, type: "text",
+      created_at: new Date().toISOString(), queued: !online,
+      reply_to: replyTo, receiver_id: kind === "dm" ? targetId : undefined,
+    };
     setMessageText("");
-    const tempId = `temp:${Date.now()}`;
-    const optimistic = { id: tempId, sender_id: userId, user_id: userId, content, type: "text", created_at: new Date().toISOString(), queued: !online };
     setMessages((prev) => [...prev, optimistic]);
+    const options = { id, replyTo };
     if (!online) {
-      const queued = queueOutbox(userId, { kind, targetId, content });
-      setUndoSend({ ...queued, tempId, offline: true });
-      setToast("Queued. Wavo will send it when you're back online.");
-      return;
+      try {
+        const queued = queueOutbox(userId, { id, kind, targetId, content, replyTo });
+        setUndoSend({ ...queued, tempId: id, offline: true });
+        setToast("Message queued for when you're online.");
+        return true;
+      } catch (error) {
+        setMessages((prev) => prev.filter((m) => m.id !== id));
+        setMessageText(content);
+        setToast(error.message);
+        return false;
+      }
     }
     try {
-      const sent = kind === "dm" ? await sendDmMessage(userId, targetId, content) : await sendSpaceMessage(targetId, userId, content);
-      setMessages((prev) => prev.map((m) => m.id === tempId ? (sent || { ...optimistic, id: tempId }) : m));
+      const sent = kind === "dm" ? await sendDmMessage(userId, targetId, content, "text", options) : await sendSpaceMessage(targetId, userId, content, options);
+      setMessages((prev) => prev.map((m) => m.id === id ? (sent || optimistic) : m));
       if (sent?.id) {
         setUndoSend({ kind, id: sent.id });
         setTimeout(() => setUndoSend((current) => current?.id === sent.id ? null : current), 5000);
       }
-    } catch (err) { console.error(err); setMessages((prev) => prev.filter((m) => m.id !== tempId)); setMessageText(content); setToast(GENERIC_ERROR); }
+      return true;
+    } catch (err) {
+      console.error("[wavo] message send", err);
+      // Network failures are queued with the same UUID. If the server already
+      // saved the message before the timeout, its primary key makes retry safe.
+      if (!navigator.onLine || /fetch|network|timeout|connection/i.test(err?.message || "")) {
+        try {
+          queueOutbox(userId, { id, kind, targetId, content, replyTo });
+          setMessages((prev) => prev.map((m) => m.id === id ? { ...m, queued: true } : m));
+          setUndoSend({ kind, id, tempId: id, offline: true });
+          setToast("Connection interrupted. Message queued.");
+          return true;
+        } catch (storageError) { setToast(storageError.message); }
+      }
+      setMessages((prev) => prev.filter((m) => m.id !== id));
+      setMessageText(content);
+      setToast("Message not sent. Please retry.");
+      return false;
+    }
   }
 
   async function undoLastSend() {
@@ -797,6 +820,7 @@ export default function App() {
       <UniversalSearch open={searchOpen} onClose={() => setSearchOpen(false)} data={data} messages={messages} onOpenFriend={actions.openFriend} onOpenSpace={actions.openSpace} onOpenTab={setTab} />
       <ChatTools open={Boolean(chatToolTarget)} onClose={() => setChatToolTarget(null)} target={chatToolTarget?.target} kind={chatToolTarget?.kind} messages={messages} pinned={currentToolPinned} nickname={chatToolTarget?.kind === "dm" ? data.nicknames[chatToolTarget.target.id] : ""} onTogglePin={toggleCurrentPin} onNickname={saveCurrentNickname} onSchedule={scheduleCurrentMessage} muted={currentToolMuted} onMute={() => { const id = chatToolTarget.target.id; const mutedSpaces = { ...(getUxPrefs(userId).mutedSpaces || {}), [id]: !currentToolMuted }; updateUxPrefs(userId, { mutedSpaces }); setToast(!currentToolMuted ? "Space muted" : "Space unmuted"); }} />
       {undoSend && <div className="undo-toast"><span>{undoSend.offline ? "Message queued" : "Message sent"}</span><button onClick={undoLastSend}>Undo</button></div>}
+      <CommandPalette friends={data.friends} spaces={data.spaces} onFriend={actions.openFriend} onSpace={actions.openSpace} onTab={(page) => { setTab(page); setSelectedFriend(null); setSelectedSpace(null); }} />
       <Toast message={toast} onClose={() => setToast("")} />
     </main>
   );
