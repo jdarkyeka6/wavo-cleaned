@@ -95,8 +95,10 @@ export async function createSpace(userId, { name, description, emoji }) {
   return data;
 }
 
-export async function getSpaceMessages(groupId) {
-  const { data, error } = await supabase.from("group_messages").select("*").eq("group_id", groupId).order("created_at", { ascending: false }).limit(300);
+export async function getSpaceMessages(groupId, before = null) {
+  let query = supabase.from("group_messages").select("*").eq("group_id", groupId).order("created_at", { ascending: false }).limit(300);
+  if (before) query = query.lt("created_at", before);
+  const { data, error } = await query;
   if (error) throw error;
   const ids = [...new Set((data || []).map((m) => m.sender_id || m.user_id).filter((id) => /^[0-9a-f-]{36}$/i.test(id || "")))];
   let profiles = [];
@@ -287,9 +289,11 @@ export async function getActiveLocationShares() {
   return data || [];
 }
 
-export async function getDmMessages(userId, friendId) {
+export async function getDmMessages(userId, friendId, before = null) {
   const chatId = [userId, friendId].sort().join("_");
-  const { data, error } = await supabase.from("messages").select("*").eq("chat_id", chatId).order("created_at", { ascending: false }).limit(500);
+  let query = supabase.from("messages").select("*").eq("chat_id", chatId).order("created_at", { ascending: false }).limit(500);
+  if (before) query = query.lt("created_at", before);
+  const { data, error } = await query;
   if (error) throw error;
   return { chatId, messages: [...(data || [])].reverse() };
 }
