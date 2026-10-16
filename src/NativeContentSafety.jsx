@@ -22,12 +22,38 @@ function showSafetyUnavailable() {
 }
 
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
 async function moderateText(text) {
-  const { data, error } = await supabase.functions.invoke('moderate-content', {
-    body: { text },
-  })
-  if (error) throw error
-  return data || { allowed: false }
+  // A native app waking from suspension can have an expired access token.
+  // Refresh once on a 401, retry a transient outage once, and never send
+  // unchecked content. Avoid automatic repeated calls when the service is down.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { data, error } = await supabase.functions.invoke('moderate-content', {
+      body: { text },
+    })
+    if (!error && typeof data?.allowed === 'boolean' && !data?.degraded) {
+      return data
+    }
+
+    let status = error?.context?.status ?? 0
+    if (!status && error?.context && typeof error.context === 'object') {
+      status = Number(error.context.status || 0)
+    }
+
+    if (attempt === 0 && status === 401) {
+      const { error: refreshError } = await supabase.auth.refreshSession()
+      if (!refreshError) continue
+    }
+    if (attempt === 0 && (status === 429 || status >= 500 || (!status && error))) {
+      await sleep(400)
+      continue
+    }
+
+    console.warn('[wavo] content check failed', { status, attempt: attempt + 1 })
+    throw error || new Error('Content safety service unavailable')
+  }
+  throw new Error('Content safety service unavailable')
 }
 
 function formText(form) {
