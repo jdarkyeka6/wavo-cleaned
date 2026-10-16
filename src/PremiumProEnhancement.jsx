@@ -78,7 +78,9 @@ function useDomHosts() {
         chat = chatRoot.querySelector(`[${CHAT_HOST}]`)
         if (!chat) {
           chat = document.createElement('div'); chat.setAttribute(CHAT_HOST, ''); chat.className = 'wpp-chat-host'
-          composer.before(chat)
+          // A direct child lets the desktop CSS place paid controls in a true
+          // grid sidebar instead of an accidental row inside ChatComposer.
+          chatRoot.appendChild(chat)
         }
       }
       setHosts((old) => old.profile === profile && old.inbox === inbox && old.chat === chat ? old : { profile, inbox, chat })
