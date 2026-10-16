@@ -61,9 +61,10 @@ import "./styles.css";
 import ConversationExperience from "./ConversationExperience";
 import { moderateContent } from "./premiumProData";
 import CommandPalette from "./CommandPalette";
+import OutboxTray from "./OutboxTray";
 import "./mobile-ux.css";
 import { OfflineBanner, Onboarding, UniversalSearch, QuickAccess, ChatTools, ReactionSettings, PullToRefresh } from "./MobileUX";
-import { cacheAppData, loadCachedAppData, cacheMessages, loadCachedMessages, getDraft, setDraft, getUxPrefs, updateUxPrefs, rememberRecent, queueOutbox, getOutbox, removeOutboxItem } from "./offline";
+import { cacheAppData, loadCachedAppData, cacheMessages, loadCachedMessages, getDraft, setDraft, getUxPrefs, updateUxPrefs, rememberRecent, queueOutbox, getOutbox, removeOutboxItem, updateOutboxItem } from "./offline";
 import { getChatPins, setChatPinned, getNicknames, setNickname, deleteDmMessage, deleteSpaceMessage, scheduleDmMessage, markDmRead } from "./uxData";
 
 const GENERIC_ERROR = "Sorry, something went wrong. Please try again.";
@@ -652,30 +653,71 @@ export default function App() {
   }, [messageText, selectedFriend?.id, selectedSpace?.id, userId]);
 
   useEffect(() => {
-    if (!userId || !online) return;
+    if (!userId) return undefined;
     let cancelled = false;
-    (async () => {
-      for (const item of getOutbox(userId)) {
-        if (cancelled) break;
-        try {
-          // An offline draft must pass moderation before it is delivered.
-          // Previously the outbox bypassed all checks.
-          if (!item.checked) {
-            const result = await moderateContent(item.content);
-            if (result?.allowed !== true) {
-              setToast("A queued message could not pass Wavo's safety check. It is still in your Outbox.");
-              break;
+    let working = false;
+    async function flushOutbox() {
+      if (cancelled || working || !navigator.onLine) return;
+      working = true;
+      try {
+        for (const item of getOutbox(userId)) {
+          if (cancelled || !navigator.onLine) break;
+          if (item.status === 'blocked') continue;
+          try {
+            if (!item.checked) {
+              // An offline message cannot evade moderation by waiting for
+              // reconnect. A rejected draft remains in the local Outbox
+              // instead of being uploaded or silently discarded.
+              const result = await moderateContent(item.content);
+              if (result?.allowed !== true) {
+                updateOutboxItem(userId, item.id, { status: 'blocked' });
+                setToast('A queued message needs review. Open Outbox to discard it.');
+                continue;
+              }
+              updateOutboxItem(userId, item.id, { checked: true });
             }
+            if (cancelled || !navigator.onLine) break;
+            const options = { id: item.id, replyTo: item.replyTo || null };
+            const sent = item.kind === 'dm'
+              ? await sendDmMessage(userId, item.targetId, item.content, 'text', options)
+              : await sendSpaceMessage(item.targetId, userId, item.content, options);
+            if (!removeOutboxItem(userId, item.id)) break;
+            setMessages((previous) => previous.map((message) => message.id === item.id ? { ...message, ...sent, queued: false } : message));
+            if (sent?.id) window.dispatchEvent(new CustomEvent('wavo:message-sent', {
+              detail: { id: sent.id, kind: item.kind, targetId: item.targetId, userId },
+            }));
+          } catch (error) {
+            console.warn('[wavo] Outbox retry paused', error);
+            break; // Retry later; never spin on an unreachable backend.
           }
-          const options = { id: item.id, replyTo: item.replyTo || null };
-          const sent = item.kind === "dm" ? await sendDmMessage(userId, item.targetId, item.content, "text", options) : await sendSpaceMessage(item.targetId, userId, item.content, options);
-          removeOutboxItem(userId, item.id);
-          setMessages((prev) => prev.map((m) => m.id === item.id ? { ...m, ...sent, queued: false } : m));
-        } catch { break; }
+        }
+      } finally {
+        working = false;
       }
-    })();
-    return () => { cancelled = true; };
+    }
+    if (online) void flushOutbox();
+    const timer = window.setInterval(flushOutbox, 30000);
+    window.addEventListener('focus', flushOutbox);
+    window.addEventListener('wavo:outbox-retry', flushOutbox);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      window.removeEventListener('focus', flushOutbox);
+      window.removeEventListener('wavo:outbox-retry', flushOutbox);
+    };
   }, [userId, online]);
+
+  useEffect(() => {
+    if (!userId) return undefined;
+    const reconcile = () => {
+      const pending = new Set(getOutbox(userId).map((item) => item.id));
+      setMessages((previous) => previous.some((message) => message.queued && !pending.has(message.id))
+        ? previous.filter((message) => !message.queued || pending.has(message.id))
+        : previous);
+    };
+    window.addEventListener('wavo:outbox-changed', reconcile);
+    return () => window.removeEventListener('wavo:outbox-changed', reconcile);
+  }, [userId]);
 
   const actions = useMemo(() => ({
     openCreate: (mode = null, spaceId = null) => { setPresetSpace(spaceId); setCreateMode(mode || true); },
@@ -862,6 +904,7 @@ export default function App() {
       <UniversalSearch open={searchOpen} onClose={() => setSearchOpen(false)} data={data} messages={messages} onOpenFriend={actions.openFriend} onOpenSpace={actions.openSpace} onOpenTab={setTab} />
       <ChatTools open={Boolean(chatToolTarget)} onClose={() => setChatToolTarget(null)} target={chatToolTarget?.target} kind={chatToolTarget?.kind} messages={messages} pinned={currentToolPinned} nickname={chatToolTarget?.kind === "dm" ? data.nicknames[chatToolTarget.target.id] : ""} onTogglePin={toggleCurrentPin} onNickname={saveCurrentNickname} onSchedule={scheduleCurrentMessage} muted={currentToolMuted} onMute={() => { const id = chatToolTarget.target.id; const mutedSpaces = { ...(getUxPrefs(userId).mutedSpaces || {}), [id]: !currentToolMuted }; updateUxPrefs(userId, { mutedSpaces }); setToast(!currentToolMuted ? "Space muted" : "Space unmuted"); }} />
       {undoSend && <div className="undo-toast"><span>{undoSend.offline ? "Message queued" : "Message sent"}</span><button onClick={undoLastSend}>Undo</button></div>}
+      <OutboxTray userId={userId} online={online} />
       <CommandPalette friends={data.friends} spaces={data.spaces} onFriend={actions.openFriend} onSpace={actions.openSpace} onTab={(page) => { setTab(page); setSelectedFriend(null); setSelectedSpace(null); }} />
       <Toast message={toast} onClose={() => setToast("")} />
     </main>
