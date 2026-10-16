@@ -1,5 +1,10 @@
 /* Wavo conversation workspace enhancements. Loaded after existing platform CSS. */
 .chat-screen, .space-chat-card { position: relative !important; }
+.chat-screen { grid-template-rows: auto minmax(0, 1fr) auto !important; }
+.space-chat-card { grid-template-rows: auto minmax(0, 1fr) auto !important; }
+.chat-screen > .wpp-chat-host,
+.space-chat-card > .wpp-chat-host { min-width: 0 !important; min-height: 0 !important; }
+
 .chat-screen > .restored-composer-wrap,
 .space-chat-card > .restored-composer-wrap {
   grid-column: 1 !important;
