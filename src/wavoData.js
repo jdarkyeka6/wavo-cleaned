@@ -109,14 +109,21 @@ export async function getSpaceMessages(groupId) {
   return (data || []).map((m) => ({ ...m, sender: map[m.sender_id || m.user_id] }));
 }
 
-export async function sendSpaceMessage(groupId, userId, content) {
-  const { data, error } = await supabase.from("group_messages").insert({
+export async function sendSpaceMessage(groupId, userId, content, options = {}) {
+  const payload = {
+    ...(options.id ? { id: options.id } : {}),
+    ...(options.replyTo ? { reply_to: options.replyTo } : {}),
     group_id: groupId,
     user_id: userId,
     sender_id: userId,
     content: content.trim(),
     type: "text",
-  }).select("*").single();
+  };
+  const { data, error } = await supabase.from("group_messages").insert(payload).select("*").single();
+  if (error?.code === "23505" && options.id) {
+    const existing = await supabase.from("group_messages").select("*").eq("id", options.id).eq("sender_id", userId).eq("group_id", groupId).maybeSingle();
+    if (!existing.error && existing.data) return existing.data;
+  }
   if (error) throw error;
   return data;
 }
@@ -287,9 +294,19 @@ export async function getDmMessages(userId, friendId) {
   return { chatId, messages: data || [] };
 }
 
-export async function sendDmMessage(userId, friendId, content, type = "text") {
+export async function sendDmMessage(userId, friendId, content, type = "text", options = {}) {
   const chatId = [userId, friendId].sort().join("_");
-  const { data, error } = await supabase.from("messages").insert({ chat_id: chatId, sender_id: userId, receiver_id: friendId, content, type, is_read: false }).select("*").single();
+  const payload = {
+    ...(options.id ? { id: options.id } : {}),
+    ...(options.replyTo ? { reply_to: options.replyTo } : {}),
+    chat_id: chatId, sender_id: userId, receiver_id: friendId,
+    content, type, is_read: false,
+  };
+  const { data, error } = await supabase.from("messages").insert(payload).select("*").single();
+  if (error?.code === "23505" && options.id) {
+    const existing = await supabase.from("messages").select("*").eq("id", options.id).eq("sender_id", userId).eq("chat_id", chatId).maybeSingle();
+    if (!existing.error && existing.data) return existing.data;
+  }
   if (error) throw error;
   return data;
 }
