@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
   CalendarDays,
@@ -59,6 +59,7 @@ import {
 } from "./wavoData";
 import "./styles.css";
 import ConversationExperience from "./ConversationExperience";
+import { moderateContent } from "./premiumProData";
 import CommandPalette from "./CommandPalette";
 import "./mobile-ux.css";
 import { OfflineBanner, Onboarding, UniversalSearch, QuickAccess, ChatTools, ReactionSettings, PullToRefresh } from "./MobileUX";
@@ -363,7 +364,7 @@ function HomeScreen({ profile, friends, spaces, posts, waves, plans, polls, requ
   );
 }
 
-function SpacesScreen({ spaces, selectedSpace, setSelectedSpace, messages, messageText, setMessageText, sendMessage, plans, polls, activities, userId, actions }) {
+function SpacesScreen({ spaces, selectedSpace, setSelectedSpace, messages, messageText, setMessageText, sendMessage, sendingMessage, plans, polls, activities, userId, actions }) {
   if (selectedSpace) {
     const spacePlans = plans.filter((p) => p.group_id === selectedSpace.id);
     const spacePolls = polls.filter((p) => p.group_id === selectedSpace.id);
@@ -394,7 +395,7 @@ function SpacesScreen({ spaces, selectedSpace, setSelectedSpace, messages, messa
             </div>
           </details>
         )}
-        <ConversationExperience kind="space" space={selectedSpace} userId={userId} messages={messages} messageText={messageText} setMessageText={setMessageText} sendMessage={sendMessage} onTools={() => actions.openChatTools("space", selectedSpace)} name={selectedSpace.name} Avatar={Avatar}/>
+        <ConversationExperience kind="space" space={selectedSpace} userId={userId} messages={messages} messageText={messageText} setMessageText={setMessageText} sendMessage={sendMessage} sending={sendingMessage} onTools={() => actions.openChatTools("space", selectedSpace)} name={selectedSpace.name} Avatar={Avatar}/>
       </div>
     );
   }
@@ -407,7 +408,7 @@ function SpacesScreen({ spaces, selectedSpace, setSelectedSpace, messages, messa
   );
 }
 
-function InboxScreen({ friends, requests, selectedFriend, setSelectedFriend, messages, messageText, setMessageText, sendMessage, userId, actions, nicknames = {} }) {
+function InboxScreen({ friends, requests, selectedFriend, setSelectedFriend, messages, messageText, setMessageText, sendMessage, sendingMessage, userId, actions, nicknames = {} }) {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -422,7 +423,7 @@ function InboxScreen({ friends, requests, selectedFriend, setSelectedFriend, mes
   if (selectedFriend) {
     return <ConversationExperience
       kind="dm" friend={selectedFriend} userId={userId} messages={messages}
-      messageText={messageText} setMessageText={setMessageText} sendMessage={sendMessage}
+      messageText={messageText} setMessageText={setMessageText} sendMessage={sendMessage} sending={sendingMessage}
       onBack={() => setSelectedFriend(null)} onTools={() => actions.openChatTools("dm", selectedFriend)}
       name={nicknames[selectedFriend.id] || selectedFriend.username} Avatar={Avatar}
     />;
@@ -576,6 +577,8 @@ export default function App() {
   const [online, setOnline] = useState(() => typeof navigator === "undefined" ? true : navigator.onLine);
   const [chatToolTarget, setChatToolTarget] = useState(null);
   const [undoSend, setUndoSend] = useState(null);
+  const sendingRef = useRef(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   const userId = session?.user?.id;
 
@@ -583,12 +586,10 @@ export default function App() {
     const setConnection = () => setOnline(navigator.onLine);
     window.addEventListener("online", setConnection);
     window.addEventListener("offline", setConnection);
-    const command = (e) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setSearchOpen(true); } };
-    window.addEventListener("keydown", command);
     registerServiceWorker().catch(() => {});
     supabase.auth.getSession().then(({ data: authData }) => { setSession(authData.session || null); setBooting(false); });
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, next) => { setSession(next); setBooting(false); });
-    return () => { authListener.subscription.unsubscribe(); window.removeEventListener("online", setConnection); window.removeEventListener("offline", setConnection); window.removeEventListener("keydown", command); };
+    return () => { authListener.subscription.unsubscribe(); window.removeEventListener("online", setConnection); window.removeEventListener("offline", setConnection); };
   }, []);
 
   async function refresh() {
@@ -657,6 +658,15 @@ export default function App() {
       for (const item of getOutbox(userId)) {
         if (cancelled) break;
         try {
+          // An offline draft must pass moderation before it is delivered.
+          // Previously the outbox bypassed all checks.
+          if (!item.checked) {
+            const result = await moderateContent(item.content);
+            if (result?.allowed !== true) {
+              setToast("A queued message could not pass Wavo's safety check. It is still in your Outbox.");
+              break;
+            }
+          }
           const options = { id: item.id, replyTo: item.replyTo || null };
           const sent = item.kind === "dm" ? await sendDmMessage(userId, item.targetId, item.content, "text", options) : await sendSpaceMessage(item.targetId, userId, item.content, options);
           removeOutboxItem(userId, item.id);
@@ -694,58 +704,90 @@ export default function App() {
 
   async function sendCurrentMessage(e, replyTo = null) {
     e.preventDefault();
+    if (sendingRef.current) return false;
     const content = messageText.trim();
     if (!content) return false;
     const kind = selectedFriend ? "dm" : "space";
     const targetId = selectedFriend?.id || selectedSpace?.id;
     if (!targetId) return false;
+    sendingRef.current = true;
+    setSendingMessage(true);
     const id = crypto.randomUUID();
-    const optimistic = {
-      id, sender_id: userId, user_id: userId, content, type: "text",
-      created_at: new Date().toISOString(), queued: !online,
-      reply_to: replyTo, receiver_id: kind === "dm" ? targetId : undefined,
-    };
-    setMessageText("");
-    setMessages((prev) => [...prev, optimistic]);
     const options = { id, replyTo };
-    if (!online) {
+    try {
+      // One moderation gate for desktop, mobile web and iOS. Avoid competing
+      // capture-phase form handlers (Premium + native + composer).
+      if (online) {
+        let result;
+        try {
+          result = await moderateContent(content);
+        } catch (error) {
+          console.warn('[wavo] message moderation service unavailable', error);
+          setToast("Can't safety-check right now. Your message is still here.");
+          return false;
+        }
+        if (result?.allowed !== true) {
+          setToast("Message not sent because it failed Wavo's safety rules.");
+          return false;
+        }
+      }
+
+      const optimistic = {
+        id, sender_id: userId, user_id: userId, content, type: "text",
+        created_at: new Date().toISOString(), queued: !online,
+        reply_to: replyTo, receiver_id: kind === "dm" ? targetId : undefined,
+      };
+
+      // Persist before clearing the composer when offline, so the user cannot
+      // lose a draft because localStorage is full or unavailable.
+      if (!online) {
+        try {
+          const queued = queueOutbox(userId, { id, kind, targetId, content, replyTo });
+          setMessageText("");
+          setMessages((previous) => [...previous, optimistic]);
+          setUndoSend({ ...queued, tempId: id, offline: true });
+          setToast("Offline: saved to Outbox. It will send after a safety check.");
+          return true;
+        } catch (error) {
+          setToast(error.message || "Offline storage unavailable. Message not sent.");
+          return false;
+        }
+      }
+
+      setMessageText("");
+      setMessages((previous) => [...previous, optimistic]);
       try {
-        const queued = queueOutbox(userId, { id, kind, targetId, content, replyTo });
-        setUndoSend({ ...queued, tempId: id, offline: true });
-        setToast("Message queued for when you're online.");
+        const sent = kind === "dm"
+          ? await sendDmMessage(userId, targetId, content, "text", options)
+          : await sendSpaceMessage(targetId, userId, content, options);
+        setMessages((previous) => previous.map((message) => message.id === id ? (sent || optimistic) : message));
+        if (sent?.id) {
+          window.dispatchEvent(new CustomEvent('wavo:message-sent', {
+            detail: { id: sent.id, kind, targetId, userId },
+          }));
+          setUndoSend({ kind, id: sent.id });
+          setTimeout(() => setUndoSend((current) => current?.id === sent.id ? null : current), 5000);
+        }
         return true;
       } catch (error) {
-        setMessages((prev) => prev.filter((m) => m.id !== id));
+        console.error("[wavo] message send", error);
+        if (!navigator.onLine || /fetch|network|timeout|connection/i.test(error?.message || "")) {
+          try {
+            const queued = queueOutbox(userId, { id, kind, targetId, content, replyTo, checked: true });
+            setMessages((previous) => previous.map((m) => m.id === id ? { ...m, queued: true } : m));
+            setUndoSend({ ...queued, tempId: id, offline: true });
+            setToast("Connection interrupted. Saved to Outbox for retry.");
+            return true;
+          } catch (storageError) { setToast(storageError.message); }
+        }
+        setMessages((previous) => previous.filter((m) => m.id !== id));
         setMessageText(content);
-        setToast(error.message);
+        setToast("Message not sent. You can retry.");
         return false;
       }
-    }
-    try {
-      const sent = kind === "dm" ? await sendDmMessage(userId, targetId, content, "text", options) : await sendSpaceMessage(targetId, userId, content, options);
-      setMessages((prev) => prev.map((m) => m.id === id ? (sent || optimistic) : m));
-      if (sent?.id) {
-        setUndoSend({ kind, id: sent.id });
-        setTimeout(() => setUndoSend((current) => current?.id === sent.id ? null : current), 5000);
-      }
-      return true;
-    } catch (err) {
-      console.error("[wavo] message send", err);
-      // Network failures are queued with the same UUID. If the server already
-      // saved the message before the timeout, its primary key makes retry safe.
-      if (!navigator.onLine || /fetch|network|timeout|connection/i.test(err?.message || "")) {
-        try {
-          queueOutbox(userId, { id, kind, targetId, content, replyTo });
-          setMessages((prev) => prev.map((m) => m.id === id ? { ...m, queued: true } : m));
-          setUndoSend({ kind, id, tempId: id, offline: true });
-          setToast("Connection interrupted. Message queued.");
-          return true;
-        } catch (storageError) { setToast(storageError.message); }
-      }
-      setMessages((prev) => prev.filter((m) => m.id !== id));
-      setMessageText(content);
-      setToast("Message not sent. Please retry.");
-      return false;
+    } finally {
+      sendingRef.current = false;
+      setSendingMessage(false);
     }
   }
 
@@ -810,8 +852,8 @@ export default function App() {
       {!isDeepView && <Header pendingCount={data.requests.length} onBell={() => setTab("inbox")} onSearch={() => setSearchOpen(true)} onCreate={() => actions.openCreate()} />}
       <PullToRefresh onRefresh={refresh}><div className="app-content">
         {tab === "home" && <HomeScreen {...data} userId={userId} actions={actions} />}
-        {tab === "spaces" && <SpacesScreen spaces={data.spaces} selectedSpace={selectedSpace} setSelectedSpace={setSelectedSpace} messages={messages} messageText={messageText} setMessageText={setMessageText} sendMessage={sendCurrentMessage} plans={data.plans} polls={data.polls} activities={data.activities} userId={userId} actions={actions} />}
-        {tab === "inbox" && <InboxScreen friends={data.friends} requests={data.requests} selectedFriend={selectedFriend} setSelectedFriend={setSelectedFriend} messages={messages} messageText={messageText} setMessageText={setMessageText} sendMessage={sendCurrentMessage} userId={userId} actions={actions} nicknames={data.nicknames} />}
+        {tab === "spaces" && <SpacesScreen spaces={data.spaces} selectedSpace={selectedSpace} setSelectedSpace={setSelectedSpace} messages={messages} messageText={messageText} setMessageText={setMessageText} sendMessage={sendCurrentMessage} sendingMessage={sendingMessage} plans={data.plans} polls={data.polls} activities={data.activities} userId={userId} actions={actions} />}
+        {tab === "inbox" && <InboxScreen friends={data.friends} requests={data.requests} selectedFriend={selectedFriend} setSelectedFriend={setSelectedFriend} messages={messages} messageText={messageText} setMessageText={setMessageText} sendMessage={sendCurrentMessage} sendingMessage={sendingMessage} userId={userId} actions={actions} nicknames={data.nicknames} />}
         {tab === "you" && <ProfileScreen profile={data.profile} posts={data.posts.filter((p) => p.author_id === userId)} userId={userId} onPostReact={actions.reactPost} onPostDelete={actions.deletePost} onNewPost={() => actions.openCreate("post")} privacy={data.privacy} locations={data.locations.filter((l) => l.owner_id === userId)} onPrivacy={updatePrivacy} onProfileSaved={refresh} onEnableNotifications={enableNotifications} onStopLocations={stopLocations} onLogout={() => supabase.auth.signOut()} />}
       </div></PullToRefresh>
       {!isDeepView && <BottomNav tab={tab} setTab={(next) => { setTab(next); if (next !== "spaces") setSelectedSpace(null); if (next !== "inbox") setSelectedFriend(null); }} />}
