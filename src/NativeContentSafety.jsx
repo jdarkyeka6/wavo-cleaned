@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react'
 import { supabase } from './supabaseClient'
-import { isNative } from './lib/platform'
 
 // Normal chat messages have one centralized moderation gate in App.jsx.
 // Native intercepts are only needed for the other user-generated content forms.
@@ -51,7 +50,6 @@ export default function NativeContentSafety() {
   const bypass = useRef(new WeakSet())
   const pending = useRef(new WeakSet())
   useEffect(() => {
-    if (!isNative()) return undefined
     async function intercept(event) {
       const form = event.target
       if (!(form instanceof HTMLFormElement) || !form.matches(UGC_FORM_SELECTOR)) return
