@@ -1,0 +1,235 @@
+/*
+ * Desktop-only conversation workspace.
+ * The chat remains the primary column. Premium / Plus / Pro controls live in
+ * an independent, scrollable side panel instead of consuming a message row.
+ * Intentionally imported after mobile-layout-reset.css so older desktop rules
+ * (including fixed-position chat tools at 1300px) cannot override the grid.
+ */
+@media (min-width: 900px) {
+  html[data-wavo-ui="desktop-web"] .app-content:has(.chat-screen) {
+    width: min(calc(100vw - 32px), 1360px) !important;
+    max-width: 1360px !important;
+    margin-inline: auto !important;
+  }
+
+  html[data-wavo-ui="desktop-web"] .chat-screen:has(> .wpp-chat-host) {
+    --wavo-desktop-chat-rail: clamp(265px, 24vw, 312px);
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) var(--wavo-desktop-chat-rail) !important;
+    grid-template-rows: auto minmax(0, 1fr) auto !important;
+    gap: 0 !important;
+    align-content: stretch !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  /* The header used to have only three grid tracks for five action elements,
+     which wrapped the More / Call controls onto an accidental second row. */
+  html[data-wavo-ui="desktop-web"] .chat-screen .chat-topbar {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+    gap: 10px !important;
+    min-height: 72px !important;
+    height: auto !important;
+    padding: 10px 14px !important;
+    overflow: hidden !important;
+  }
+
+  html[data-wavo-ui="desktop-web"] .chat-screen .chat-topbar > div:not(.avatar):not(.avatar-sm) {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+
+  html[data-wavo-ui="desktop-web"] .chat-screen .chat-topbar > button,
+  html[data-wavo-ui="desktop-web"] .chat-screen .chat-topbar > .avatar,
+  html[data-wavo-ui="desktop-web"] .chat-screen .chat-topbar > .avatar-sm {
+    flex: 0 0 auto !important;
+  }
+
+  html[data-wavo-ui="desktop-web"] .chat-screen .dm-messages {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    padding: 16px 18px 20px !important;
+  }
+
+  html[data-wavo-ui="desktop-web"] .chat-screen .dm-composer,
+  html[data-wavo-ui="desktop-web"] .chat-screen > .composer {
+    grid-column: 1 !important;
+    grid-row: 3 !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+
+  /* Grid positioning is crucial: fixed positioning attaches to the transformed
+     swipe-enabled chat container and does not create a reliable side rail. */
+  html[data-wavo-ui="desktop-web"] .chat-screen > .wpp-chat-host {
+    position: relative !important;
+    grid-column: 2 !important;
+    grid-row: 1 / 4 !important;
+    inset: auto !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 12px !important;
+    transform: none !important;
+    z-index: 5 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain;
+    scrollbar-width: thin;
+    border-left: 1px solid rgba(139, 163, 210, .16);
+    background: linear-gradient(180deg, rgba(18, 30, 47, .70), rgba(9, 19, 32, .80));
+  }
+
+  html[data-wavo-ui="desktop-web"] .chat-screen > .wpp-chat-host .wpp-chat-power {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 14px !important;
+    display: grid !important;
+    align-content: start !important;
+    gap: 13px !important;
+    overflow: visible !important;
+    box-sizing: border-box !important;
+    border-radius: 17px !important;
+    font-size: 12px !important;
+  }
+
+  /* Wide, horizontal Premium controls work in a footer but not a narrow rail.
+     Present each feature as its own readable row instead. */
+  html[data-wavo-ui="desktop-web"] .chat-screen .wpp-chat-controls,
+  html[data-wavo-ui="desktop-web"] .space-chat-card .wpp-chat-controls {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 11px !important;
+  }
+
+  html[data-wavo-ui="desktop-web"] .chat-screen .wpp-chat-controls label,
+  html[data-wavo-ui="desktop-web"] .space-chat-card .wpp-chat-controls label {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 5px !important;
+    font-size: 12px !important;
+  }
+
+  html[data-wavo-ui="desktop-web"] .chat-screen :is(.wpp-effects, .wpp-react, .wpp-folder-assign),
+  html[data-wavo-ui="desktop-web"] .space-chat-card :is(.wpp-effects, .wpp-react, .wpp-folder-assign) {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 7px !important;
+    align-items: start !important;
+  }
+
+  html[data-wavo-ui="desktop-web"] .chat-screen :is(.wpp-effects, .wpp-react, .wpp-folder-assign) small,
+  html[data-wavo-ui="desktop-web"] .space-chat-card :is(.wpp-effects, .wpp-react, .wpp-folder-assign) small {
+    white-space: normal !important;
+    font-size: 11px !important;
+    line-height: 1.35 !important;
+  }
+
+  html[data-wavo-ui="desktop-web"] .chat-screen :is(.wpp-effects, .wpp-react, .wpp-folder-assign) > div,
+  html[data-wavo-ui="desktop-web"] .space-chat-card :is(.wpp-effects, .wpp-react, .wpp-folder-assign) > div {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    min-width: 0 !important;
+  }
+
+  html[data-wavo-ui="desktop-web"] .chat-screen :is(.wpp-effects, .wpp-folder-assign) button,
+  html[data-wavo-ui="desktop-web"] .space-chat-card :is(.wpp-effects, .wpp-folder-assign) button {
+    min-height: 30px !important;
+    padding: 6px 9px !important;
+    line-height: 1.25 !important;
+  }
+
+  html[data-wavo-ui="desktop-web"] .chat-screen .wpp-stat-grid,
+  html[data-wavo-ui="desktop-web"] .space-chat-card .wpp-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  html[data-wavo-ui="desktop-web"] .chat-screen .wpp-announcement,
+  html[data-wavo-ui="desktop-web"] .space-chat-card .wpp-announcement {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  html[data-wavo-ui="desktop-web"] .chat-screen .wavo-plus-ai-host {
+    right: calc(var(--wavo-desktop-chat-rail, 300px) + 16px) !important;
+    bottom: 78px !important;
+  }
+
+  /* The same two-column workspace also works for conversations in Spaces. */
+  html[data-wavo-ui="desktop-web"] .space-conversation-screen .space-chat-card:has(> .wpp-chat-host) {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) clamp(265px, 24vw, 312px) !important;
+    grid-template-rows: auto minmax(0, 1fr) auto !important;
+    align-content: stretch !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  html[data-wavo-ui="desktop-web"] .space-chat-card > .section-heading {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+  }
+
+  html[data-wavo-ui="desktop-web"] .space-chat-card > .space-messages {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+  }
+
+  html[data-wavo-ui="desktop-web"] .space-chat-card > .composer {
+    grid-column: 1 !important;
+    grid-row: 3 !important;
+    min-width: 0 !important;
+  }
+
+  html[data-wavo-ui="desktop-web"] .space-chat-card > .wpp-chat-host {
+    position: relative !important;
+    grid-column: 2 !important;
+    grid-row: 1 / 4 !important;
+    inset: auto !important;
+    transform: none !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 12px !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    border-left: 1px solid rgba(139, 163, 210, .16);
+    background: linear-gradient(180deg, rgba(18, 30, 47, .70), rgba(9, 19, 32, .80));
+    overscroll-behavior-y: contain;
+    scrollbar-width: thin;
+  }
+
+  html[data-wavo-ui="desktop-web"] .space-chat-card > .wpp-chat-host .wpp-chat-power {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 14px !important;
+    overflow: visible !important;
+    align-content: start !important;
+    gap: 13px !important;
+  }
+}
