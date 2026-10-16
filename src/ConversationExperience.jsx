@@ -3,6 +3,7 @@ import { ChevronLeft, CornerDownRight, Info, Link2, Pin, Search, Send, X, PanelR
 import { supabase } from './supabaseClient'
 import { markDmRead } from './uxData'
 import { ChatComposer, MessageContent } from './RestoredChat'
+import { getDmMessages, getSpaceMessages } from './wavoData'
 
 function useTyping(kind, targetId, userId, text) {
   const [typing, setTyping] = useState(false)
@@ -192,7 +193,19 @@ export default function ConversationExperience({ kind, friend, space, userId, me
   const [dragging, setDragging] = useState(false)
   const [notice, setNotice] = useState('')
   const [actionsMessageId, setActionsMessageId] = useState(null)
+  const [olderMessages, setOlderMessages] = useState([])
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [noMoreHistory, setNoMoreHistory] = useState(false)
   const dragDepth = useRef(0)
+  const messageListRef = useRef(null)
+  const currentChatRef = useRef('')
+  currentChatRef.current = `${kind}:${targetId}` 
+  const displayMessages = useMemo(() => {
+    const unique = new Map()
+    for (const message of olderMessages) unique.set(message.id, message)
+    for (const message of messages) unique.set(message.id, message)
+    return [...unique.values()].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+  }, [olderMessages, messages])
   const typing = useTyping(kind, chatId, userId, messageText)
   // A conversation with hundreds of messages should not scan the entire
   // history separately for every message on every keystroke.
@@ -200,14 +213,17 @@ export default function ConversationExperience({ kind, friend, space, userId, me
     const byId = new Map()
     const replyCounts = new Map()
     let lastOutgoing
-    for (const m of messages) {
+    for (const m of displayMessages) {
       byId.set(m.id, m)
       if (m.reply_to) replyCounts.set(m.reply_to, (replyCounts.get(m.reply_to) || 0) + 1)
       if (m.sender_id === userId || (kind === 'space' && m.user_id === userId)) lastOutgoing = m.id
     }
     return { byId, replyCounts, lastOutgoing }
-  }, [messages, userId, kind])
+  }, [displayMessages, userId, kind])
   useEffect(() => {
+    setOlderMessages([])
+    setNoMoreHistory(false)
+    setLoadingOlder(false)
     window.dispatchEvent(new Event('wavo:conversation-change'))
   }, [kind, targetId])
 
@@ -240,6 +256,39 @@ export default function ConversationExperience({ kind, friend, space, userId, me
       else next.add(messageId)
       return next
     })
+  }
+
+  async function loadEarlier() {
+    if (loadingOlder || noMoreHistory || !displayMessages.length) return
+    const cursor = displayMessages[0]?.created_at
+    if (!cursor) return
+    const chatKey = currentChatRef.current
+    const viewport = messageListRef.current
+    const previousHeight = viewport?.scrollHeight || 0
+    const previousTop = viewport?.scrollTop || 0
+    setLoadingOlder(true)
+    try {
+      const rows = kind === 'dm'
+        ? (await getDmMessages(userId, targetId, cursor)).messages
+        : await getSpaceMessages(targetId, cursor)
+      if (currentChatRef.current !== chatKey) return
+      setOlderMessages((current) => {
+        const combined = new Map([...rows, ...current].map((row) => [row.id, row]))
+        return [...combined.values()].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+      })
+      if (rows.length < (kind === 'dm' ? 500 : 300)) setNoMoreHistory(true)
+      requestAnimationFrame(() => {
+        const element = messageListRef.current
+        if (element && currentChatRef.current === chatKey) {
+          element.scrollTop = previousTop + element.scrollHeight - previousHeight
+        }
+      })
+    } catch (error) {
+      console.warn('[wavo] history pagination unavailable', error)
+      setNotice("Couldn't load older messages. Please try again.")
+    } finally {
+      if (currentChatRef.current === chatKey) setLoadingOlder(false)
+    }
   }
 
   const drop = (event) => {
@@ -277,16 +326,20 @@ export default function ConversationExperience({ kind, friend, space, userId, me
     {kind === 'dm'
       ? <header className="chat-topbar"><button className="chat-back-button" onClick={onBack} aria-label="Back to Inbox"><ChevronLeft size={20}/><span>Inbox</span></button><Avatar profile={friend} size="sm"/><div><strong>{nameLabel}</strong><span>{friend?.status || 'Wavo friend'}</span></div><button className="wavo-chat-info-button" type="button" onClick={() => setInfo(!info)} aria-label="Conversation information"><Info size={18}/></button><button className="mobile-tools-button" onClick={onTools} aria-label="Chat tools">•••</button></header>
       : <div className="section-heading"><div><span className="eyebrow">PERSISTENT CHAT</span><h2>Conversation</h2></div><button className="wavo-chat-info-button" type="button" onClick={() => setInfo(!info)} aria-label="Space conversation information"><Info size={18}/></button></div>}
-    <div className={kind === 'dm' ? 'dm-messages' : 'space-messages'}>
-      {kind === 'space' && messages.length === 0 && <div className="muted center">Start the conversation.</div>}
-      {messages.map((m) => <MessageRow key={m.id} kind={kind} message={m} parent={byId.get(m.reply_to)} childrenCount={replyCounts.get(m.id) || 0} mine={m.sender_id === userId || (kind === 'space' && m.user_id === userId)} pins={pins} onReply={(message) => { setReply(message.reply_to ? byId.get(message.reply_to) || message : message); setActionsMessageId(null) }} onThread={(message) => { openThread(message); setActionsMessageId(null) }} onPin={(id) => { togglePin(id); setActionsMessageId(null) }} lastOutgoing={m.id === lastOutgoing} actionsOpen={actionsMessageId === m.id} toggleActions={() => setActionsMessageId((current) => current === m.id ? null : m.id)} />)}
+    <div ref={messageListRef} className={kind === 'dm' ? 'dm-messages' : 'space-messages'}>
+      {messages.length >= (kind === 'dm' ? 500 : 300) && !noMoreHistory &&
+        <button type="button" className="wavo-load-older" disabled={loadingOlder} onClick={loadEarlier}>
+          {loadingOlder ? 'Loading older messages…' : 'Load older messages'}
+        </button>}
+      {kind === 'space' && displayMessages.length === 0 && <div className="muted center">Start the conversation.</div>}
+      {displayMessages.map((m) => <MessageRow key={m.id} kind={kind} message={m} parent={byId.get(m.reply_to)} childrenCount={replyCounts.get(m.id) || 0} mine={m.sender_id === userId || (kind === 'space' && m.user_id === userId)} pins={pins} onReply={(message) => { setReply(message.reply_to ? byId.get(message.reply_to) || message : message); setActionsMessageId(null) }} onThread={(message) => { openThread(message); setActionsMessageId(null) }} onPin={(id) => { togglePin(id); setActionsMessageId(null) }} lastOutgoing={m.id === lastOutgoing} actionsOpen={actionsMessageId === m.id} toggleActions={() => setActionsMessageId((current) => current === m.id ? null : m.id)} />)}
       {typing && <div className="wavo-typing" role="status">{kind === 'dm' ? `${friend?.username || 'Someone'} is typing…` : 'Someone is typing…'}</div>}
     </div>
     <ChatComposer key={chatId} userId={userId} friend={friend} space={space} value={messageText} onChange={setMessageText} onSubmit={submit} sending={sending} replyTo={reply} onCancelReply={() => setReply(null)}/>
     <RailControls kind={kind} targetId={targetId}/>
     {notice && <button type="button" className="wavo-workspace-notice" onClick={() => setNotice('')}>{notice}</button>}
-    {info && <InfoPanel name={nameLabel} messages={messages} pins={pins} onClose={() => setInfo(false)} onJump={jump} onUnpin={togglePin}/>}
-    {thread && <ThreadPanel parent={thread} replies={messages.filter((m) => m.reply_to === thread.id)} onClose={() => setThread(null)} onReply={() => { setReply(thread); setThread(null) }}/>}
+    {info && <InfoPanel name={nameLabel} messages={displayMessages} pins={pins} onClose={() => setInfo(false)} onJump={jump} onUnpin={togglePin}/>}
+    {thread && <ThreadPanel parent={thread} replies={displayMessages.filter((m) => m.reply_to === thread.id)} onClose={() => setThread(null)} onReply={() => { setReply(thread); setThread(null) }}/>}
     {dragging && <div className="wavo-drop-overlay">Drop files to preview and send</div>}
   </div>
 }
