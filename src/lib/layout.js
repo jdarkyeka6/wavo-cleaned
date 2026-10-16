@@ -53,7 +53,9 @@ function applyViewportVars(root) {
 
   // When the keyboard is open, follow the visual viewport so composers sit
   // immediately above it. Otherwise, own exactly the drawable app viewport.
-  const height = keyboardOpen ? visibleViewportHeight : currentViewportHeight
+  // When the keyboard is up the shell is separately translated by offsetTop.
+  // Adding that offset to its height places the composer below the keyboard.
+  const height = keyboardOpen ? Math.max(1, visualHeight) : currentViewportHeight
   const keyboard = keyboardOpen ? keyboardOverlap : 0
 
   root.style.setProperty('--wavo-viewport-width', `${visualWidth}px`)
