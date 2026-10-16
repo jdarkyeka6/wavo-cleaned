@@ -8,32 +8,58 @@ function useTyping(kind, targetId, userId, text) {
   const [typing, setTyping] = useState(false)
   const channelRef = useRef(null)
   const lastSentRef = useRef(0)
+  const textRef = useRef('')
+  const activeRef = useRef(false)
+  textRef.current = text || ''
+
   useEffect(() => {
-    if (!userId || !targetId) return
-    const topic = `wavo-typing:${kind}:${targetId}`
-    const channel = supabase.channel(topic, { config: { broadcast: { self: false } } })
+    if (!userId || !targetId) return undefined
+    // Private realtime channels are protected by chat membership policies.
+    const channel = supabase.channel(`wavo-typing:${kind}:${targetId}`, {
+      config: { private: true, broadcast: { self: false } },
+    })
     let clearTimer
     channel.on('broadcast', { event: 'typing' }, ({ payload }) => {
       if (!payload || payload.userId === userId) return
       setTyping(Boolean(payload.active))
       clearTimeout(clearTimer)
-      if (payload.active) clearTimer = setTimeout(() => setTyping(false), 3200)
-    }).subscribe()
+      if (payload.active) clearTimer = setTimeout(() => setTyping(false), 3000)
+    }).subscribe((status) => {
+      if (status === 'SUBSCRIBED' && textRef.current.trim()) {
+        channel.send({ type: 'broadcast', event: 'typing', payload: { userId, active: true } }).catch(() => {})
+      }
+    })
     channelRef.current = channel
+    lastSentRef.current = 0
+    activeRef.current = false
     return () => {
       clearTimeout(clearTimer)
+      channel.send({ type: 'broadcast', event: 'typing', payload: { userId, active: false } }).catch(() => {})
       channelRef.current = null
       setTyping(false)
       supabase.removeChannel(channel)
     }
   }, [kind, targetId, userId])
+
   useEffect(() => {
-    if (!userId || !targetId || !text?.trim()) return
-    const now = Date.now()
-    if (now - lastSentRef.current < 1200) return
-    lastSentRef.current = now
-    channelRef.current?.send({ type: 'broadcast', event: 'typing', payload: { userId, active: true } }).catch(() => {})
+    const channel = channelRef.current
+    if (!channel || !userId || !targetId) return undefined
+    const hasText = Boolean(text?.trim())
+    const sendState = (active) => {
+      if (!active && !activeRef.current) return
+      if (active && Date.now() - lastSentRef.current < 1400) return
+      lastSentRef.current = Date.now()
+      activeRef.current = active
+      channel.send({ type: 'broadcast', event: 'typing', payload: { userId, active } }).catch(() => {})
+    }
+    if (!hasText) { sendState(false); return undefined }
+    sendState(true)
+    // Typing stops automatically after inactivity, even if the composer
+    // remains focused and still contains an unsent draft.
+    const inactivity = setTimeout(() => sendState(false), 2200)
+    return () => clearTimeout(inactivity)
   }, [text, userId, targetId])
+
   return typing
 }
 
@@ -132,9 +158,7 @@ function RailControls({ kind, targetId }) {
   </div>
 }
 
-function MessageRow({ message, kind, mine, messages, pins, onReply, onThread, onPin, lastOutgoing }) {
-  const parent = message.reply_to && messages.find((m) => m.id === message.reply_to)
-  const childrenCount = messages.filter((m) => m.reply_to === message.id).length
+function MessageRow({ message, kind, mine, parent, childrenCount, pins, onReply, onThread, onPin, lastOutgoing, actionsOpen, toggleActions }) {
   return <div id={`wavo-msg-${message.id}`} className={kind === 'dm' ? (mine ? 'dm-row mine' : 'dm-row') : (mine ? 'space-message mine' : 'space-message')}>
     {kind === 'space' && <span className="wavo-message-sender">{message.sender?.username || (mine ? 'You' : 'Member')}</span>}
     <div className={kind === 'dm' ? 'dm-bubble' : 'wavo-space-bubble'}>
@@ -146,15 +170,18 @@ function MessageRow({ message, kind, mine, messages, pins, onReply, onThread, on
         {kind === 'dm' && mine && lastOutgoing && <span>{message.is_read ? 'Seen' : 'Sent'}</span>}
       </div>
     </div>
-    {!message.deleted_at && !message.queued && <div className="wavo-message-actions">
-      <button type="button" onClick={() => onReply(message)} title="Reply"><CornerDownRight size={15}/> Reply</button>
-      <button type="button" onClick={() => onThread(message)} title="View thread">Thread{childrenCount ? ` (${childrenCount})` : ''}</button>
-      <button type="button" onClick={() => onPin(message.id)} title={pins.has(message.id) ? 'Unpin message' : 'Pin message'}><Pin size={14} />{pins.has(message.id) ? 'Unpin' : 'Pin'}</button>
+    {!message.deleted_at && !message.queued && <div className={`wavo-message-actions ${actionsOpen ? 'expanded' : ''}`}>
+      <button type="button" className="wavo-message-more" aria-label={actionsOpen ? 'Hide message actions' : 'Message actions'} aria-expanded={actionsOpen} onClick={toggleActions}>•••</button>
+      <div className="wavo-message-action-buttons">
+        <button type="button" onClick={() => onReply(message)} title="Reply"><CornerDownRight size={15}/> Reply</button>
+        <button type="button" onClick={() => onThread(message)} title="View thread">Thread{childrenCount ? ` (${childrenCount})` : ''}</button>
+        <button type="button" onClick={() => onPin(message.id)} title={pins.has(message.id) ? 'Unpin message' : 'Pin message'}><Pin size={14} />{pins.has(message.id) ? 'Unpin' : 'Pin'}</button>
+      </div>
     </div>}
   </div>
 }
 
-export default function ConversationExperience({ kind, friend, space, userId, messages, messageText, setMessageText, sendMessage, onBack, onTools, name, Avatar }) {
+export default function ConversationExperience({ kind, friend, space, userId, messages, messageText, setMessageText, sendMessage, sending = false, onBack, onTools, name, Avatar }) {
   const target = friend || space
   const targetId = target?.id
   const chatId = kind === 'dm' ? [userId, targetId].sort().join('_') : String(targetId)
@@ -164,17 +191,32 @@ export default function ConversationExperience({ kind, friend, space, userId, me
   const [pins, setPins] = useState(new Set())
   const [dragging, setDragging] = useState(false)
   const [notice, setNotice] = useState('')
+  const [actionsMessageId, setActionsMessageId] = useState(null)
   const dragDepth = useRef(0)
   const typing = useTyping(kind, chatId, userId, messageText)
-  const ownMessages = messages.filter((m) => m.sender_id === userId || (kind === 'space' && m.user_id === userId))
-  const lastOutgoing = ownMessages.at(-1)?.id
+  // A conversation with hundreds of messages should not scan the entire
+  // history separately for every message on every keystroke.
+  const { byId, replyCounts, lastOutgoing } = useMemo(() => {
+    const byId = new Map()
+    const replyCounts = new Map()
+    let lastOutgoing
+    for (const m of messages) {
+      byId.set(m.id, m)
+      if (m.reply_to) replyCounts.set(m.reply_to, (replyCounts.get(m.reply_to) || 0) + 1)
+      if (m.sender_id === userId || (kind === 'space' && m.user_id === userId)) lastOutgoing = m.id
+    }
+    return { byId, replyCounts, lastOutgoing }
+  }, [messages, userId, kind])
+  useEffect(() => {
+    window.dispatchEvent(new Event('wavo:conversation-change'))
+  }, [kind, targetId])
 
   const loadPins = useCallback(async () => {
     if (!userId || !targetId) return
     const { data, error } = await supabase.from('chat_message_pins').select('message_id').eq('user_id', userId).eq('kind', kind).eq('target_id', String(targetId))
     if (!error) setPins(new Set((data || []).map((row) => row.message_id)))
   }, [userId, targetId, kind])
-  useEffect(() => { setReply(null); setThread(null); setInfo(false); loadPins() }, [loadPins])
+  useEffect(() => { setReply(null); setThread(null); setInfo(false); setActionsMessageId(null); loadPins() }, [loadPins])
 
   useEffect(() => {
     if (kind !== 'dm' || !userId || !targetId || !messages.some((m) => m.receiver_id === userId && !m.is_read)) return
@@ -228,7 +270,7 @@ export default function ConversationExperience({ kind, friend, space, userId, me
     const completed = await sendMessage(event, reply?.id || null)
     if (completed) setReply(null)
   }
-  const openThread = (message) => setThread(message.reply_to ? messages.find((m) => m.id === message.reply_to) || message : message)
+  const openThread = (message) => setThread(message.reply_to ? byId.get(message.reply_to) || message : message)
   const nameLabel = name || target?.username || target?.name || 'Conversation'
 
   return <div className={kind === 'dm' ? 'chat-screen' : 'space-chat-card'} onDragEnter={enter} onDragOver={(e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault() }} onDragLeave={leave} onDrop={drop}>
@@ -237,10 +279,10 @@ export default function ConversationExperience({ kind, friend, space, userId, me
       : <div className="section-heading"><div><span className="eyebrow">PERSISTENT CHAT</span><h2>Conversation</h2></div><button className="wavo-chat-info-button" type="button" onClick={() => setInfo(!info)} aria-label="Space conversation information"><Info size={18}/></button></div>}
     <div className={kind === 'dm' ? 'dm-messages' : 'space-messages'}>
       {kind === 'space' && messages.length === 0 && <div className="muted center">Start the conversation.</div>}
-      {messages.map((m) => <MessageRow key={m.id} kind={kind} message={m} messages={messages} mine={m.sender_id === userId || (kind === 'space' && m.user_id === userId)} pins={pins} onReply={(message) => setReply(message.reply_to ? messages.find((row) => row.id === message.reply_to) || message : message)} onThread={openThread} onPin={togglePin} lastOutgoing={m.id === lastOutgoing}/>)}
-      {typing && <div className="wavo-typing" role="status">Typing…</div>}
+      {messages.map((m) => <MessageRow key={m.id} kind={kind} message={m} parent={byId.get(m.reply_to)} childrenCount={replyCounts.get(m.id) || 0} mine={m.sender_id === userId || (kind === 'space' && m.user_id === userId)} pins={pins} onReply={(message) => { setReply(message.reply_to ? byId.get(message.reply_to) || message : message); setActionsMessageId(null) }} onThread={(message) => { openThread(message); setActionsMessageId(null) }} onPin={(id) => { togglePin(id); setActionsMessageId(null) }} lastOutgoing={m.id === lastOutgoing} actionsOpen={actionsMessageId === m.id} toggleActions={() => setActionsMessageId((current) => current === m.id ? null : m.id)} />)}
+      {typing && <div className="wavo-typing" role="status">{kind === 'dm' ? `${friend?.username || 'Someone'} is typing…` : 'Someone is typing…'}</div>}
     </div>
-    <ChatComposer key={chatId} userId={userId} friend={friend} space={space} value={messageText} onChange={setMessageText} onSubmit={submit} replyTo={reply} onCancelReply={() => setReply(null)}/>
+    <ChatComposer key={chatId} userId={userId} friend={friend} space={space} value={messageText} onChange={setMessageText} onSubmit={submit} sending={sending} replyTo={reply} onCancelReply={() => setReply(null)}/>
     <RailControls kind={kind} targetId={targetId}/>
     {notice && <button type="button" className="wavo-workspace-notice" onClick={() => setNotice('')}>{notice}</button>}
     {info && <InfoPanel name={nameLabel} messages={messages} pins={pins} onClose={() => setInfo(false)} onJump={jump} onUnpin={togglePin}/>}
