@@ -68,76 +68,19 @@ platform :ios do
       keychain_password: keychain_pw
     }
 
+    # TestFlight builds must never revoke an existing Apple distribution
+    # certificate automatically: it may sign other apps or releases.
+    # If no certificate slot is available, fail safely so the account owner
+    # can recover signing without invalidating unrelated builds.
     begin
       cert(**cert_args)
     rescue => e
-      msg = e.message.to_s
-      unless msg.downcase.include?("maximum number") && msg.downcase.include?("distribution certificate")
-        raise
-      end
-
-      require "time"
-
-      allowed_types = [
-        Spaceship::ConnectAPI::Certificate::CertificateType::DISTRIBUTION,
-        Spaceship::ConnectAPI::Certificate::CertificateType::IOS_DISTRIBUTION
-      ]
-
-      distribution_certs = Spaceship::ConnectAPI::Certificate.all.select do |candidate|
-        allowed_types.include?(candidate.certificate_type)
-      end
-
-      if distribution_certs.empty?
-        UI.user_error!("Apple reported the Distribution certificate limit, but no distribution certificates were returned for revocation.")
-      end
-
-      oldest = distribution_certs.min_by do |candidate|
-        begin
-          Time.parse(candidate.expiration_date.to_s)
-        rescue StandardError
-          Time.at(0)
-        end
-      end
-
-      UI.important(
-        "Distribution certificate limit reached. Revoking oldest distribution certificate " \
-        "#{oldest.display_name || oldest.name || oldest.id} (#{oldest.certificate_type}, expires #{oldest.expiration_date || 'unknown'}), then retrying."
+      UI.user_error!(
+        "Apple Distribution signing is unavailable without revoking an existing " \
+        "certificate. Existing certificates were not modified. " \
+        "Check Apple Developer Certificates and install reusable CI signing credentials. " \
+        "Original error: #{e.message}"
       )
-
-      revoked_id = oldest.id
-      oldest.delete!
-
-      # Apple can take noticeably longer than the DELETE request to release the
-      # Distribution-certificate slot. Do not revoke a second certificate just
-      # because the portal is eventually consistent. Poll until the specific
-      # certificate disappears, then give Apple a short extra settling window.
-      revocation_visible = false
-      12.times do |attempt|
-        sleep 5
-        remaining = Spaceship::ConnectAPI::Certificate.all.select do |candidate|
-          allowed_types.include?(candidate.certificate_type)
-        end
-        unless remaining.any? { |candidate| candidate.id == revoked_id }
-          revocation_visible = true
-          UI.success("Apple now reports the revoked Distribution certificate as gone.")
-          break
-        end
-        UI.message("Waiting for Apple certificate revocation to propagate (#{(attempt + 1) * 5}s / 60s)…")
-      end
-
-      if revocation_visible
-        # The Certificates API can stop listing the revoked certificate before
-        # Apple's certificate-creation quota has actually released the slot.
-        # A five-second delay was not enough in CI. Give the backend a full
-        # propagation window before asking for a replacement certificate.
-        UI.message("Certificate disappeared from the API. Waiting 90 seconds for Apple's creation quota to release the slot…")
-        sleep 90
-      else
-        UI.important("The revoked certificate is still visible after 60 seconds. Waiting 90 more seconds before one final creation attempt; no additional certificates will be revoked.")
-        sleep 90
-      end
-
-      cert(**cert_args)
     end
 
     sigh(
