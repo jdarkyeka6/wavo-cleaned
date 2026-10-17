@@ -273,14 +273,14 @@ function ChatPower({ userId, tier, settings, folders, setFolders }) {
   const [announcement, setAnnouncement] = useState('')
   const [announceAt, setAnnounceAt] = useState('')
   const [notice, setNotice] = useState('')
-  const bypass = useRef(new WeakSet())
+
   const paid = rank(tier) >= 2
   const plus = tier === 'plus'
   const pro = tier === 'pro'
 
   const resolve = useCallback(async () => {
     const next = await resolveConversation(userId)
-    setContext(next)
+    setContext((previous) => previous?.kind === next?.kind && previous?.targetId === next?.targetId && previous?.root === next?.root ? previous : next)
     if (!next) return
     if (paid) {
       const saved = await getChatPreference(userId, next.kind, next.targetId).catch(() => null)
@@ -313,7 +313,12 @@ function ChatPower({ userId, tier, settings, folders, setFolders }) {
   }, [context, userId, paid, pro])
 
   useEffect(() => {
-    resolve(); const timer = setInterval(resolve, 1200); return () => clearInterval(timer)
+    resolve()
+    const onNavigate = () => { void resolve() }
+    window.addEventListener('wavo:conversation-change', onNavigate)
+    // Fallback when third-party UI transitions without navigation events.
+    const timer = setInterval(resolve, 30000)
+    return () => { clearInterval(timer); window.removeEventListener('wavo:conversation-change', onNavigate) }
   }, [resolve])
   useEffect(() => { if (context) refreshMessages() }, [context?.targetId, refreshMessages])
 
@@ -324,36 +329,29 @@ function ChatPower({ userId, tier, settings, folders, setFolders }) {
     root.dataset.wavoBubbleStyle = pref?.bubble_style || settings?.bubble_style || 'classic'
   }, [context, pref, settings?.default_chat_theme, settings?.bubble_style])
 
+  // Send actions come from the core message sender after moderation and a
+  // successful insert. Never intercept form submissions here: it caused
+  // duplicate checks, native alert loops, and a race against form state.
   useEffect(() => {
-    async function intercept(event) {
-      const form = event.target
-      if (!(form instanceof HTMLFormElement)) return
-      if (!form.matches('.composer, .create-form')) return
-      if (bypass.current.has(form)) { bypass.current.delete(form); return }
-      const text = [...form.querySelectorAll('textarea,input:not([type]),input[type="text"]')].map((x) => x.value).filter(Boolean).join('\n').trim()
-      if (!text) return
-      event.preventDefault(); event.stopPropagation()
+    if (!userId || !paid || effect === 'none') return undefined
+    const onSent = async (event) => {
+      const sent = event.detail
+      if (!sent?.id || sent.userId !== userId || !['dm', 'space'].includes(sent.kind)) return
+      if (!context || sent.kind !== context.kind || String(sent.targetId) !== String(context.targetId)) return
       try {
-        const check = await moderateContent(text)
-        if (!check?.allowed) { window.alert('Wavo blocked this because it may contain seriously unsafe content.'); return }
-        bypass.current.add(form); form.requestSubmit()
-        if (paid && effect !== 'none' && form.classList.contains('composer')) {
-          setTimeout(async () => {
-            const nowContext = await resolveConversation(userId)
-            if (!nowContext) return
-            const table = nowContext.kind === 'dm' ? 'messages' : 'group_messages'
-            let q = supabase.from(table).select('id,created_at')
-            q = nowContext.kind === 'dm' ? q.eq('chat_id', nowContext.conversationId).eq('sender_id', userId) : q.eq('group_id', nowContext.targetId).or(`sender_id.eq.${userId},user_id.eq.${userId}`)
-            const { data } = await q.order('created_at', { ascending: false }).limit(1).maybeSingle()
-            if (data?.id && Date.now() - new Date(data.created_at).getTime() < 15000) await supabase.from(table).update({ effect }).eq('id', data.id)
-            refreshMessages()
-          }, 550)
-        }
-      } catch { window.alert('Wavo could not run its safety check. Try sending again in a moment.') }
+        const table = sent.kind === 'dm' ? 'messages' : 'group_messages'
+        const { error } = await supabase.from(table).update({ effect })
+          .eq('id', sent.id).eq('sender_id', userId)
+        if (error) throw error
+        await refreshMessages()
+      } catch (error) {
+        console.warn('[wavo] message effect not saved', error)
+        setNotice('Message sent, but its visual effect could not be saved.')
+      }
     }
-    document.addEventListener('submit', intercept, true)
-    return () => document.removeEventListener('submit', intercept, true)
-  }, [userId, paid, effect, refreshMessages])
+    window.addEventListener('wavo:message-sent', onSent)
+    return () => window.removeEventListener('wavo:message-sent', onSent)
+  }, [userId, paid, effect, context, refreshMessages])
 
   if (!context) return null
 

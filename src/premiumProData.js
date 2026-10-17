@@ -115,7 +115,10 @@ export async function setMessageEffect(messageKind, messageId, userId, effect) {
 export async function moderateContent(text, imageUrl = '') {
   const { data, error } = await supabase.functions.invoke('moderate-content', { body: { text, imageUrl } })
   if (error) throw error
-  return data || { allowed: true }
+  if (typeof data?.allowed !== 'boolean' || data.degraded) {
+    throw new Error('Content safety check unavailable')
+  }
+  return data
 }
 
 export async function proAi(action, body = {}) {

@@ -116,7 +116,7 @@ export function MessageContent({ message, mine = false }) {
   return <p>{message?.content}</p>;
 }
 
-export function ChatComposer({ userId, friend = null, space = null, value, onChange, onSubmit, replyTo = null, onCancelReply }) {
+export function ChatComposer({ userId, friend = null, space = null, value, onChange, onSubmit, sending = false, replyTo = null, onCancelReply }) {
   const mediaInputRef = useRef(null);
   const fileInputRef = useRef(null);
   const voice = useVoiceRecorder();
@@ -265,9 +265,15 @@ export function ChatComposer({ userId, friend = null, space = null, value, onCha
   }
 
   async function chooseFile(event) {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files || []);
     event.target.value = "";
-    if (!file) return;
+    if (!files.length) return;
+    if (files.length > 1) {
+      setDroppedFiles((current) => [...current, ...files].slice(0, 20));
+      setToolsOpen(false);
+      return;
+    }
+    const file = files[0];
 
     const type = file.type.startsWith("image/") ? "image" : "file";
     if (type === "image" && file.size > MAX_SUPABASE_FILE_BYTES) {
@@ -460,15 +466,20 @@ export function ChatComposer({ userId, friend = null, space = null, value, onCha
         </section>
       )}
 
-      <form className="composer dm-composer restored-composer" onSubmit={(event) => { setToolsOpen(false); onSubmit(event); }}>
-        <input ref={mediaInputRef} className="attachment-input" type="file" onChange={chooseFile} accept="image/*,video/*" />
-        <input ref={fileInputRef} className="attachment-input" type="file" onChange={chooseFile} accept=".pdf,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip" />
-        <button type="button" className={`composer-tool plus-trigger ${toolsOpen ? "open" : ""}`} onClick={() => { setGifOpen(false); setToolsOpen((open) => !open); }} disabled={busy} aria-label="Add to chat"><Plus size={21} /></button>
-        <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={`Message ${targetName}`} />
+      <form className="composer dm-composer restored-composer" onPaste={(event) => {
+        const files = Array.from(event.clipboardData?.files || []);
+        if (!files.length) return;
+        event.preventDefault();
+        setDroppedFiles((current) => [...current, ...files].slice(0, 20));
+      }} onSubmit={(event) => { setToolsOpen(false); onSubmit(event); }}>
+        <input ref={mediaInputRef} className="attachment-input" type="file" onChange={chooseFile} accept="image/*,video/*" multiple />
+        <input ref={fileInputRef} className="attachment-input" type="file" onChange={chooseFile} accept=".pdf,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip" multiple />
+        <button type="button" className={`composer-tool plus-trigger ${toolsOpen ? "open" : ""}`} onClick={() => { setGifOpen(false); setToolsOpen((open) => !open); }} disabled={busy || sending} aria-label="Add to chat"><Plus size={21} /></button>
+        <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={sending ? 'Checking message…' : `Message ${targetName}`} disabled={sending} aria-busy={sending} />
         {value?.trim() ? (
-          <button className="composer-send" type="submit" disabled={busy} aria-label="Send message"><Send size={18} /></button>
+          <button className="composer-send" type="submit" disabled={busy || sending} aria-label={sending ? "Checking message" : "Send message"}>{sending ? <span className="wavo-send-spinner" aria-hidden="true" /> : <Send size={18} />}</button>
         ) : (
-          <button type="button" className="composer-send mic-send" onClick={startVoice} disabled={busy} aria-label="Record voice note"><Mic size={19} /></button>
+          <button type="button" className="composer-send mic-send" onClick={startVoice} disabled={busy || sending} aria-label="Record voice note"><Mic size={19} /></button>
         )}
       </form>
       {(voice.error || error) && <div className="composer-error">{voice.error || error}</div>}

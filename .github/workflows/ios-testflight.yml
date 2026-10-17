@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - improve/wavo-polish-reliability-20261017
     paths:
       - .github/testflight-trigger
       - .github/workflows/ios-testflight.yml

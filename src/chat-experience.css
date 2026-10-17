@@ -152,3 +152,74 @@
 .wavo-command-results p { padding:14px; color:#b6cbe3; }
 .wavo-command-dialog footer { padding:9px 14px; border-top:1px solid #34435d; color:#aebdda; font-size:11px; }
 @media(max-width:899px) { .wavo-command-trigger { display:none; } }
+
+/* Wavo polish: clean message actions and send feedback */
+.wavo-send-spinner {
+  width: 17px; height: 17px; display: inline-block;
+  border-radius: 50%; border: 2px solid rgba(225,236,255,.35);
+  border-top-color: #e9f4ff; animation: wavo-send-spin .75s linear infinite;
+}
+@keyframes wavo-send-spin { to { transform: rotate(360deg); } }
+.wavo-message-action-buttons { display:flex; gap:5px; align-items:center; flex-wrap:wrap; }
+.wavo-message-action-buttons > button {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:6px 8px; color:#eaf1ff;
+  border-radius:9px; border:1px solid rgba(137,158,201,.25);
+  background:rgba(31,46,70,.96); font-size:11px; cursor:pointer;
+}
+.wavo-message-action-buttons > button:hover { background:#354668; border-color:#987fff; }
+.wavo-message-more { display:none; color:#dcecff; }
+.wavo-message-actions:focus-within { opacity:1; }
+.wavo-message-meta { font-variant-numeric:tabular-nums; }
+.wavo-reply-quote:focus-visible,
+.wavo-message-action-buttons button:focus-visible,
+.wavo-chat-info-button:focus-visible,
+.wavo-rail-toggle:focus-visible,
+.wavo-command-trigger:focus-visible {
+  outline:2px solid #a693ff!important; outline-offset:2px;
+}
+.wavo-info-results { overscroll-behavior:contain; }
+.wavo-typing { animation:wavo-typing-appear .16s ease-out; }
+@keyframes wavo-typing-appear { from { opacity:0; transform:translateY(4px); } }
+@media (max-width:899px) {
+  .wavo-message-actions {
+    opacity:1!important; display:flex!important; width:auto!important;
+    gap:6px!important; flex:0 0 auto; min-width:0; align-self:center;
+  }
+  .chat-screen .dm-row { flex-wrap:nowrap!important; align-items:center!important; }
+  .chat-screen .dm-row .wavo-message-actions { width:auto!important; }
+  .wavo-message-more {
+    display:inline-grid!important; place-items:center;
+    width:30px; height:30px; min-width:30px;
+    border:1px solid rgba(132,155,198,.23); border-radius:10px;
+    background:rgba(29,43,64,.82); font-weight:800; line-height:1;
+  }
+  .wavo-message-action-buttons { display:none!important; }
+  .wavo-message-actions.expanded { flex-wrap:wrap!important; }
+  .wavo-message-actions.expanded .wavo-message-action-buttons {
+    display:flex!important; flex:1 1 100%; max-width:min(240px,75vw);
+    padding:6px; border-radius:10px;
+    border:1px solid rgba(150,169,224,.28);
+    background:#1c2a47; box-shadow:0 12px 28px #0006;
+  }
+  .wavo-message-action-buttons > button { min-height:32px; }
+  .wavo-message-meta { gap:5px; }
+  .wavo-message-meta span { font-size:9px!important; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .wavo-send-spinner,.wavo-typing { animation:none!important; }
+}
+
+/* Historical messages are fetched only when someone requests them. */
+.wavo-load-older {
+  display:block; flex:0 0 auto; align-self:center;
+  width:fit-content; min-height:32px; max-width:80%;
+  margin:10px auto 14px!important; padding:7px 14px!important;
+  border:1px solid rgba(140,167,221,.28); border-radius:999px;
+  background:rgba(35,51,83,.88); color:#d9e9ff;
+  cursor:pointer; font-size:12px; font-weight:650;
+}
+.wavo-load-older:hover { background:#384c7a; border-color:#a491ff; }
+.wavo-load-older:disabled { opacity:.6; cursor:wait; }
+.chat-screen .dm-messages > .wavo-load-older:first-child,
+.space-chat-card .space-messages > .wavo-load-older:first-child { margin-top:10px!important; }
