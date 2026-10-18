@@ -1,4 +1,5 @@
 import { getPlatform, isNativeApp } from './platform'
+import { measureViewportGeometry } from './viewportGeometry'
 
 export const MOBILE_BREAKPOINT = 760
 
@@ -26,36 +27,33 @@ export function isCompactUi() {
   return getUiMode() !== 'desktop-web'
 }
 
+let lastLayoutWidth = 0
+
 function applyViewportVars(root) {
   if (typeof window === 'undefined') return
 
   const vv = window.visualViewport
-  const visualWidth = Math.round(vv?.width || window.innerWidth || 0)
-  const visualHeight = Math.max(1, Math.round(vv?.height || window.innerHeight || 0))
-  const innerHeight = Math.max(1, Math.round(window.innerHeight || visualHeight))
-  const visualOffsetTop = Math.max(0, Math.round(vv?.offsetTop || 0))
+  const visualWidth = Math.max(1, Math.round(vv?.width || window.innerWidth || 0))
+  const layoutWidth = Math.max(1, Math.round(window.innerWidth || visualWidth))
+  const visualHeight = vv?.height || window.innerHeight
+  const innerHeight = window.innerHeight
+  const visualOffsetTop = vv?.offsetTop || 0
 
-  // On iOS, WKWebView can resize its layout viewport AND report a second,
-  // smaller visual viewport while the keyboard animates. Using the latter
-  // blindly subtracts the keyboard twice and leaves the composer floating
-  // well above the keys. Keep a full-height baseline for this orientation.
-  const fullHeight = Math.max(innerHeight, visualHeight + visualOffsetTop)
-  if (!stableViewportHeight) stableViewportHeight = fullHeight
+  // A portrait/landscape change needs a new full-height baseline. Ordinary
+  // keyboard animation never changes the layout width this dramatically.
+  if (lastLayoutWidth && Math.abs(layoutWidth - lastLayoutWidth) > 100) {
+    stableViewportHeight = 0
+  }
+  lastLayoutWidth = layoutWidth
 
-  const keyboardOpen = stableViewportHeight - Math.min(innerHeight, visualHeight) > 120
-  const nativeLayoutResized = isNativeApp && stableViewportHeight - innerHeight > 120
-  const height = keyboardOpen
-    ? (nativeLayoutResized ? innerHeight : visualHeight)
-    : fullHeight
-  // Only a visual-viewport resize needs its pan offset compensated. When the
-  // native WebView has already resized, applying that offset a second time
-  // pushes the input away from the keyboard.
-  const chatOffsetTop = keyboardOpen && !nativeLayoutResized ? visualOffsetTop : 0
-  const keyboardHeight = keyboardOpen
-    ? Math.max(0, stableViewportHeight - height - chatOffsetTop)
-    : 0
-
-  if (!keyboardOpen) stableViewportHeight = fullHeight
+  const geometry = measureViewportGeometry({
+    visualHeight,
+    innerHeight,
+    visualOffsetTop,
+    previousFullHeight: stableViewportHeight,
+    hasVisualViewport: Boolean(vv),
+  })
+  stableViewportHeight = geometry.fullHeight
 
   const focused = document.activeElement
   const composerFocused = focused instanceof HTMLElement &&
@@ -63,11 +61,12 @@ function applyViewportVars(root) {
     Boolean(focused.closest('.chat-screen .composer, .space-conversation-screen .composer'))
 
   root.style.setProperty('--wavo-viewport-width', `${visualWidth}px`)
-  root.style.setProperty('--wavo-viewport-height', `${height}px`)
-  root.style.setProperty('--wavo-keyboard-height', `${keyboardHeight}px`)
-  root.style.setProperty('--wavo-chat-viewport-offset-top', `${chatOffsetTop}px`)
-  root.dataset.wavoKeyboard = keyboardOpen ? 'open' : 'closed'
-  root.dataset.wavoChatKeyboard = keyboardOpen && composerFocused ? 'open' : 'closed'
+  root.style.setProperty('--wavo-viewport-height', `${geometry.viewportHeight}px`)
+  root.style.setProperty('--wavo-keyboard-height', `${geometry.keyboardHeight}px`)
+  root.style.setProperty('--wavo-chat-visible-top', `${geometry.visibleTop}px`)
+  root.style.setProperty('--wavo-chat-visible-height', `${geometry.viewportHeight}px`)
+  root.dataset.wavoKeyboard = geometry.keyboardOpen ? 'open' : 'closed'
+  root.dataset.wavoChatKeyboard = geometry.keyboardOpen && composerFocused ? 'open' : 'closed'
 }
 
 export function applyUiMode() {
