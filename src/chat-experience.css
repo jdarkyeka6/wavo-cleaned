@@ -223,3 +223,16 @@
 .wavo-load-older:disabled { opacity:.6; cursor:wait; }
 .chat-screen .dm-messages > .wavo-load-older:first-child,
 .space-chat-card .space-messages > .wavo-load-older:first-child { margin-top:10px!important; }
+
+/* Native keyboard: do not reserve the home-indicator inset ABOVE the keys.
+ * Keep the reply preview inside the same grid row as the composer. */
+html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"] .chat-screen .dm-composer {
+  padding-bottom: 8px !important;
+}
+
+/* The floating AI shortcut covers the reply preview's cancel control on
+ * narrow iPhones. Temporarily hide it during replies and while typing. */
+:is(html[data-wavo-ui="mobile-web"], html[data-wavo-ui="mobile-app"]) .chat-screen:has(.wavo-reply-preview) .wavo-plus-ai-host,
+html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"] .chat-screen .wavo-plus-ai-host {
+  display: none !important;
+}
