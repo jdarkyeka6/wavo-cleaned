@@ -8,6 +8,8 @@ on:
     paths:
       - .github/testflight-trigger
       - .github/workflows/ios-testflight.yml
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: macos-15
@@ -166,4 +168,5 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          GH_SIGNING_WRITE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bundle exec fastlane beta
