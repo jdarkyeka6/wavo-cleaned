@@ -1,0 +1,83 @@
+name: Rotate Wavo-only iOS signing certificate
+on:
+  push:
+    branches:
+      - improve/wavo-polish-reliability-20261017
+    paths:
+      - .github/workflows/wavo-signing-rotation-once.yml
+permissions:
+  contents: read
+  actions: write
+jobs:
+  rotate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify reusable signing implementation exists
+        uses: actions/checkout@v4
+      - name: Inspect and revoke only Wavo certificate, then start TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test -f scripts/wavo-ci-signing.js
+          grep -q 'wavo-ci-signing.js save' ios/App/fastlane/Fastfile
+          test ! -f .github/signing/wavo-distribution.enc.json || { echo "::error::A reusable signing archive already exists; refusing to revoke."; exit 1; }
+          node <<'NODE'
+          const { createPrivateKey, sign } = require('node:crypto');
+          const targetId = '75TF8X4LKC';
+          const expectedApps = ['lol.wavo.app', 'lol.wavo.app.WavoLiveActivity'].sort();
+          const keyId = (process.env.ASC_KEY_ID || '').trim();
+          const issuer = (process.env.ASC_ISSUER_ID || '').trim();
+          const raw = (process.env.ASC_KEY_CONTENT || '').trim();
+          const keyText = raw.includes('BEGIN PRIVATE KEY') ? raw : Buffer.from(raw, 'base64').toString('utf8');
+          if (!keyId || !issuer || !keyText.includes('BEGIN PRIVATE KEY')) throw Error('Apple API credentials unavailable');
+          const now = Math.floor(Date.now()/1000);
+          const header = Buffer.from(JSON.stringify({alg:'ES256',kid:keyId,typ:'JWT'})).toString('base64url');
+          const payload = Buffer.from(JSON.stringify({iss:issuer,iat:now,exp:now+900,aud:'appstoreconnect-v1'})).toString('base64url');
+          const unsigned = header + '.' + payload;
+          const signature = sign('sha256', Buffer.from(unsigned), { key:createPrivateKey(keyText), dsaEncoding:'ieee-p1363' }).toString('base64url');
+          const appleToken = unsigned + '.' + signature;
+          async function apple(url, method='GET') {
+            const response = await fetch(url, {method,headers:{Authorization:'Bearer '+appleToken,Accept:'application/json'}});
+            if (!response.ok) throw Error('Apple HTTP '+response.status+' '+(await response.text()).slice(0,400));
+            return response;
+          }
+          async function collect(route) {
+            let url = 'https://api.appstoreconnect.apple.com'+route;
+            const result = [];
+            for (let i=0; url && i<20; i++) {
+              const json = await (await apple(url)).json();
+              result.push(...(json.data || []));
+              url = json.links?.next || null;
+            }
+            if (url) throw Error('Could not finish Apple API pagination');
+            return result;
+          }
+          (async () => {
+            const cert = (await (await apple('https://api.appstoreconnect.apple.com/v1/certificates/'+targetId)).json()).data;
+            if (cert?.id !== targetId || cert.attributes?.certificateType !== 'DISTRIBUTION') throw Error('Target is not the expected distribution certificate');
+            const profiles = await collect('/v1/profiles?limit=200&include=certificates,bundleId');
+            const bundles = await collect('/v1/bundleIds?limit=200');
+            const bundleMap = new Map(bundles.map(b => [b.id, b.attributes?.identifier]));
+            const linked = profiles.filter(p => (p.relationships?.certificates?.data || []).some(c => c.id === targetId));
+            const appNames = linked.map(p => bundleMap.get(p.relationships?.bundleId?.data?.id)).sort();
+            if (linked.length !== 2 || appNames.length !== expectedApps.length || appNames.some((x,i) => x !== expectedApps[i]) || linked.some(p => p.attributes?.profileState !== 'ACTIVE')) {
+              throw Error('Safety check failed: certificate is not linked exclusively to the two known Wavo App Store profiles');
+            }
+            console.log('Preflight confirmed: only Wavo and WavoLiveActivity profiles linked to target.');
+            const revoked = await apple('https://api.appstoreconnect.apple.com/v1/certificates/'+targetId,'DELETE');
+            if (revoked.status !== 204) throw Error('Unexpected Apple revocation status: '+revoked.status);
+            console.log('Revoked ONLY Wavo distribution certificate '+targetId+'. Existing public App Store version is untouched.');
+            const repo = process.env.GITHUB_REPOSITORY;
+            const dispatch = await fetch('https://api.github.com/repos/'+repo+'/actions/workflows/ios-testflight.yml/dispatches',{
+              method:'POST',
+              headers:{Authorization:'Bearer '+process.env.GITHUB_TOKEN,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','Content-Type':'application/json'},
+              body:JSON.stringify({ref:'improve/wavo-polish-reliability-20261017'})
+            });
+            if (dispatch.status !== 204) throw Error('Wavo cert revoked but TestFlight dispatch failed ('+dispatch.status+'): '+(await dispatch.text()).slice(0,700));
+            console.log('Triggered Wavo iOS TestFlight build with reusable signing-key persistence.');
+          })().catch(error => {console.error('Rotation failed: '+error.message);process.exitCode=1});
+          NODE
