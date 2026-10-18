@@ -24,3 +24,4 @@
 2026-10-07 Restore account actions and cosmetics c4eeead8070b8eb75f2f66391941a9f743d84e5a
 2026-10-11 Group conversation sizing and scroll fix 86721eb247c13bda6fcd63e4bdd2bbbad0cfb5b8
 2026-10-18 iOS keyboard viewport and reply positioning fix 6c1ba6396350f953fefd5c9749c5455e632305db
+2026-10-18 Verify reusable iOS signing CI before Wavo-only certificate rotation
