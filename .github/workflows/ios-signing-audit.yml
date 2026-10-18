@@ -46,6 +46,8 @@ jobs:
           (async () => {
             const certs = await allPages('/v1/certificates?limit=200');
             const profiles = await allPages('/v1/profiles?limit=200&include=certificates,bundleId');
+            const bundles = await allPages('/v1/bundleIds?limit=200');
+            const bundlesById = new Map(bundles.map(b => [b.id, b.attributes?.identifier || b.attributes?.name || b.id]));
             console.log('Read-only Apple Developer signing audit. No certificates or profiles modified.');
             console.log('Certificates: ' + certs.length + ', provisioning profiles: ' + profiles.length);
             for (const cert of certs) {
@@ -59,8 +61,12 @@ jobs:
                 expirationDate: cert.attributes?.expirationDate || '',
                 profileCount: associated.length,
                 activeProfileCount: active.length,
-                appIdentifiers: [...new Set(associated.map(p => p.relationships?.bundleId?.data?.id).filter(Boolean))],
-                profileStates: associated.map(p => p.attributes?.profileState || '?'),
+                profiles: associated.map(p => ({
+                  name: p.attributes?.name,
+                  type: p.attributes?.profileType,
+                  state: p.attributes?.profileState,
+                  app: bundlesById.get(p.relationships?.bundleId?.data?.id) || 'unknown'
+                })),
               }));
             }
           })().catch(e => { console.error('Audit failed: ' + e.message); process.exitCode = 1; });
