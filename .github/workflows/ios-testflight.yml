@@ -106,6 +106,8 @@ jobs:
           cache: npm
       - name: Install npm dependencies
         run: npm install
+      - name: Verify native keyboard viewport geometry
+        run: node --test tests/viewportGeometry.test.mjs
       - name: Check the app config is present
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
