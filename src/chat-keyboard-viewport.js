@@ -6,16 +6,11 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
   window[INSTALL_KEY] = true
   let frame = 0
 
-  // The layout module is the single source of truth for native resize, visual
-  // viewport panning and keyboard state. Do not maintain another baseline here.
   const measure = () => {
     frame = 0
+    // Layout and keyboard geometry now come from the same visualViewport
+    // reading; never calculate or subtract a second keyboard height here.
     applyUiMode()
-    if (document.documentElement.dataset.wavoChatKeyboard === 'open' &&
-        (window.scrollX !== 0 || window.scrollY !== 0)) {
-      // Only the messages pane should scroll, not the document behind it.
-      window.scrollTo(0, 0)
-    }
   }
 
   const scheduleMeasure = () => {
@@ -26,14 +21,15 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
   const settleAfterFocus = () => {
     scheduleMeasure()
     setTimeout(scheduleMeasure, 80)
-    setTimeout(scheduleMeasure, 300)
+    setTimeout(scheduleMeasure, 280)
+    setTimeout(scheduleMeasure, 500)
   }
 
   document.addEventListener('focusin', settleAfterFocus, true)
   document.addEventListener('focusout', settleAfterFocus, true)
-
-  // These deferred measurements are important when iOS animates its keyboard:
-  // visualViewport.resize can finish after the input's focus event.
   window.addEventListener('orientationchange', settleAfterFocus, { passive: true })
+
+  // Do NOT force window.scrollTo(0, 0) while the keyboard animates.
+  // In WKWebView that can pan the page and strand the input far above the keys.
   scheduleMeasure()
 }
