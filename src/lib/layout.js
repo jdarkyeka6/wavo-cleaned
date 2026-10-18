@@ -31,35 +31,43 @@ function applyViewportVars(root) {
 
   const vv = window.visualViewport
   const visualWidth = Math.round(vv?.width || window.innerWidth || 0)
-  const visualHeight = Math.round(vv?.height || window.innerHeight || 0)
-  const innerHeight = Math.round(window.innerHeight || visualHeight || 0)
-  const offsetTop = Math.max(0, Math.round(vv?.offsetTop || 0))
+  const visualHeight = Math.max(1, Math.round(vv?.height || window.innerHeight || 0))
+  const innerHeight = Math.max(1, Math.round(window.innerHeight || visualHeight))
+  const visualOffsetTop = Math.max(0, Math.round(vv?.offsetTop || 0))
 
-  // WKWebView's screen.height can include native space that the web view cannot
-  // actually draw into. Using it as the app height makes the bottom navigation
-  // stop above the real bottom edge and leaves a large empty strip underneath.
-  // visualViewport/innerHeight describe the drawable CSS viewport instead.
-  const visibleViewportHeight = Math.max(1, visualHeight + offsetTop)
-  const currentViewportHeight = Math.max(visibleViewportHeight, innerHeight)
+  // On iOS, WKWebView can resize its layout viewport AND report a second,
+  // smaller visual viewport while the keyboard animates. Using the latter
+  // blindly subtracts the keyboard twice and leaves the composer floating
+  // well above the keys. Keep a full-height baseline for this orientation.
+  const fullHeight = Math.max(innerHeight, visualHeight + visualOffsetTop)
+  if (!stableViewportHeight) stableViewportHeight = fullHeight
 
-  if (!stableViewportHeight) stableViewportHeight = currentViewportHeight
+  const keyboardOpen = stableViewportHeight - Math.min(innerHeight, visualHeight) > 120
+  const nativeLayoutResized = isNativeApp && stableViewportHeight - innerHeight > 120
+  const height = keyboardOpen
+    ? (nativeLayoutResized ? innerHeight : visualHeight)
+    : fullHeight
+  // Only a visual-viewport resize needs its pan offset compensated. When the
+  // native WebView has already resized, applying that offset a second time
+  // pushes the input away from the keyboard.
+  const chatOffsetTop = keyboardOpen && !nativeLayoutResized ? visualOffsetTop : 0
+  const keyboardHeight = keyboardOpen
+    ? Math.max(0, stableViewportHeight - height - chatOffsetTop)
+    : 0
 
-  const keyboardOverlap = Math.max(0, stableViewportHeight - visibleViewportHeight)
-  const keyboardOpen = keyboardOverlap > 120
+  if (!keyboardOpen) stableViewportHeight = fullHeight
 
-  if (!keyboardOpen) {
-    stableViewportHeight = currentViewportHeight
-  }
-
-  // When the keyboard is open, follow the visual viewport so composers sit
-  // immediately above it. Otherwise, own exactly the drawable app viewport.
-  const height = keyboardOpen ? visibleViewportHeight : currentViewportHeight
-  const keyboard = keyboardOpen ? keyboardOverlap : 0
+  const focused = document.activeElement
+  const composerFocused = focused instanceof HTMLElement &&
+    focused.matches('input, textarea, [contenteditable="true"]') &&
+    Boolean(focused.closest('.chat-screen .composer, .space-conversation-screen .composer'))
 
   root.style.setProperty('--wavo-viewport-width', `${visualWidth}px`)
   root.style.setProperty('--wavo-viewport-height', `${height}px`)
-  root.style.setProperty('--wavo-keyboard-height', `${keyboard}px`)
+  root.style.setProperty('--wavo-keyboard-height', `${keyboardHeight}px`)
+  root.style.setProperty('--wavo-chat-viewport-offset-top', `${chatOffsetTop}px`)
   root.dataset.wavoKeyboard = keyboardOpen ? 'open' : 'closed'
+  root.dataset.wavoChatKeyboard = keyboardOpen && composerFocused ? 'open' : 'closed'
 }
 
 export function applyUiMode() {
