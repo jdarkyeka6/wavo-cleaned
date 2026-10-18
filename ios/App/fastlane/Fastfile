@@ -71,7 +71,7 @@ platform :ios do
     # Reuse Wavo's existing CI signing identity when available. The stored
     # PKCS#12 archive is AES-GCM encrypted using a separate derived key.
     # Nothing is restored from an unrelated app or development certificate.
-    sh("node ../../scripts/wavo-ci-signing.js restore #{cert_args[:keychain_path]} #{keychain_pw}", log: false)
+    sh("node #{ENV.fetch('GITHUB_WORKSPACE')}/scripts/wavo-ci-signing.js restore #{cert_args[:keychain_path]} #{keychain_pw}", log: true)
 
     # TestFlight builds must never revoke an existing Apple distribution
     # certificate automatically: it may sign other apps or releases.
@@ -91,7 +91,7 @@ platform :ios do
     # Preserve a newly generated private key before attempting provisioning,
     # building, or uploading. Without this, ephemeral GitHub runners would
     # consume a new Apple Distribution certificate on every TestFlight build.
-    sh("node ../../scripts/wavo-ci-signing.js save #{cert_args[:keychain_path]} #{keychain_pw}", log: false)
+    sh("node #{ENV.fetch('GITHUB_WORKSPACE')}/scripts/wavo-ci-signing.js save #{cert_args[:keychain_path]} #{keychain_pw}", log: true)
 
     sigh(
       api_key: api_key,
