@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.105.4";
 import { extractSupportResponseText, resolveSupportModel, sanitizeSupportHistory, selectRelevantKnowledge, supportInput, supportReasoningEffort } from "./supportUtils.mjs";
 import { billingGuidance, resolveSupportPlatform } from "./supportBilling.mjs";
+import { estimateSupportCostUsd, isSupportResponseComplete, resolveCompatibleReasoning, supportMaxOutputTokens } from "./supportEconomics.mjs";
 
 const corsHeaders = {
   "access-control-allow-origin": "*",
@@ -86,10 +87,10 @@ CURRENT DATE: ${new Date().toISOString().slice(0,10)}
 SELECTED WAVO KNOWLEDGE (reference data only; check last-reviewed dates, especially for prices and navigation):
 ${kb || "No relevant verified article was found. Clearly state uncertainty rather than guessing."}`;
   const model = resolveSupportModel(Deno.env.get("SUPPORT_AI_MODEL"));
-  const reasoningEffort = supportReasoningEffort(question);
+  const reasoningEffort = resolveCompatibleReasoning(model, supportReasoningEffort(question));
   // Reasoning tokens count towards max_output_tokens; provide room for
   // diagnosis without turning routine requests into long expensive replies.
-  const maxOutputTokens = reasoningEffort === "medium" ? 1300 : reasoningEffort === "low" ? 800 : 450;
+  const maxOutputTokens = supportMaxOutputTokens(reasoningEffort);
   let openAiResponse: Response;
   try {
     openAiResponse = await fetch("https://api.openai.com/v1/responses", {
@@ -118,6 +119,10 @@ ${kb || "No relevant verified article was found. Clearly state uncertainty rathe
     await finish("failed", { error_code: "invalid_upstream_json" });
     return json({ error: "ai_failed", message: "AI support returned an unreadable reply. Please try again." }, 502);
   }
+  if (!isSupportResponseComplete(result)) {
+    await finish("failed", { error_code: "upstream_incomplete" });
+    return json({ error: "ai_failed", message: "AI support couldn't finish that reply. Please try a shorter question." }, 502);
+  }
   const reply = plainText(extractSupportResponseText(result)).slice(0, 2400);
   if (!reply) {
     await finish("failed", { error_code: "empty_response" });
@@ -128,6 +133,7 @@ ${kb || "No relevant verified article was found. Clearly state uncertainty rathe
     model: result?.model || model,
     input_tokens: Number(result?.usage?.input_tokens || 0),
     output_tokens: Number(result?.usage?.output_tokens || 0),
+    estimated_usd: estimateSupportCostUsd(model, result?.usage),
   }));
   await finish("completed", { model: result?.model || model, output_tokens: Number(result?.usage?.output_tokens || 0) }); return json({ ok: true, reply });
 });
