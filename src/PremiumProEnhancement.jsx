@@ -17,6 +17,7 @@ import {
   APPLE_PRODUCTS, isNativeIOS, loadStoreProducts, manageAppleSubscription,
   purchaseAppleTier, restoreApplePurchases, startWebCheckout,
 } from './storePurchases'
+import { watchConversationChanges } from './lib/conversationWatch'
 import './premium-pro.css'
 
 const PROFILE_HOST = 'data-wavo-premium-pro-host'
@@ -313,12 +314,8 @@ function ChatPower({ userId, tier, settings, folders, setFolders }) {
   }, [context, userId, paid, pro])
 
   useEffect(() => {
-    resolve()
-    const onNavigate = () => { void resolve() }
-    window.addEventListener('wavo:conversation-change', onNavigate)
-    // Fallback when third-party UI transitions without navigation events.
-    const timer = setInterval(resolve, 30000)
-    return () => { clearInterval(timer); window.removeEventListener('wavo:conversation-change', onNavigate) }
+    void resolve()
+    return watchConversationChanges(window, resolve)
   }, [resolve])
   useEffect(() => { if (context) refreshMessages() }, [context?.targetId, refreshMessages])
 
