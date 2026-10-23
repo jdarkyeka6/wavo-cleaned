@@ -30,3 +30,26 @@ jobs:
         run: npx eslint src/lib/wavo2FeatureFlags.js src/lib/safeNotificationUrl.js src/lib/wavo2GameRules.js src/phase3Data.js src/NotificationSetup.jsx
       - name: Build web app
         run: npm run build
+
+  game-sql-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test candidate game integrity guard in disposable Postgres
+        run: |
+          cat tests/sql/wavo2_guard_fixture.sql \
+              docs/sql/wavo2_board_game_guard_STAGING_ONLY.sql \
+              tests/sql/wavo2_guard_assertions.sql \
+            | docker exec -i "${{ job.services.postgres.id }}" \
+                psql -U postgres -d postgres -v ON_ERROR_STOP=1
