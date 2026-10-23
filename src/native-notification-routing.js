@@ -1,27 +1,12 @@
 import { isIOS, isNativeApp } from './lib/platform'
+import { parsePushDestination } from './lib/pushDestination'
 
 // Register this at app boot, not after Supabase auth/push registration. A push
 // tap can be delivered before the signed-in user is loaded on a cold launch.
 const INSTALL_KEY = '__WAVO_NATIVE_PUSH_ROUTER_INSTALLED__'
 
 export function normalizePushDestination(raw) {
-  if (typeof raw !== 'string' || !raw.startsWith('/') || raw.startsWith('//') || raw.includes('\\')) return null
-
-  let path
-  try {
-    const url = new URL(raw, window.location.origin)
-    if (url.origin !== window.location.origin) return null
-    path = url.pathname
-  } catch {
-    return null
-  }
-
-  if (path === '/chats' || path === '/inbox' || path === '/messages') return '/inbox'
-  if (path.startsWith('/chats/')) path = '/chat/' + path.slice('/chats/'.length)
-
-  if (path.startsWith('/chat/') && path.length > '/chat/'.length) return path
-  if (path.startsWith('/space/') && path.length > '/space/'.length) return path
-  return null
+  return parsePushDestination(raw, window.location.origin)
 }
 
 function navigateToNotification(raw) {
