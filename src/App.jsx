@@ -753,7 +753,7 @@ export default function App() {
     const item = undoSend;
     if (!item) return;
     try {
-      if (item.offline) { removeOutboxItem(userId, item.id); setMessages((prev) => prev.filter((m) => m.id !== item.tempId)); }
+      if (item.offline) { if (!removeOutboxItem(userId, item.id)) throw new Error("Could not remove queued message"); setMessages((prev) => prev.filter((m) => m.id !== item.tempId)); }
       else { if (item.kind === "dm") await deleteDmMessage(userId, item.id); else await deleteSpaceMessage(userId, item.id); setMessages((prev) => prev.filter((m) => m.id !== item.id)); }
       setUndoSend(null); setToast("Message undone");
     } catch { setToast(GENERIC_ERROR); }
