@@ -6,6 +6,7 @@ import { estimateSupportCostUsd, isSupportResponseComplete, resolveCompatibleRea
 import { SUPPORT_RETRIEVAL_CASES } from "./supportRetrievalCases.mjs";
 import { buildSupportInstructions } from "../supabase/functions/support-ai/supportInstructions.mjs";
 import { SUPPORT_ANSWER_CASES } from "./supportAnswerCases.mjs";
+import { guardSupportReply } from "../supabase/functions/support-ai/supportReplyGuards.mjs";
 
 test("defaults to the low-cost GPT-6 model; ignores invalid overrides", () => {
   assert.equal(DEFAULT_SUPPORT_MODEL, "gpt-6-luna");
@@ -179,4 +180,37 @@ test("evaluation and production share one support instruction builder", () => {
   assert.ok(!ios.includes("wavo.lol/subscriptions"));
   assert.equal(SUPPORT_ANSWER_CASES.length,16);
   assert.ok(SUPPORT_ANSWER_CASES.every(x=>x.question && x.kb && x.id && x.platform));
+});
+
+test("Support does not tell iOS users to purchase on the web or quote invented prices", () => {
+  const iosQuestion="How much does Wavo Pro cost?";
+  for(const reply of [
+    "Pro costs A$17.95 per month",
+    "Pro costs $17.95 per month",
+    "Pay via wavo.lol/subscriptions",
+    "You can subscribe on the website.",
+  ]) {
+    const guarded=guardSupportReply(reply,"ios",iosQuestion);
+    assert.ok(guarded.includes("Apple App Store purchase sheet"),guarded);
+    assert.ok(!guarded.includes("17.95"));
+    assert.ok(!guarded.includes("wavo.lol"));
+  }
+  assert.equal(guardSupportReply("Restart Wavo to retry.","ios","Why are my notifications broken?"),"Restart Wavo to retry.");
+});
+
+test("Support cannot claim to have performed unprovided account tools", () => {
+  const attempts=["I've refunded your purchase.","I have now cancelled your subscription.","We've reset your password.","I have fixed your account."];
+  for(const reply of attempts){
+    const guarded=guardSupportReply(reply,"web","Can you fix my account?");
+    assert.ok(guarded.includes("can't make changes"),guarded);
+  }
+  assert.equal(guardSupportReply("I haven't changed your settings.","web","How do I change settings?"),"I haven't changed your settings.");
+});
+
+test("Web Pro and unknown-platform prices are treated as unverified", () => {
+  const web=guardSupportReply("Wavo Pro is A$14.99/month","web","What does Pro cost?");
+  assert.ok(web.includes("can't confirm the exact Wavo Pro"));
+  const unknown=guardSupportReply("Subscribe for $9.99","unknown","What is the subscription price?");
+  assert.ok(unknown.includes("Which device"));
+  assert.equal(guardSupportReply("You can check your Apple account.","ios","How do refunds work?"),"You can check your Apple account.");
 });
