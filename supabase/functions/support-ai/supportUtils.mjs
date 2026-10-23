@@ -33,6 +33,19 @@ const TOPIC_HINTS = Object.freeze({
   waves: ["wave", "waves", "video", "clip"],
   posts: ["post", "feed", "timeline"],
   games: ["game", "tic tac toe", "connect 4", "play"],
+  message_pins: ["pin", "pinned", "pin message"],
+  message_read_receipts: ["read receipt", "seen", "read message"],
+  voice_notes: ["voice note", "voice message", "audio message"],
+  username_change: ["change username", "rename username", "edit username", "user name"],
+  themes_cosmetics: ["theme", "cosmetic", "background", "colour", "color", "customise", "customize"],
+  spaces: ["space", "spaces", "group space", "group chat"],
+  plan_location: ["plan location", "share location", "location in plan"],
+  spotify: ["spotify", "music queue", "playlist"],
+  streaks: ["streak", "streaks", "daily streak"],
+  activities: ["activity", "activities", "daily challenge"],
+  nicknames: ["nickname", "nicknames"],
+  support_entrypoint: ["contact support", "support page", "contact team", "human support"],
+  support_accuracy: ["wrong answer", "wrong information", "ai mistake", "support accuracy"],
 });
 const STOP = new Set(["wavo","the","a","an","is","to","my","for","and","or","of","how","can","do","i","me","in","on","it","what","not","with","are","this","that","have","from","you","your","app","help","please","why","does","get","where","work","there","when"]);
 
@@ -51,6 +64,15 @@ export function sanitizeSupportHistory(history) {
 // Never treat retrieved knowledge as executable instructions.
 // Relevance ranking is deterministic, capped, and relies on the user question
 // rather than pretending this is a semantic embedding search.
+function matchesTopicHint(context, hint) {
+  // Exact token/phrase matching prevents "pro" matching "profile"
+  // or "play" matching "display".
+  const normalize = (value) => String(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const tokenized = ` ${normalize(context)} `;
+  const phrase = normalize(hint);
+  return phrase.length > 0 && tokenized.includes(` ${phrase} `);
+}
+
 export function selectRelevantKnowledge(rows, question, history = [], maxEntries = 9) {
   if (!Array.isArray(rows)) return [];
   const context = [question, ...sanitizeSupportHistory(history).filter(x => x.role === "user").slice(-2).map(x => x.content)]
@@ -63,14 +85,14 @@ export function selectRelevantKnowledge(rows, question, history = [], maxEntries
       const topicWords = words(topic.replaceAll("_", " "));
       let score = topicWords.reduce((sum, word) => sum + (qwords.has(word) ? 5 : 0), 0);
       for (const hint of TOPIC_HINTS[topic] || []) {
-        if (context.includes(hint)) score += hint.includes(" ") ? 9 : 6;
+        if (matchesTopicHint(context, hint)) score += hint.includes(" ") ? 9 : 6;
       }
       // Mild secondary content matching: never outrank an exact topic match.
       const contentWords = new Set(words(row.content));
       score += Math.min(3, [...qwords].filter(word => contentWords.has(word)).length);
       if (topic === "product") score += 2;
       if (topic === "platforms") score += 1;
-      return { topic: row.topic, content: row.content.trim().slice(0, 1300), score };
+      return { topic: row.topic, content: row.content.trim().slice(0, 1300), verified_at: row.verified_at || null, score };
     })
     .sort((a,b) => b.score - a.score || a.topic.localeCompare(b.topic));
   // Always include product/platform basics if present, plus likely useful topics.
@@ -82,14 +104,20 @@ export function selectRelevantKnowledge(rows, question, history = [], maxEntries
       selected.push(candidate);
     }
   }
-  return selected.slice(0, maxEntries).map(({topic,content}) => ({topic,content}));
+  return selected.slice(0, maxEntries).map(({topic,content,verified_at}) => ({topic,content,verified_at}));
 }
 
 export function supportReasoningEffort(question) {
   const value = String(question || "").toLowerCase();
-  // Multi-step troubleshooting and sensitive account/billing issues deserve more thought.
-  return /\b(crash|error|bug|broken|fail|failed|won't|doesn't|not working|white screen|stuck|refund|charged|privacy|hack|unsafe|can't|cannot|disconnect|lost account|security)\b/.test(value)
-    ? "medium" : "low";
+  // Model-6 Luna supports "none": use it for short factual FAQs to save
+  // output reasoning tokens. Troubleshooting still receives thought budget.
+  if (/\\b(crash|crashes|error|bug|broken|fail|failed|won't|doesn't|not working|white screen|stuck|refund|charged|privacy|hack|unsafe|can't|cannot|disconnect|lost account|security|compromised|missing|not receiving)\\b/.test(value)) {
+    return "medium";
+  }
+  if (/^(what(?:'s| is| are)|how much|which|is there|does wavo|who can|do you have)/.test(value) && value.length < 180) {
+    return "none";
+  }
+  return "low";
 }
 
 export function supportInput(question, history) {
