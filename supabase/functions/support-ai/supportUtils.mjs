@@ -111,7 +111,7 @@ export function supportReasoningEffort(question) {
   const value = String(question || "").toLowerCase();
   // Model-6 Luna supports "none": use it for short factual FAQs to save
   // output reasoning tokens. Troubleshooting still receives thought budget.
-  if (/\\b(crash|crashes|error|bug|broken|fail|failed|won't|doesn't|not working|white screen|stuck|refund|charged|privacy|hack|unsafe|can't|cannot|disconnect|lost account|security|compromised|missing|not receiving)\\b/.test(value)) {
+  if (/\b(crash|crashes|error|bug|broken|fail|failed|won't|doesn't|not working|white screen|stuck|refund|charged|privacy|hack|unsafe|can't|cannot|disconnect|lost account|security|compromised|missing|not receiving)\b/.test(value)) {
     return "medium";
   }
   if (/^(what(?:'s| is| are)|how much|which|is there|does wavo|who can|do you have)/.test(value) && value.length < 180) {
