@@ -17,4 +17,5 @@ jobs:
       - run: npm ci
       - run: node --test tests/wavesRecommendations.test.mjs
       - run: node --test tests/offline-queue.test.mjs
+      - run: node --test tests/conversation-watch.test.mjs
       - run: npm run build
