@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {DEFAULT_SUPPORT_MODEL, resolveSupportModel, sanitizeSupportHistory, selectRelevantKnowledge, supportReasoningEffort, supportInput} from "../supabase/functions/support-ai/supportUtils.mjs";
+import {DEFAULT_SUPPORT_MODEL, resolveSupportModel, sanitizeSupportHistory, selectRelevantKnowledge, supportReasoningEffort, supportInput, extractSupportResponseText} from "../supabase/functions/support-ai/supportUtils.mjs";
 import {resolveSupportPlatform, billingGuidance} from "../supabase/functions/support-ai/supportBilling.mjs";
 
 test("defaults to the low-cost GPT-6 model; ignores invalid overrides", () => {
@@ -111,4 +111,11 @@ test("Wavo support coverage reaches common existing feature categories", () => {
     const selected=selectRelevantKnowledge(rows,question,[],5).map(x=>x.topic);
     assert.ok(selected.includes(topic),`Missing ${topic} for ${question}: ${selected.join(",")}`);
   }
+});
+
+test("Responses API text is read from output_text or nested message content", () => {
+  assert.equal(extractSupportResponseText({output_text:"  Thanks!  "}),"Thanks!");
+  assert.equal(extractSupportResponseText({output:[{type:"reasoning"},{type:"message",content:[{type:"output_text",text:"First."},{type:"output_text",text:"Second."}]}]}),"First.\nSecond.");
+  assert.equal(extractSupportResponseText({output:[{content:[{type:"tool_call",value:"not text"}]}]}),"");
+  assert.equal(extractSupportResponseText(null),"");
 });
