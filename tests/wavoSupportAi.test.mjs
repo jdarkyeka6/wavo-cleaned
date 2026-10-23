@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {DEFAULT_SUPPORT_MODEL, resolveSupportModel, sanitizeSupportHistory, selectRelevantKnowledge, supportReasoningEffort, supportInput, extractSupportResponseText} from "../supabase/functions/support-ai/supportUtils.mjs";
 import {resolveSupportPlatform, billingGuidance} from "../supabase/functions/support-ai/supportBilling.mjs";
+import { estimateSupportCostUsd, isSupportResponseComplete, resolveCompatibleReasoning, supportMaxOutputTokens } from "../supabase/functions/support-ai/supportEconomics.mjs";
+import { SUPPORT_RETRIEVAL_CASES } from "./supportRetrievalCases.mjs";
 
 test("defaults to the low-cost GPT-6 model; ignores invalid overrides", () => {
   assert.equal(DEFAULT_SUPPORT_MODEL, "gpt-6-luna");
@@ -118,4 +120,43 @@ test("Responses API text is read from output_text or nested message content", ()
   assert.equal(extractSupportResponseText({output:[{type:"reasoning"},{type:"message",content:[{type:"output_text",text:"First."},{type:"output_text",text:"Second."}]}]}),"First.\nSecond.");
   assert.equal(extractSupportResponseText({output:[{content:[{type:"tool_call",value:"not text"}]}]}),"");
   assert.equal(extractSupportResponseText(null),"");
+});
+
+test("GPT-6.1 Sol never receives unsupported reasoning effort none", () => {
+  assert.equal(resolveCompatibleReasoning("gpt-6.1-sol","none"),"low");
+  assert.equal(resolveCompatibleReasoning("gpt-6.1-sol","medium"),"medium");
+  assert.equal(resolveCompatibleReasoning("gpt-6-luna","none"),"none");
+  assert.equal(resolveCompatibleReasoning("gpt-5.6-luna","none"),"none");
+  assert.equal(supportMaxOutputTokens("none"),450);
+  assert.equal(supportMaxOutputTokens("low"),800);
+  assert.equal(supportMaxOutputTokens("medium"),1300);
+});
+
+test("token cost estimates include reasoning and discounted cached input", () => {
+  const usage={input_tokens:2000,output_tokens:250,input_tokens_details:{cached_tokens:500}};
+  assert.equal(estimateSupportCostUsd("gpt-6-luna",usage),0.00028);
+  assert.equal(estimateSupportCostUsd("gpt-5.6-luna",usage),0.00061);
+  assert.equal(estimateSupportCostUsd("gpt-6.1-sol",usage),0.00555);
+  assert.equal(estimateSupportCostUsd("gpt-6-luna",{input_tokens:2000,output_tokens:250}),0.000325);
+  assert.equal(estimateSupportCostUsd("gpt-6-luna",{input_tokens:2000,output_tokens:250,input_tokens_details:{cached_tokens:5000}}),0.000145);
+  assert.equal(estimateSupportCostUsd("unpriced-model",usage),null);
+  assert.equal(estimateSupportCostUsd("gpt-6-luna",{output_tokens:250}),null);
+  assert.equal(estimateSupportCostUsd("gpt-6-luna",{input_tokens:-5,output_tokens:250}),null);
+});
+
+test("incomplete API responses are not presented as complete help", () => {
+  assert.equal(isSupportResponseComplete({status:"completed"}),true);
+  assert.equal(isSupportResponseComplete({output_text:"Legacy mocked reply"}),true);
+  assert.equal(isSupportResponseComplete({status:"incomplete",output_text:"Truncated"}),false);
+  assert.equal(isSupportResponseComplete({status:"failed",output_text:"Unreliable"}),false);
+  assert.equal(isSupportResponseComplete(null),false);
+});
+
+test("36 synthetic Wavo support topics are findable", () => {
+  const names=[...new Set(SUPPORT_RETRIEVAL_CASES.map(x=>x.topic)), "product","platforms"];
+  const rows=names.map(topic=>({topic,content:"General reference instructions for Wavo"}));
+  for(const {question,topic} of SUPPORT_RETRIEVAL_CASES){
+    const matches=selectRelevantKnowledge(rows,question,[],9).map(row=>row.topic);
+    assert.ok(matches.includes(topic),`Question "${question}" did not retrieve ${topic}; got ${matches.join(", ")}`);
+  }
 });
