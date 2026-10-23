@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {DEFAULT_SUPPORT_MODEL, resolveSupportModel, sanitizeSupportHistory, selectRelevantKnowledge, supportReasoningEffort, supportInput} from "../supabase/functions/support-ai/supportUtils.mjs";
+import {resolveSupportPlatform, billingGuidance} from "../supabase/functions/support-ai/supportBilling.mjs";
 
 test("defaults to the low-cost GPT-6 model; ignores invalid overrides", () => {
   assert.equal(DEFAULT_SUPPORT_MODEL, "gpt-6-luna");
@@ -43,7 +44,71 @@ test("follows the latest user turns and limits returned topics", () => {
   assert.ok(selected.length <= 3);
 });
 
-test("complex troubleshooting gets medium effort; routine questions stay low", () => {
+test("complex troubleshooting gets medium effort; factual FAQ gets no reasoning tokens", () => {
   assert.equal(supportReasoningEffort("The app crashes with a white screen"),"medium");
-  assert.equal(supportReasoningEffort("What is Wavo Premium?"),"low");
+  assert.equal(supportReasoningEffort("What is Wavo Premium?"),"none");
+  assert.equal(supportReasoningEffort("Can you help me message my friend?"),"low");
+});
+
+test("billing guidance never guesses Apple prices or Pro web prices", () => {
+  assert.equal(resolveSupportPlatform("web","https://wavo.lol"),"web");
+  assert.equal(resolveSupportPlatform("web","https://www.wavo.lol"),"web");
+  assert.equal(resolveSupportPlatform("web","https://evil.example"),"unknown");
+  assert.equal(resolveSupportPlatform("web",null),"unknown");
+  assert.equal(resolveSupportPlatform("ios","capacitor://localhost"),"ios");
+  const ios=billingGuidance("ios");
+  const web=billingGuidance("web");
+  assert.ok(ios.includes("Apple In-App Purchase"));
+  assert.ok(!ios.includes("A$4.99"));
+  assert.ok(!ios.includes("wavo.lol/subscriptions"));
+  assert.ok(web.includes("Premium A$4.99/month"));
+  assert.ok(web.includes("Pro amount is unverified"));
+  assert.ok(!web.includes("A$14.99"));
+});
+
+test("topic hints match whole words rather than misleading substrings", () => {
+  const rows=[
+    {topic:"product", content:"Wavo app"},
+    {topic:"platforms",content:"Web and iOS"},
+    {topic:"premium", content:"Subscription price"},
+    {topic:"profile_identity",content:"Profile settings"},
+    {topic:"themes_cosmetics",content:"Themes"},
+    {topic:"games",content:"Games"},
+  ];
+  const picked=selectRelevantKnowledge(rows,"How can I edit my profile display name?",[],4).map(row=>row.topic);
+  assert.ok(picked.includes("profile_identity"));
+  assert.ok(!picked.includes("premium"),"pro must not match profile");
+  assert.ok(!picked.includes("games"),"play must not match display");
+});
+
+test("knowledge carries review dates so stale help can be marked uncertain", () => {
+  const rows=[
+    {topic:"product",content:"Overview",verified_at:"2026-09-07T00:00:00Z"},
+    {topic:"platforms",content:"Devices"},
+    {topic:"ios_push",content:"iPhone notifications",verified_at:"2026-10-01T12:00:00Z"},
+  ];
+  const selected=selectRelevantKnowledge(rows,"iPhone push notification not working",[],4);
+  assert.equal(selected.find(x=>x.topic==="ios_push")?.verified_at,"2026-10-01T12:00:00Z");
+  assert.equal(selected.find(x=>x.topic==="platforms")?.verified_at,null);
+});
+
+test("Wavo support coverage reaches common existing feature categories", () => {
+  const cases=[
+    ["Where is my voice note?","voice_notes"],
+    ["I need to pin a message","message_pins"],
+    ["How do I change username?","username_change"],
+    ["Spotify with friends","spotify"],
+    ["My daily streak disappeared","streaks"],
+    ["Can I customise my theme?","themes_cosmetics"],
+    ["Why are my notifications broken?","notifications"],
+    ["How do I send a friend request?","friends"],
+    ["Where can I find spaces?","spaces"],
+    ["Where is human support?","support_entrypoint"],
+  ];
+  const names=["product","platforms",...new Set(cases.map(x=>x[1])),"premium","games"];
+  const rows=names.map(topic=>({topic,content:"Basic Wavo instructions"}));
+  for(const [question,topic] of cases){
+    const selected=selectRelevantKnowledge(rows,question,[],5).map(x=>x.topic);
+    assert.ok(selected.includes(topic),`Missing ${topic} for ${question}: ${selected.join(",")}`);
+  }
 });
