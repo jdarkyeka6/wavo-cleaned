@@ -1,0 +1,32 @@
+name: Wavo 2 foundation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wavo2-foundation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Verify Wavo 2 foundation and game rules
+        run: node --test tests/wavo2FeatureFlags.test.mjs tests/safeNotificationUrl.test.mjs tests/wavo2GameRules.test.mjs
+      - name: Check changed app files
+        run: npx eslint src/lib/wavo2FeatureFlags.js src/lib/safeNotificationUrl.js src/lib/wavo2GameRules.js src/phase3Data.js src/NotificationSetup.jsx
+      - name: Build web app
+        run: npm run build
