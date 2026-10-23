@@ -4,6 +4,7 @@ import { extractSupportResponseText, resolveSupportModel, sanitizeSupportHistory
 import { billingGuidance, resolveSupportPlatform } from "./supportBilling.mjs";
 import { estimateSupportCostUsd, isSupportResponseComplete, resolveCompatibleReasoning, supportMaxOutputTokens } from "./supportEconomics.mjs";
 import { buildSupportInstructions } from "./supportInstructions.mjs";
+import { guardSupportReply } from "./supportReplyGuards.mjs";
 
 const corsHeaders = {
   "access-control-allow-origin": "*",
@@ -91,7 +92,7 @@ Deno.serve(async (req: Request) => {
     await finish("failed", { error_code: "upstream_incomplete" });
     return json({ error: "ai_failed", message: "AI support couldn't finish that reply. Please try a shorter question." }, 502);
   }
-  const reply = plainText(extractSupportResponseText(result)).slice(0, 2400);
+  const reply = guardSupportReply(plainText(extractSupportResponseText(result)).slice(0, 2400), platform, question);
   if (!reply) {
     await finish("failed", { error_code: "empty_response" });
     return json({ error: "empty_response", message: "AI support couldn't complete that answer. Please try again." }, 502);
