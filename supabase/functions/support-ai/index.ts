@@ -90,7 +90,7 @@ ${kb || "No relevant verified article was found. Clearly state uncertainty rathe
   const reasoningEffort = supportReasoningEffort(question);
   // Reasoning tokens count towards max_output_tokens; provide room for
   // diagnosis without turning routine requests into long expensive replies.
-  const maxOutputTokens = reasoningEffort === "medium" ? 1200 : 750;
+  const maxOutputTokens = reasoningEffort === "medium" ? 1300 : reasoningEffort === "low" ? 800 : 450;
   let openAiResponse: Response;
   try {
     openAiResponse = await fetch("https://api.openai.com/v1/responses", {
