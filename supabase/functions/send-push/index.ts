@@ -225,9 +225,18 @@ Deno.serve(async (req) => {
     senderUsername = sender?.username || "";
   }
 
-  let url = "/chats";
-  if (senderUsername && (!rawChatId || callId || !isUuid(rawChatId))) {
-    url = `/chats/${encodeURIComponent(senderUsername)}`;
+  // Navigate to Wavo's existing in-app routes. Keep /inbox as a safe
+  // fallback for non-message notifications and unresolvable groups.
+  let url = "/inbox";
+  if (isUuid(rawChatId) && !callId) {
+    const { data: group } = await admin
+      .from("groups")
+      .select("name")
+      .eq("id", rawChatId)
+      .maybeSingle();
+    if (group?.name) url = `/space/${encodeURIComponent(group.name)}`;
+  } else if (senderUsername) {
+    url = `/chat/${encodeURIComponent(senderUsername)}`;
   }
 
   const payload = {
