@@ -46,3 +46,22 @@ This branch and PR do **not** deploy the Supabase Edge Function. Merging a Verce
 - Source pricing evidence: `src/storePurchases.js` loads StoreKit products; `src/PlusPlanEnhancement.jsx` uses A$9.99 web Plus fallback; `src/PremiumProEnhancement.jsx` uses A$14.99 web Pro fallback, while `src/PlanComparison.jsx` has an A$19.99 fallback. Support must not pretend these are reconciled.
 - The expanded automated tests check platform-origin restrictions, missing Apple prices, lexical collisions such as `pro` vs `profile`, last-reviewed dates, and ten common support categories.
 - This is still **not** a real-model quality benchmark or a production deployment. Perform signed-in sandbox tests before launch.
+
+## Model compatibility, evaluation, and cost telemetry (2026-10-23)
+
+- OpenAI confirms GPT-6 Luna at US$0.10/M input and US$0.50/M output tokens (standard API) and GPT-5.6 Luna at US$0.20/M input, US$1.20/M output. Cached-input rates are lower. Regional tiers can differ.
+- `supportEconomics.mjs` estimates response cost only when OpenAI returns token usage. It accounts for cached input and billed output tokens, including reasoning tokens. Estimates are diagnostic, not actual Stripe/OpenAI invoices. No customer message text is logged by this telemetry.
+- The alternate GPT-6.1 Sol model does **not** accept `reasoning.effort: none`; selection now coerces this case to `low` instead of causing an HTTP 400.
+- Partial Responses API results (`status: incomplete` or failure) are rejected rather than shown as complete help answers.
+- `supportInstructions.mjs` is now the single prompt source for both production code and the optional model comparison. This avoids testing a different prompt from the one Wavo actually uses.
+- `tests/supportRetrievalCases.mjs`: 36 synthetic topic-retrieval cases (no real support content).
+- `tests/supportAnswerCases.mjs`: 16 synthetic, scenario-based answer comparisons for iOS billing, account safety, support version, outages, refunds and troubleshooting.
+- Run `node scripts/evaluate-wavo-support.mjs` safely to see a **dry run without any API calls**. For an explicit real-model comparison, set the environment variables `SUPPORT_EVAL_CONFIRM=yes` and `OPENAI_API_KEY` and invoke the script. The script compares GPT-5.6 Luna and GPT-6 Luna, uses synthetic prompts, makes no secret/PII prints, and has an estimated US$0.10 preflight spending cap. Real billing may differ from estimates. Results require manual review.
+- No customer messages should be copied into the synthetic fixture. Never commit API keys.
+- Read-only activity inventory (2026-10-23): `support_ai_requests` had 61 lifetime rows, 54 completed, and its latest recorded request was 2026-10-07. No requests were recorded in the preceding 14 days, limiting real-world quality comparisons.
+
+### Further release blockers
+1. Actually run the opt-in model evaluation with a protected API credential (it has **not yet** been run).
+2. Manually score accuracy, privacy, billing guidance, friendliness and troubleshooting quality. Compare GPT-6 Luna against the existing model; tune prompts based on failures.
+3. Test request authentication, real Origin headers, iOS StoreKit display and consent flow with a signed-in test account.
+4. Confirm existing live `support-ai` v15 deployment before any explicit promotion. Keep rollback ready.
