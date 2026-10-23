@@ -1,4 +1,5 @@
 import { getPlatform, isNativeApp } from './platform'
+import { measureViewportGeometry } from './viewportGeometry'
 
 export const MOBILE_BREAKPOINT = 760
 
@@ -26,40 +27,46 @@ export function isCompactUi() {
   return getUiMode() !== 'desktop-web'
 }
 
+let lastLayoutWidth = 0
+
 function applyViewportVars(root) {
   if (typeof window === 'undefined') return
 
   const vv = window.visualViewport
-  const visualWidth = Math.round(vv?.width || window.innerWidth || 0)
-  const visualHeight = Math.round(vv?.height || window.innerHeight || 0)
-  const innerHeight = Math.round(window.innerHeight || visualHeight || 0)
-  const offsetTop = Math.max(0, Math.round(vv?.offsetTop || 0))
+  const visualWidth = Math.max(1, Math.round(vv?.width || window.innerWidth || 0))
+  const layoutWidth = Math.max(1, Math.round(window.innerWidth || visualWidth))
+  const visualHeight = vv?.height || window.innerHeight
+  const innerHeight = window.innerHeight
+  const visualOffsetTop = vv?.offsetTop || 0
 
-  // WKWebView's screen.height can include native space that the web view cannot
-  // actually draw into. Using it as the app height makes the bottom navigation
-  // stop above the real bottom edge and leaves a large empty strip underneath.
-  // visualViewport/innerHeight describe the drawable CSS viewport instead.
-  const visibleViewportHeight = Math.max(1, visualHeight + offsetTop)
-  const currentViewportHeight = Math.max(visibleViewportHeight, innerHeight)
-
-  if (!stableViewportHeight) stableViewportHeight = currentViewportHeight
-
-  const keyboardOverlap = Math.max(0, stableViewportHeight - visibleViewportHeight)
-  const keyboardOpen = keyboardOverlap > 120
-
-  if (!keyboardOpen) {
-    stableViewportHeight = currentViewportHeight
+  // A portrait/landscape change needs a new full-height baseline. Ordinary
+  // keyboard animation never changes the layout width this dramatically.
+  if (lastLayoutWidth && Math.abs(layoutWidth - lastLayoutWidth) > 100) {
+    stableViewportHeight = 0
   }
+  lastLayoutWidth = layoutWidth
 
-  // When the keyboard is open, follow the visual viewport so composers sit
-  // immediately above it. Otherwise, own exactly the drawable app viewport.
-  const height = keyboardOpen ? visibleViewportHeight : currentViewportHeight
-  const keyboard = keyboardOpen ? keyboardOverlap : 0
+  const geometry = measureViewportGeometry({
+    visualHeight,
+    innerHeight,
+    visualOffsetTop,
+    previousFullHeight: stableViewportHeight,
+    hasVisualViewport: Boolean(vv),
+  })
+  stableViewportHeight = geometry.fullHeight
+
+  const focused = document.activeElement
+  const composerFocused = focused instanceof HTMLElement &&
+    focused.matches('input, textarea, [contenteditable="true"]') &&
+    Boolean(focused.closest('.chat-screen .composer, .space-conversation-screen .composer'))
 
   root.style.setProperty('--wavo-viewport-width', `${visualWidth}px`)
-  root.style.setProperty('--wavo-viewport-height', `${height}px`)
-  root.style.setProperty('--wavo-keyboard-height', `${keyboard}px`)
-  root.dataset.wavoKeyboard = keyboardOpen ? 'open' : 'closed'
+  root.style.setProperty('--wavo-viewport-height', `${geometry.viewportHeight}px`)
+  root.style.setProperty('--wavo-keyboard-height', `${geometry.keyboardHeight}px`)
+  root.style.setProperty('--wavo-chat-visible-top', `${geometry.visibleTop}px`)
+  root.style.setProperty('--wavo-chat-visible-height', `${geometry.viewportHeight}px`)
+  root.dataset.wavoKeyboard = geometry.keyboardOpen ? 'open' : 'closed'
+  root.dataset.wavoChatKeyboard = geometry.keyboardOpen && composerFocused ? 'open' : 'closed'
 }
 
 export function applyUiMode() {

@@ -1,0 +1,73 @@
+name: Wavo iOS signing audit (read only)
+on:
+  push:
+    branches:
+      - improve/wavo-polish-reliability-20261017
+    paths:
+      - .github/workflows/ios-signing-audit.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read-only Apple certificates and provisioning profile references
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+        run: |
+          node <<'NODE'
+          const { createPrivateKey, sign } = require('node:crypto');
+          const keyId = (process.env.ASC_KEY_ID || '').trim();
+          const issuer = (process.env.ASC_ISSUER_ID || '').trim();
+          const raw = (process.env.ASC_KEY_CONTENT || '').trim();
+          const keyText = raw.includes('BEGIN PRIVATE KEY') ? raw : Buffer.from(raw, 'base64').toString('utf8');
+          if (!keyId || !issuer || !keyText.includes('BEGIN PRIVATE KEY')) throw Error('Apple signing API key missing');
+          const now = Math.floor(Date.now() / 1000);
+          const header = Buffer.from(JSON.stringify({ alg: 'ES256', kid: keyId, typ: 'JWT' })).toString('base64url');
+          const payload = Buffer.from(JSON.stringify({ iss: issuer, iat: now, exp: now + 1100, aud: 'appstoreconnect-v1' })).toString('base64url');
+          const unsigned = header + '.' + payload;
+          const signature = sign('sha256', Buffer.from(unsigned), { key: createPrivateKey(keyText), dsaEncoding: 'ieee-p1363' }).toString('base64url');
+          const token = unsigned + '.' + signature;
+          async function allPages(endpoint) {
+            const collected = [];
+            let next = 'https://api.appstoreconnect.apple.com' + endpoint;
+            for (let page = 0; next && page < 20; page++) {
+              const r = await fetch(next, { headers: { Authorization: 'Bearer ' + token, Accept: 'application/json' } });
+              if (!r.ok) throw Error('Apple API ' + r.status + ': ' + (await r.text()).slice(0, 1000));
+              const json = await r.json();
+              collected.push(...(json.data || []));
+              next = json.links?.next || null;
+            }
+            if (next) throw Error('Audit incomplete: too many pages');
+            return collected;
+          }
+          (async () => {
+            const certs = await allPages('/v1/certificates?limit=200');
+            const profiles = await allPages('/v1/profiles?limit=200&include=certificates,bundleId');
+            const bundles = await allPages('/v1/bundleIds?limit=200');
+            const bundlesById = new Map(bundles.map(b => [b.id, b.attributes?.identifier || b.attributes?.name || b.id]));
+            console.log('Read-only Apple Developer signing audit. No certificates or profiles modified.');
+            console.log('Certificates: ' + certs.length + ', provisioning profiles: ' + profiles.length);
+            for (const cert of certs) {
+              const associated = profiles.filter(p => (p.relationships?.certificates?.data || []).some(x => x.id === cert.id));
+              const active = associated.filter(p => p.attributes?.profileState === 'ACTIVE');
+              console.log(JSON.stringify({
+                id: cert.id,
+                name: cert.attributes?.name || '',
+                type: cert.attributes?.certificateType || '',
+                serialNumber: cert.attributes?.serialNumber || '',
+                expirationDate: cert.attributes?.expirationDate || '',
+                profileCount: associated.length,
+                activeProfileCount: active.length,
+                profiles: associated.map(p => ({
+                  name: p.attributes?.name,
+                  type: p.attributes?.profileType,
+                  state: p.attributes?.profileState,
+                  app: bundlesById.get(p.relationships?.bundleId?.data?.id) || 'unknown'
+                })),
+              }));
+            }
+          })().catch(e => { console.error('Audit failed: ' + e.message); process.exitCode = 1; });
+          NODE
