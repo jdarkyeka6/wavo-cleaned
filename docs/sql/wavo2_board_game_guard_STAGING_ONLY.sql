@@ -148,9 +148,9 @@ begin
         (0,3,6),(1,4,7),(2,5,8),
         (0,4,8),(2,4,6)
       ) as line(a,b,c)
-      where new_board ->> a = marker
-        and new_board ->> b = marker
-        and new_board ->> c = marker
+      where new_board ->> line.a = marker
+        and new_board ->> line.b = marker
+        and new_board ->> line.c = marker
     ) into won;
   end if;
 
