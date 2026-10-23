@@ -4,6 +4,8 @@ import {DEFAULT_SUPPORT_MODEL, resolveSupportModel, sanitizeSupportHistory, sele
 import {resolveSupportPlatform, billingGuidance} from "../supabase/functions/support-ai/supportBilling.mjs";
 import { estimateSupportCostUsd, isSupportResponseComplete, resolveCompatibleReasoning, supportMaxOutputTokens } from "../supabase/functions/support-ai/supportEconomics.mjs";
 import { SUPPORT_RETRIEVAL_CASES } from "./supportRetrievalCases.mjs";
+import { buildSupportInstructions } from "../supabase/functions/support-ai/supportInstructions.mjs";
+import { SUPPORT_ANSWER_CASES } from "./supportAnswerCases.mjs";
 
 test("defaults to the low-cost GPT-6 model; ignores invalid overrides", () => {
   assert.equal(DEFAULT_SUPPORT_MODEL, "gpt-6-luna");
@@ -159,4 +161,22 @@ test("36 synthetic Wavo support topics are findable", () => {
     const matches=selectRelevantKnowledge(rows,question,[],9).map(row=>row.topic);
     assert.ok(matches.includes(topic),`Question "${question}" did not retrieve ${topic}; got ${matches.join(", ")}`);
   }
+});
+
+test("evaluation and production share one support instruction builder", () => {
+  const ios=buildSupportInstructions({
+    supportVersion:"v16", platform:"ios",
+    accountContext:"AUTHENTICATED ACCOUNT: synthetic user; no admin flag.",
+    billingRule:billingGuidance("ios"),
+    kb:"- ios_push (last reviewed 2026-10-23): Check notifications permission.",
+    currentDate:"2026-10-23",
+  });
+  assert.ok(ios.includes("SUPPORT VERSION: v16"));
+  assert.ok(ios.includes("CURRENT DATE: 2026-10-23"));
+  assert.ok(ios.includes("Check notifications permission"));
+  assert.ok(ios.includes("Apple In-App Purchase"));
+  assert.ok(!ios.includes("A$17.95"));
+  assert.ok(!ios.includes("wavo.lol/subscriptions"));
+  assert.equal(SUPPORT_ANSWER_CASES.length,16);
+  assert.ok(SUPPORT_ANSWER_CASES.every(x=>x.question && x.kb && x.id && x.platform));
 });
