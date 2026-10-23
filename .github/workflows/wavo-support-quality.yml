@@ -21,6 +21,8 @@ jobs:
       - run: npm ci
       - name: Unit tests for support retrieval, context and model selection
         run: node --test tests/wavoSupportAi.test.mjs
+      - name: Dry-run synthetic model evaluation (no API calls)
+        run: node scripts/evaluate-wavo-support.mjs
       - name: Front-end build
         run: npm run build
       - name: Edge Function TypeScript validation
