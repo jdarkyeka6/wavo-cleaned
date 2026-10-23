@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.105.4";
-import { resolveSupportModel, sanitizeSupportHistory, selectRelevantKnowledge, supportInput, supportReasoningEffort } from "./supportUtils.mjs";
+import { extractSupportResponseText, resolveSupportModel, sanitizeSupportHistory, selectRelevantKnowledge, supportInput, supportReasoningEffort } from "./supportUtils.mjs";
 import { billingGuidance, resolveSupportPlatform } from "./supportBilling.mjs";
 
 const corsHeaders = {
@@ -16,7 +16,6 @@ const getSecretKey = () => {
 };
 const agoIso = (ms: number) => new Date(Date.now() - ms).toISOString();
 async function sha256(value: string) { const bytes = new TextEncoder().encode(value.trim().toLowerCase().replace(/\s+/g, " ")); const digest = await crypto.subtle.digest("SHA-256", bytes); return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join(""); }
-function extractOutputText(data: any): string { if (typeof data?.output_text === "string" && data.output_text.trim()) return data.output_text.trim(); const parts: string[] = []; for (const item of data?.output || []) for (const part of item?.content || []) if (part?.type === "output_text" && typeof part?.text === "string") parts.push(part.text); return parts.join("\n").trim(); }
 function plainText(value: string): string { return value.replace(/\*\*/g, "").replace(/__/g, "").replace(/`/g, "").replace(/^#{1,6}\s+/gm, "").replace(/^[-*]\s+/gm, "").trim(); }
 
 Deno.serve(async (req: Request) => {
@@ -112,6 +111,23 @@ ${kb || "No relevant verified article was found. Clearly state uncertainty rathe
     return json({ error: "ai_failed", message: "AI support couldn't connect right now. Please try again." }, 502);
   }
   if (!openAiResponse.ok) { const detail = await openAiResponse.text(); console.error("support-ai upstream status", openAiResponse.status, detail.length); await finish("failed", { error_code: `openai_${openAiResponse.status}` }); return json({ error: "ai_failed", message: "AI support couldn't answer right now. Try again in a moment." }, 502); }
-  const result = await openAiResponse.json(); const reply = plainText(extractOutputText(result)).slice(0, 2400); if (!reply) { await finish("failed", { error_code: "empty_response" }); return json({ error: "empty_response" }, 502); }
+  let result: any;
+  try {
+    result = await openAiResponse.json();
+  } catch {
+    await finish("failed", { error_code: "invalid_upstream_json" });
+    return json({ error: "ai_failed", message: "AI support returned an unreadable reply. Please try again." }, 502);
+  }
+  const reply = plainText(extractSupportResponseText(result)).slice(0, 2400);
+  if (!reply) {
+    await finish("failed", { error_code: "empty_response" });
+    return json({ error: "empty_response", message: "AI support couldn't complete that answer. Please try again." }, 502);
+  }
+  // Aggregate token counts only, without logging customer questions or message text.
+  console.info("support-ai usage", JSON.stringify({
+    model: result?.model || model,
+    input_tokens: Number(result?.usage?.input_tokens || 0),
+    output_tokens: Number(result?.usage?.output_tokens || 0),
+  }));
   await finish("completed", { model: result?.model || model, output_tokens: Number(result?.usage?.output_tokens || 0) }); return json({ ok: true, reply });
 });
