@@ -80,14 +80,25 @@ export function rememberRecent(userId, kind, targetId) {
   return updateUxPrefs(userId, { [field]: next });
 }
 
+function notifyOutboxChanged() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("wavo:outbox-changed"));
+  }
+}
+
 export function queueOutbox(userId, item) {
-  // The ID is also the database message ID, so a network timeout after a
-  // successful send cannot cause the retry to deliver a duplicate.
+  // Keep the same client UUID through reconnects. Retrying an already queued
+  // UUID must never duplicate it or overwrite the original target/content.
   const items = read(key(userId, "outbox"), []);
-  const queued = { ...item, id: item.id || crypto.randomUUID(), queuedAt: Date.now() };
+  const queuedId = item.id || crypto.randomUUID();
+  const existing = items.find((pending) => pending.id === queuedId);
+  if (existing) return existing;
+
+  const queued = { ...item, id: queuedId, queuedAt: Date.now() };
   if (!write(key(userId, "outbox"), [...items, queued])) {
     throw new Error("Offline storage is full. This message was not queued.");
   }
+  notifyOutboxChanged();
   return queued;
 }
 
@@ -96,7 +107,21 @@ export function getOutbox(userId) {
 }
 
 export function removeOutboxItem(userId, id) {
-  write(key(userId, "outbox"), getOutbox(userId).filter((item) => item.id !== id));
+  const items = getOutbox(userId);
+  // Do not claim an offline Undo succeeded if local storage failed. The item
+  // could otherwise still be delivered later even after vanishing from UI.
+  const saved = write(key(userId, "outbox"), items.filter((item) => item.id !== id));
+  if (saved) notifyOutboxChanged();
+  return saved;
+}
+
+export function updateOutboxItem(userId, id, patch) {
+  const items = getOutbox(userId);
+  if (!items.some((item) => item.id === id)) return false;
+  const next = items.map((item) => item.id === id ? { ...item, ...patch, id: item.id } : item);
+  if (!write(key(userId, "outbox"), next)) return false;
+  notifyOutboxChanged();
+  return true;
 }
 
 export function clearUserOfflineData(userId) {
