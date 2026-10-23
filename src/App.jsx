@@ -644,6 +644,13 @@ export default function App() {
     return () => { supabase.removeChannel(channel); };
   }, [selectedSpace, userId]);
 
+  // Premium chat widgets now refresh on navigation instead of polling
+  // Supabase every 1.2 seconds. Fire after React has updated the chat view.
+  useEffect(() => {
+    if (!userId) return;
+    window.dispatchEvent(new Event("wavo:conversation-change"));
+  }, [userId, selectedFriend?.id, selectedSpace?.id]);
+
   useEffect(() => {
     if (!userId) return;
     const key = selectedFriend ? `dm:${[userId, selectedFriend.id].sort().join("_")}` : selectedSpace ? `space:${selectedSpace.id}` : null;
