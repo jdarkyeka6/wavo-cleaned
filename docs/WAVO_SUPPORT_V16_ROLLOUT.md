@@ -65,3 +65,16 @@ This branch and PR do **not** deploy the Supabase Edge Function. Merging a Verce
 2. Manually score accuracy, privacy, billing guidance, friendliness and troubleshooting quality. Compare GPT-6 Luna against the existing model; tune prompts based on failures.
 3. Test request authentication, real Origin headers, iOS StoreKit display and consent flow with a signed-in test account.
 4. Confirm existing live `support-ai` v15 deployment before any explicit promotion. Keep rollback ready.
+
+## Response guardrails and release decision
+
+Support now has a final client-independent response guard (`supportReplyGuards.mjs`) that checks AI-generated text before it is sent to the customer:
+
+- If the AI claims to have performed an account change, refund, cancellation or fix, replace it with an accurate statement explaining that Support has no such action tools.
+- If an iOS purchase answer contains a hardcoded dollar amount or directs customers to website checkout, replace it with safe Apple purchase-sheet guidance.
+- If the AI invents an exact web Pro price while source fallback values disagree, say the amount cannot yet be confirmed.
+- If a request's platform is unknown, avoid asserting prices or directing users to a purchase route.
+
+This is a last-resort rule-based guard, not a substitute for model evaluation. Monitor false positives and adjust after manual review. Synthetic tests cover these fallback behaviours.
+
+The comparison harness is installed but **no paid real-model evaluation has been run**. On a release checklist, code/type/build tests passing is distinct from actual answer-quality validation. Supabase production still has the earlier deployed Edge Function until a separate authenticated, reviewed rollout explicitly replaces it.
