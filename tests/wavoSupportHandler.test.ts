@@ -186,3 +186,12 @@ Deno.test("unsupported refund claims and unverified iOS prices are corrected bef
   assert.ok(!output.body.reply.includes("17.95"));
   assert.equal(actions.updates[0].value.status, "completed");
 });
+
+Deno.test("knowledge-base read errors stop ungrounded model calls", async () => {
+  const { handler, actions } = setup({ kbError: { code: "PGRST503" } });
+  const output = await reply(await handler(request()));
+  assert.equal(output.status, 503);
+  assert.equal(output.body.error, "support_unavailable");
+  assert.equal(actions.updates[0].value.error_code, "knowledge_unavailable");
+  assert.equal(actions.upstream.length, 0);
+});
