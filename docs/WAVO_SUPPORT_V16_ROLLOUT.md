@@ -104,3 +104,14 @@ GitHub Actions runs `deno test --no-check tests/wavoSupportHandler.test.ts` afte
 - Knowledge-base retrieval failure: no speculative model call when verified support data is unavailable.
 
 **These are isolated full-handler tests with fake services, not genuine authenticated Supabase staging tests or a live quality evaluation.** Production support remains on version 15 until separate release approval and device/account checks. There is no dedicated connected Wavo staging project.
+
+## Request-accounting and support-history hardening (2026-10-24)
+
+- Successful AI replies require a **confirmed database status transition** from pending to completed. The handler uses a request-ID + authenticated user-ID + pending-status condition and checks a returned row. If the update fails, throws or matches no row, the API does not report the request as successfully completed.
+- Database error logs contain only codes and generic failure names, not raw insert-error details or customer questions.
+- The six Supabase count queries used for rate-limiting must each return a nonnegative safe integer. Missing/null counters now cause a 503 and prevent an OpenAI request, rather than being interpreted as zero usage.
+- Local Support conversations are only displayed once the currently authenticated user's saved tabs have loaded. This avoids briefly rendering a different account's local support tabs during a fast session transition.
+- Isolated regression tests cover update errors, thrown errors, missing rows, missing/null request counts and normal success.
+- The existing service-role request accounting tables were inspected read-only: `support_ai_requests` and `support_ai_knowledge` both have RLS enabled and no public RLS policies. There is no reason to open client table access for Support v16.
+
+**Remaining architectural limitation:** the six separate request-count reads are not an atomic quota reservation across geographically distributed Edge Function instances. Before a high-traffic public launch, evaluate a staging-tested transactional SQL reservation/RPC and race tests. Do not claim absolute rate-limit concurrency guarantees from the present checks. A genuine staging Supabase environment and real-model answer review remain outstanding.
