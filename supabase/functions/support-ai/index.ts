@@ -66,7 +66,7 @@ Deno.serve(async (req: Request) => {
     await finish("blocked_rate_limit", { error_code: limits.errorCode });
     return json({
       error: "rate_limit",
-      message: "You're sending support requests pretty quickly. Give it a few minutes, then try again.",
+      message: "You've reached a Wavo Support request limit. Please try again later. Some limits reset over 24 hours.",
     }, 429);
   }
   if (!openAiKey) { await finish("failed", { error_code: "openai_key_missing" }); return json({ error: "openai_key_missing" }, 503); }
