@@ -61,38 +61,35 @@ platform :ios do
       lock_when_sleeps: false
     )
 
-    cert_args = {
-      api_key: api_key,
-      generate_apple_certs: true,
-      keychain_path: File.expand_path("~/Library/Keychains/#{keychain_name}-db"),
-      keychain_password: keychain_pw
-    }
-
-    # Import an existing distribution identity if the owner supplies a P12
-    # via GitHub Secrets. Never print the private key or store it in the repo.
+    # Reuse Wavo's active distribution certificate rather than creating a new
+    # certificate on each ephemeral GitHub Actions runner.
     p12_base64 = ENV["IOS_DISTRIBUTION_P12_BASE64"].to_s.strip
     existing_cert_id = ENV["IOS_DISTRIBUTION_CERT_ID"].to_s.strip
-    if !p12_base64.empty?
-      UI.user_error!("IOS_DISTRIBUTION_CERT_ID is required when reusing a P12.") if existing_cert_id.empty?
-      require "tempfile"
-      require "base64"
-      Tempfile.create(["wavo-ci-distribution", ".p12"]) do |file|
-        file.binmode
-        file.write(Base64.strict_decode64(p12_base64))
-        file.flush
-        import_certificate(
-          certificate_path: file.path,
-          certificate_password: ENV["IOS_DISTRIBUTION_P12_PASSWORD"].to_s,
-          keychain_name: keychain_name,
-          keychain_password: keychain_pw
-        )
-      end
-      UI.message("Reusing supplied Apple Distribution identity.")
-    else
-      # Never revoke existing certificates just to make room in Apple's quota.
-      # If the quota is full and no reusable P12 was provided, fail safely.
-      cert(**cert_args)
+    if p12_base64.empty? || existing_cert_id.empty?
+      UI.user_error!("Reusable Wavo signing identity is not configured. Set IOS_DISTRIBUTION_P12_BASE64 and IOS_DISTRIBUTION_CERT_ID as GitHub Secrets. Never create or revoke Apple certificates automatically.")
     end
+
+    # This is the signing certificate associated with Wavo's active App Store
+    # provisioning profile during the 2026-10-24 read-only Apple audit.
+    expected_wavo_cert_id = "AJZTAG7VP4"
+    if existing_cert_id != expected_wavo_cert_id
+      UI.user_error!("Signing identity does not match Wavo's audited active certificate. Review live Apple provisioning profiles before changing the certificate pin.")
+    end
+
+    require "tempfile"
+    require "base64"
+    Tempfile.create(["wavo-ci-distribution", ".p12"]) do |file|
+      file.binmode
+      file.write(Base64.strict_decode64(p12_base64))
+      file.flush
+      import_certificate(
+        certificate_path: file.path,
+        certificate_password: ENV["IOS_DISTRIBUTION_P12_PASSWORD"].to_s,
+        keychain_name: keychain_name,
+        keychain_password: keychain_pw
+      )
+    end
+    UI.message("Using the existing audited Wavo Apple Distribution signing identity.")
 
     profile_options = { api_key: api_key, force: true }
     profile_options[:cert_id] = existing_cert_id unless existing_cert_id.empty?
