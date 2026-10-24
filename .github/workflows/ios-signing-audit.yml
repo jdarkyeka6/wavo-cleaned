@@ -6,6 +6,7 @@ on:
     branches: [feature/wavo-support-smart-20261023]
     paths:
       - .github/workflows/ios-signing-audit.yml
+      - scripts/audit-apple-signing.rb
 
 permissions:
   contents: read
