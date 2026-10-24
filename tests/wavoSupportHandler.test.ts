@@ -11,6 +11,9 @@ function setup({
   failedCount = -1,
   profileError = null,
   kbError = null,
+  finishError = null,
+  finishMissing = false,
+  finishThrows = false,
   openAiStatus = 200,
   openAiBody = { status: "completed", model: "gpt-6-luna", output_text: "Check notification permissions in iPhone Settings.", usage: { input_tokens: 200, output_tokens: 30 } },
   throwOpenAi = false,
@@ -29,12 +32,24 @@ function setup({
           actions.inserts.push({ table, value });
           return { error: insertError };
         },
-        update: (value: unknown) => ({
-          eq: async (_column: string, _id: string) => {
-            actions.updates.push({ table, value });
-            return { error: null };
-          },
-        }),
+        update: (value: unknown) => {
+          const filters: [string,unknown][] = [];
+          return {
+            eq(column: string, id: unknown) {
+              filters.push([column, id]);
+              return this;
+            },
+            select(_fields: string) { return this; },
+            async maybeSingle() {
+              actions.updates.push({ table, value, filters });
+              if (finishThrows) throw new Error("mock update failed");
+              return {
+                error: finishError,
+                data: finishMissing ? null : { request_id: REQUEST_ID },
+              };
+            },
+          };
+        },
         select: (_columns: string, options: { count?: string } = {}) => {
           const selectedCount = options.count === "exact" ? countIndex++ : -1;
           return {
@@ -110,6 +125,11 @@ Deno.test("end-to-end happy path authenticates, accounts, retrieves KB and retur
   assert.ok(result.body.reply.includes("notification"));
   assert.equal(actions.inserts.length, 1);
   assert.equal(actions.updates[0].value.status, "completed");
+  assert.deepEqual(actions.updates[0].filters, [
+    ["request_id", REQUEST_ID],
+    ["user_id", USER_ID],
+    ["status", "pending"],
+  ]);
   assert.equal(actions.upstream.length, 1);
   assert.equal(actions.upstream[0].input.model, "gpt-6-luna");
   assert.equal(actions.upstream[0].input.store, false);
@@ -194,4 +214,21 @@ Deno.test("knowledge-base read errors stop ungrounded model calls", async () => 
   assert.equal(output.body.error, "support_unavailable");
   assert.equal(actions.updates[0].value.error_code, "knowledge_unavailable");
   assert.equal(actions.upstream.length, 0);
+});
+
+Deno.test("successful AI answers do not bypass failed database completion accounting", async () => {
+  for (const config of [
+    { finishError: { code: "PGRST500" } },
+    { finishMissing: true },
+    { finishThrows: true },
+  ]) {
+    const { handler, actions } = setup(config);
+    const output = await reply(await handler(request()));
+    assert.equal(output.status, 503);
+    assert.equal(output.body.error, "support_unavailable");
+    assert.equal(actions.upstream.length, 1);
+    assert.equal(actions.updates.length, 1);
+    assert.equal(actions.updates[0].value.status, "completed");
+    assert.equal(actions.updates[0].filters[1][1], USER_ID);
+  }
 });
