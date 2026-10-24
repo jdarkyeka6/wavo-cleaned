@@ -1,0 +1,32 @@
+name: Wavo Apple signing inventory
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/wavo-support-smart-20261023]
+    paths:
+      - .github/workflows/ios-signing-audit.yml
+      - scripts/audit-apple-signing.rb
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: ios/App
+      - name: List signing certificates and provisioning profiles (read only)
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+        run: |
+          cd ios/App
+          bundle exec ruby ../../scripts/audit-apple-signing.rb
