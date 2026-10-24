@@ -41,9 +41,18 @@ Deno.serve(async (req: Request) => {
   const questionHash = await sha256(question); const { error: claimError } = await admin.from("support_ai_requests").insert({ request_id: requestId, user_id: user.id, question_hash: questionHash, status: "pending", input_chars: question.length });
   if (claimError) { if (claimError.code === "23505") return json({ error: "duplicate_request" }, 409); console.error("support-ai claim", claimError); return json({ error: "claim_failed" }, 500); }
   const finish = async (status: string, patch: Record<string, unknown> = {}) => { await admin.from("support_ai_requests").update({ status, completed_at: new Date().toISOString(), ...patch }).eq("request_id", requestId); };
-  const [{ count: minuteCount }, { count: hourCount }, { count: dayCount }, { count: globalDayCount }, { count: sameQuestionCount }, { count: pendingCount }, { data: profile }] = await Promise.all([
+  const [{ count: minuteCount, error: minuteError }, { count: hourCount, error: hourError }, { count: dayCount, error: dayError }, { count: globalDayCount, error: globalDayError }, { count: sameQuestionCount, error: repeatError }, { count: pendingCount, error: pendingError }, { data: profile, error: profileError }] = await Promise.all([
     admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).gte("created_at", agoIso(60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).gte("created_at", agoIso(60 * 60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).gte("created_at", agoIso(24 * 60 * 60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).gte("created_at", agoIso(24 * 60 * 60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).eq("question_hash", questionHash).gte("created_at", agoIso(10 * 60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "pending").gte( "created_at", agoIso(2 * 60_000)), admin.from("profiles").select("created_at,username,is_admin,support_unlimited").eq("id", user.id).maybeSingle(),
   ]);
+  if (minuteError || hourError || dayError || globalDayError || repeatError || pendingError || profileError) {
+    // Failing open would permit unlimited requests if accounting breaks.
+    console.error("support-ai accounting query failed");
+    await finish("failed", { error_code: "accounting_unavailable" });
+    return json({
+      error: "support_unavailable",
+      message: "Wavo Support is having trouble checking request limits. Please try again shortly.",
+    }, 503);
+  }
   const accountAgeMs = profile?.created_at
     ? Date.now() - new Date(profile.created_at).getTime()
     : Number.POSITIVE_INFINITY;
