@@ -34,19 +34,39 @@ certs.each_with_index do |cert, idx|
   puts "#{idx + 1}. certificate ID=#{cert.id} type=#{cert.certificate_type} name=#{label.inspect} expires=#{expiry}"
 end
 
-# Provisioning profiles can identify live dependencies. Fail conservatively
-# when the API cannot provide a definitive certificate association.
+# Only ACTIVE profiles are currently usable. Query the actual certificate
+# relationship for each rather than assuming a certificate belongs to Wavo
+# because the profile name contains Wavo.
 begin
   profiles = Spaceship::ConnectAPI::Profile.all
-  puts "PROVISIONING PROFILE COUNT: #{profiles.length}"
-  profiles.each do |profile|
-    name = profile.respond_to?(:name) ? profile.name.to_s : "unknown"
-    kind = profile.respond_to?(:profile_type) ? profile.profile_type.to_s : "unknown"
-    status = profile.respond_to?(:profile_state) ? profile.profile_state.to_s : "unknown"
-    puts "Profile: #{name.inspect}; type=#{kind}; status=#{status}"
+  active = profiles.select { |profile| profile.profile_state.to_s == "ACTIVE" }
+  puts "PROVISIONING PROFILES: #{profiles.length} total; #{active.length} active"
+  used_ids = []
+  unknown_links = 0
+  active.each do |profile|
+    name = profile.name.to_s
+    begin
+      linked = profile.fetch_all_certificates
+      ids = linked.map(&:id)
+      used_ids.concat(ids)
+      puts "ACTIVE PROFILE #{name.inspect} => certificate IDs: #{ids.join(', ')}"
+      unknown_links += 1 if ids.empty?
+    rescue StandardError => e
+      unknown_links += 1
+      puts "ACTIVE PROFILE #{name.inspect} => certificate links UNAVAILABLE (#{e.class})"
+    end
+  end
+  used_ids.uniq!
+  puts "CERTIFICATES LINKED FROM ACTIVE PROFILES: #{used_ids.join(', ')}"
+  candidates = certs.map(&:id) - used_ids
+  if unknown_links > 0
+    puts "NO DELETION RECOMMENDATION: #{unknown_links} active profile(s) have unverifiable certificate links."
+  else
+    puts "CANDIDATES WITH NO ACTIVE PROFILE LINKS: #{candidates.join(', ')}"
+    puts "Caution: An unlinked certificate could still be needed for other future builds or private-key reuse."
   end
 rescue StandardError => e
-  puts "Provisioning profile dependency inventory unavailable (#{e.class})."
+  puts "Provisioning-profile dependency inventory unavailable (#{e.class}); DO NOT REVOKE CERTIFICATES."
 end
 
-puts "AUDIT COMPLETE: Read-only. Certificates are team-wide; profile names alone DO NOT prove any certificate is safe to revoke."
+puts "AUDIT COMPLETE: No changes to certificates, profiles, App Store or TestFlight."
