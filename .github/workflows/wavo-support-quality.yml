@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   support:
@@ -33,3 +34,11 @@ jobs:
         run: deno check --node-modules-dir=auto supabase/functions/support-ai/index.ts
       - name: Exercise full HTTP handler with fake Supabase and OpenAI
         run: deno test --no-check tests/wavoSupportHandler.test.ts
+      - name: Report Support TestFlight candidate status
+        if: github.head_ref == 'feature/wavo-support-smart-20261023'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ios-testflight.yml/runs?branch=feature%2Fwavo-support-smart-20261023&per_page=5" \
+            --jq '.workflow_runs[] | [.id, .event, .status, (.conclusion // "pending"), .head_sha, .html_url] | @tsv'
+
