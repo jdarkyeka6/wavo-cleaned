@@ -3,7 +3,7 @@ import { billingGuidance, resolveSupportPlatform } from "./supportBilling.mjs";
 import { estimateSupportCostUsd, isSupportResponseComplete, resolveCompatibleReasoning, supportMaxOutputTokens } from "./supportEconomics.mjs";
 import { buildSupportInstructions } from "./supportInstructions.mjs";
 import { guardSupportReply } from "./supportReplyGuards.mjs";
-import { classifySupportRateLimit, isValidSupportRequestId, readSupportBody } from "./supportRequestGuards.mjs";
+import { classifySupportRateLimit, hasCompleteSupportCounters, isValidSupportRequestId, readSupportBody } from "./supportRequestGuards.mjs";
 
 const corsHeaders = {
   "access-control-allow-origin": "*",
@@ -80,7 +80,8 @@ export function createSupportHandler({
   const [{ count: minuteCount, error: minuteError }, { count: hourCount, error: hourError }, { count: dayCount, error: dayError }, { count: globalDayCount, error: globalDayError }, { count: sameQuestionCount, error: repeatError }, { count: pendingCount, error: pendingError }, { data: profile, error: profileError }] = await Promise.all([
     admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).gte("created_at", agoIso(60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).gte("created_at", agoIso(60 * 60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).gte("created_at", agoIso(24 * 60 * 60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).gte("created_at", agoIso(24 * 60 * 60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).eq("question_hash", questionHash).gte("created_at", agoIso(10 * 60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "pending").gte( "created_at", agoIso(2 * 60_000)), admin.from("profiles").select("created_at,username,is_admin,support_unlimited").eq("id", user.id).maybeSingle(),
   ]);
-  if (minuteError || hourError || dayError || globalDayError || repeatError || pendingError || profileError) {
+  const counters = { minuteCount, hourCount, dayCount, globalDayCount, sameQuestionCount, pendingCount };
+  if (minuteError || hourError || dayError || globalDayError || repeatError || pendingError || profileError || !hasCompleteSupportCounters(counters)) {
     // Failing open would permit unlimited requests if accounting breaks.
     logger.error("support-ai accounting query failed");
     await finish("failed", { error_code: "accounting_unavailable" });
@@ -95,7 +96,7 @@ export function createSupportHandler({
   const newAccount = accountAgeMs < 24 * 60 * 60_000;
   const trustedTester = profile?.support_unlimited === true;
   const limits = classifySupportRateLimit(
-    { minuteCount, hourCount, dayCount, globalDayCount, sameQuestionCount, pendingCount },
+    counters,
     { trustedTester, newAccount },
   );
   if (limits.blocked) {
