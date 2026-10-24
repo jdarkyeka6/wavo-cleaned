@@ -7,7 +7,7 @@ import { SUPPORT_RETRIEVAL_CASES } from "./supportRetrievalCases.mjs";
 import { buildSupportInstructions } from "../supabase/functions/support-ai/supportInstructions.mjs";
 import { SUPPORT_ANSWER_CASES } from "./supportAnswerCases.mjs";
 import { guardSupportReply } from "../supabase/functions/support-ai/supportReplyGuards.mjs";
-import { MAX_SUPPORT_BODY_BYTES, isValidSupportRequestId, readSupportBody, classifySupportRateLimit } from "../supabase/functions/support-ai/supportRequestGuards.mjs";
+import { MAX_SUPPORT_BODY_BYTES, isValidSupportRequestId, readSupportBody, classifySupportRateLimit, hasCompleteSupportCounters } from "../supabase/functions/support-ai/supportRequestGuards.mjs";
 
 test("defaults to the low-cost GPT-6 model; ignores invalid overrides", () => {
   assert.equal(DEFAULT_SUPPORT_MODEL, "gpt-6-luna");
@@ -277,4 +277,14 @@ test("Synthetic full request preflight yields grounded and bill-safe support rep
   const answer=guardSupportReply("You can subscribe to Pro for A$17.95 per month.", "ios", question);
   assert.ok(answer.includes("Apple App Store purchase sheet"));
   assert.ok(!answer.includes("17.95"));
+});
+
+test("incomplete count records do not pass validation", () => {
+  const data={minuteCount:1,hourCount:1,dayCount:1,globalDayCount:1,sameQuestionCount:1,pendingCount:1};
+  assert.equal(hasCompleteSupportCounters(data),true);
+  for(const key of Object.keys(data)){
+    assert.equal(hasCompleteSupportCounters({...data,[key]:null}),false);
+    assert.equal(hasCompleteSupportCounters({...data,[key]:-1}),false);
+  }
+  assert.equal(hasCompleteSupportCounters(null),false);
 });
