@@ -48,4 +48,12 @@ jobs:
         run: |
           gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ios-testflight.yml/runs?branch=feature%2Fwavo-support-smart-20261023&per_page=5" \
             --jq '.workflow_runs[] | [.id, .event, .status, (.conclusion // "pending"), .head_sha, .html_url] | @tsv'
+      - name: Report Apple certificate inventory workflow status
+        if: github.head_ref == 'feature/wavo-support-smart-20261023'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ios-signing-audit.yml/runs?branch=feature%2Fwavo-support-smart-20261023&per_page=5" \
+            --jq '.workflow_runs[] | [.id, .event, .status, (.conclusion // "pending"), .head_sha, .html_url] | @tsv'
+
 
