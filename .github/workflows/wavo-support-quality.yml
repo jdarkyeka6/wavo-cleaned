@@ -26,6 +26,13 @@ jobs:
         run: node scripts/evaluate-wavo-support.mjs
       - name: Front-end build
         run: npm run build
+      - name: Check TestFlight signing lane syntax and safe recovery
+        run: |
+          ruby -c ios/App/fastlane/Fastfile
+          if grep -Fq 'oldest.delete!' ios/App/fastlane/Fastfile; then
+            echo "::error::Automatic Apple certificate revocation is unsafe"
+            exit 1
+          fi
       - name: Edge Function TypeScript validation
         uses: denoland/setup-deno@v2
         with:
