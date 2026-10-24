@@ -91,7 +91,8 @@ platform :ios do
     end
     UI.message("Using the existing audited Wavo Apple Distribution signing identity.")
 
-    profile_options = { api_key: api_key, force: true }
+    # Reuse existing valid Wavo App Store profiles; never delete/recreate them on each run.
+    profile_options = { api_key: api_key, force: false }
     profile_options[:cert_id] = existing_cert_id unless existing_cert_id.empty?
 
     sigh(**profile_options.merge(app_identifier: APP_IDENTIFIER))
