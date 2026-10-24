@@ -47,3 +47,11 @@ Apple has 3 Distribution certificates, and all 3 are linked to active App Store 
 The development TestFlight workflow now requires a reusable Wavo .p12 with its private key, password and certificate ID before attempting a costly build. It only accepts the audited Wavo certificate ID AJZTAG7VP4, imports that identity into the temporary CI keychain, and never automatically creates or revokes any certificate.
 
 If the private key was lost on an old ephemeral CI runner, neither the certificate ID nor the App Store Connect .p8 API key can recreate it. A Mac/keychain backup, protected signing storage or deliberate signing rotation by the Apple Account Holder is required. Do not revoke certificates referenced by the other active apps without a coordinated migration.
+
+## Verified TestFlight retry (2026-10-24)
+
+Triggered the branch's `.github/testflight-trigger` to start a signed Wavo TestFlight build. GitHub Actions run: https://github.com/jdarkyeka6/wavo-cleaned/actions/runs/40090747730
+
+Result: the early signing-identity check failed because all three GitHub Secrets (`IOS_DISTRIBUTION_P12_BASE64`, `IOS_DISTRIBUTION_P12_PASSWORD`, `IOS_DISTRIBUTION_CERT_ID`) were unset in this repository. The job stopped before Xcode/Fastlane, so no certificate creation/revocation, no app upload, and no production changes took place. The certificate `AJZTAG7VP4` remains valid in Apple's registry, but its private key is not currently available to CI.
+
+Next owner action: securely export the existing Apple Distribution identity (certificate **and matching private key**) from the Mac or protected signing backup where it was originally created. Put the three values directly in the repository's Actions Secrets and rerun the `iOS to TestFlight` workflow on `feature/wavo-support-smart-20261023`. Never share the .p12 or passphrase in a chat or issue. If that original key was only in an ephemeral runner and wasn't backed up, it is not recoverable from Apple's certificate record; the Apple Developer account owner must plan a safe signing-identity rotation instead.
