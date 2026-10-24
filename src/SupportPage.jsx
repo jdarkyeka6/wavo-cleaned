@@ -273,7 +273,8 @@ export default function SupportPage() {
     }
   };
 
-  if (!ready) {
+  // Wait until the current user's saved Support tabs have been restored.
+  if (!ready || (session?.user?.id && historyLoadedFor !== session.user.id)) {
     return (
       <div className="support-shell support-centered">
         <div className="support-loading">Opening Wavo Support…</div>
