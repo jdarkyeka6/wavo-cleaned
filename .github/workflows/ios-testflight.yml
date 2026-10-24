@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+      # Ship the Support v16 TestFlight candidate without merging into live web.
+      - feature/wavo-support-smart-20261023
     paths:
       - .github/testflight-trigger
       - .github/workflows/ios-testflight.yml
@@ -89,7 +91,7 @@ jobs:
           grep -Fq 'const aiEntitled = plus || pro' src/PlusPlanEnhancement.jsx || { echo "::error::Plus/Pro AI UI entitlement is missing"; exit 1; }
           grep -Fq 'Included with Plus' src/PremiumProEnhancement.jsx || { echo "::error::Paid plan current/included state regression"; exit 1; }
           grep -Fq 'platform: getPlatform()' src/SupportPage.jsx || { echo "::error::Support AI is not receiving the client platform"; exit 1; }
-          grep -Fq 'Do not mention website prices' supabase/functions/support-ai/index.ts || { echo "::error::Native Support AI purchase-steering guard is missing"; exit 1; }
+          grep -Fq 'Never mention or link to external checkout' supabase/functions/support-ai/supportBilling.mjs || { echo "::error::Native Support AI purchase-steering guard is missing"; exit 1; }
           if grep -q "api.openai.com" supabase/functions/moderate-content/index.ts; then
             echo "::error::Automatic message moderation still sends ordinary content to OpenAI"
             exit 1
