@@ -46,6 +46,18 @@ export async function readSupportBody(req, maxBytes = MAX_SUPPORT_BODY_BYTES) {
   }
 }
 
+const SUPPORT_COUNTER_KEYS = Object.freeze([
+  "minuteCount", "hourCount", "dayCount",
+  "globalDayCount", "sameQuestionCount", "pendingCount",
+]);
+
+export function hasCompleteSupportCounters(counters) {
+  return !!counters && typeof counters === "object" &&
+    SUPPORT_COUNTER_KEYS.every((key) =>
+      Number.isSafeInteger(counters[key]) && counters[key] >= 0
+    );
+}
+
 function count(value) { return Number.isSafeInteger(value) && value >= 0 ? value : 0; }
 
 export function classifySupportRateLimit(counters, { trustedTester = false, newAccount = false } = {}) {
