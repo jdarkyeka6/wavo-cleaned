@@ -90,3 +90,17 @@ New `supportRequestGuards.mjs` adds:
 - The existing request accounting schema and customer request records were left unchanged.
 
 Automated tests exercise malformed JSON, oversized streamed data, invalid UUIDs, threshold boundaries and one synthetic request through validation, knowledge retrieval, prompt composition and safe reply filtering. **This is not a live authenticated Edge Function end-to-end test**. Supabase project inventory shows no dedicated Wavo staging project, so production v15 remains deployed until a separate test environment and real-model comparison are available.
+
+## Isolated HTTP-handler regression testing (2026-10-24)
+
+The Supabase production entrypoint now imports a dedicated `supportHandler.ts` and calls `Deno.serve(createSupportHandler({createClient}))`. This keeps the actual handler unchanged but allows dependency injection in tests (fake auth/database, synthetic OpenAI responses, synthetic secrets) without launching an external server or consuming API credits.
+
+GitHub Actions runs `deno test --no-check tests/wavoSupportHandler.test.ts` after Deno's real type check of the production entrypoint. Tests cover:
+- Signed-in successful request through inserts, limits, knowledge retrieval, OpenAI mock and completed status.
+- Unauthorised clients, invalid/oversized request bodies and duplicate request IDs.
+- Rate-limit failures and database accounting errors, both without a billable model call.
+- OpenAI HTTP errors, invalid JSON, network failures and incomplete model answers, with recorded failed state.
+- iOS billing safeguard before returning an answer.
+- Knowledge-base retrieval failure: no speculative model call when verified support data is unavailable.
+
+**These are isolated full-handler tests with fake services, not genuine authenticated Supabase staging tests or a live quality evaluation.** Production support remains on version 15 until separate release approval and device/account checks. There is no dedicated connected Wavo staging project.
