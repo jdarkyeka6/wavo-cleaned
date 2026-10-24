@@ -5,6 +5,7 @@ import { billingGuidance, resolveSupportPlatform } from "./supportBilling.mjs";
 import { estimateSupportCostUsd, isSupportResponseComplete, resolveCompatibleReasoning, supportMaxOutputTokens } from "./supportEconomics.mjs";
 import { buildSupportInstructions } from "./supportInstructions.mjs";
 import { guardSupportReply } from "./supportReplyGuards.mjs";
+import { classifySupportRateLimit, isValidSupportRequestId, readSupportBody } from "./supportRequestGuards.mjs";
 
 const corsHeaders = {
   "access-control-allow-origin": "*",
@@ -28,19 +29,37 @@ Deno.serve(async (req: Request) => {
   if (!supabaseUrl || !serviceKey) return json({ error: "server_config" }, 500);
   const token = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim(); if (!token) return json({ error: "unauthorized" }, 401);
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } }); const { data: authData, error: authError } = await admin.auth.getUser(token); const user = authData?.user; if (authError || !user) return json({ error: "unauthorized" }, 401);
-  let body: any; try { body = await req.json(); } catch { return json({ error: "bad_json" }, 400); }
+  const parsed = await readSupportBody(req);
+  if (!parsed.ok) {
+    return json({ error: parsed.code, ...(parsed.message ? { message: parsed.message } : {}) }, parsed.status);
+  }
+  const body: any = parsed.data;
   const requestId = String(body?.requestId || ""); const question = String(body?.question || "").trim(); const history = sanitizeSupportHistory(body?.history);
   const requestedPlatform = String(body?.platform || "unknown").toLowerCase();
   const platform = resolveSupportPlatform(requestedPlatform, req.headers.get("origin"));
-  if (!/^[0-9a-f-]{36}$/i.test(requestId)) return json({ error: "bad_request_id" }, 400); if (!question) return json({ error: "empty_question" }, 400); if (question.length > 2000) return json({ error: "input_too_long", message: "Keep each support message under 2,000 characters." }, 400);
+  if (!isValidSupportRequestId(requestId)) return json({ error: "bad_request_id" }, 400); if (!question) return json({ error: "empty_question" }, 400); if (question.length > 2000) return json({ error: "input_too_long", message: "Keep each support message under 2,000 characters." }, 400);
   const questionHash = await sha256(question); const { error: claimError } = await admin.from("support_ai_requests").insert({ request_id: requestId, user_id: user.id, question_hash: questionHash, status: "pending", input_chars: question.length });
   if (claimError) { if (claimError.code === "23505") return json({ error: "duplicate_request" }, 409); console.error("support-ai claim", claimError); return json({ error: "claim_failed" }, 500); }
   const finish = async (status: string, patch: Record<string, unknown> = {}) => { await admin.from("support_ai_requests").update({ status, completed_at: new Date().toISOString(), ...patch }).eq("request_id", requestId); };
   const [{ count: minuteCount }, { count: hourCount }, { count: dayCount }, { count: globalDayCount }, { count: sameQuestionCount }, { count: pendingCount }, { data: profile }] = await Promise.all([
     admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).gte("created_at", agoIso(60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).gte("created_at", agoIso(60 * 60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).gte("created_at", agoIso(24 * 60 * 60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).gte("created_at", agoIso(24 * 60 * 60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).eq("question_hash", questionHash).gte("created_at", agoIso(10 * 60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "pending").gte( "created_at", agoIso(2 * 60_000)), admin.from("profiles").select("created_at,username,is_admin,support_unlimited").eq("id", user.id).maybeSingle(),
   ]);
-  const accountAgeMs = profile?.created_at ? Date.now() - new Date(profile.created_at).getTime() : Number.POSITIVE_INFINITY; const newAccount = accountAgeMs < 24 * 60 * 60_000; const trustedTester = profile?.support_unlimited === true; const personalLimitHit = trustedTester ? ((minuteCount || 0) > 60 || (hourCount || 0) > 500 || (dayCount || 0) > 2000) : ((minuteCount || 0) > 6 || (hourCount || 0) > 20 || (dayCount || 0) > (newAccount ? 10 : 60) || (sameQuestionCount || 0) >= 6); const blocked = personalLimitHit || (globalDayCount || 0) > 2000 || (pendingCount || 0) > 2;
-  if (blocked) { await finish("blocked_rate_limit", { error_code: (sameQuestionCount || 0) >= 6 ? "duplicate_spam" : "rate_limit" }); return json({ error: "rate_limit", message: "You're sending support requests pretty quickly. Give it a few minutes, then try again." }, 429); }
+  const accountAgeMs = profile?.created_at
+    ? Date.now() - new Date(profile.created_at).getTime()
+    : Number.POSITIVE_INFINITY;
+  const newAccount = accountAgeMs < 24 * 60 * 60_000;
+  const trustedTester = profile?.support_unlimited === true;
+  const limits = classifySupportRateLimit(
+    { minuteCount, hourCount, dayCount, globalDayCount, sameQuestionCount, pendingCount },
+    { trustedTester, newAccount },
+  );
+  if (limits.blocked) {
+    await finish("blocked_rate_limit", { error_code: limits.errorCode });
+    return json({
+      error: "rate_limit",
+      message: "You're sending support requests pretty quickly. Give it a few minutes, then try again.",
+    }, 429);
+  }
   if (!openAiKey) { await finish("failed", { error_code: "openai_key_missing" }); return json({ error: "openai_key_missing" }, 503); }
   // Retrieval is deterministic and deliberately limited. The entire KB is no
   // longer inserted into every prompt, reducing irrelevant context and spend.
