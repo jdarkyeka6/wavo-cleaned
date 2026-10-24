@@ -88,7 +88,16 @@ export function createSupportHandler({
   // longer inserted into every prompt, reducing irrelevant context and spend.
   const { data: knowledge, error: kbError } = await admin.from("support_ai_knowledge")
     .select("topic,content,verified_at").eq("active", true).order("topic");
-  if (kbError) logger.error("support-ai knowledge load failed", kbError.code);
+  if (kbError) {
+    // Avoid spending API credits generating an answer with no verified Wavo
+    // knowledge after a DB failure. No user content is written to logs.
+    logger.error("support-ai knowledge load failed", kbError.code);
+    await finish("failed", { error_code: "knowledge_unavailable" });
+    return json({
+      error: "support_unavailable",
+      message: "Wavo Support couldn't load its help information. Please try again shortly.",
+    }, 503);
+  }
   const selectedKnowledge = selectRelevantKnowledge(knowledge || [], question, history, 9);
   const kb = selectedKnowledge.map((k) => `- ${k.topic} (last reviewed ${k.verified_at ? String(k.verified_at).slice(0,10) : "unknown"}): ${k.content}`).join("\n");
   const supportVersion = "v16";
