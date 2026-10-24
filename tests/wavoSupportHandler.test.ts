@@ -232,3 +232,12 @@ Deno.test("successful AI answers do not bypass failed database completion accoun
     assert.equal(actions.updates[0].filters[1][1], USER_ID);
   }
 });
+
+Deno.test("missing rate-count values reject the request without an OpenAI call", async () => {
+  const { handler, actions } = setup({ counts: [null,1,1,1,1,1] });
+  const result = await reply(await handler(request()));
+  assert.equal(result.status,503);
+  assert.equal(result.body.error,"support_unavailable");
+  assert.equal(actions.upstream.length,0);
+  assert.equal(actions.updates[0].value.error_code,"accounting_unavailable");
+});
