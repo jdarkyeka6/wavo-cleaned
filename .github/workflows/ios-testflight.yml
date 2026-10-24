@@ -15,6 +15,22 @@ jobs:
     steps:
       - name: Check out the code
         uses: actions/checkout@v4
+      - name: Require reusable Wavo signing identity before building
+        env:
+          IOS_DISTRIBUTION_P12_BASE64: ${{ secrets.IOS_DISTRIBUTION_P12_BASE64 }}
+          IOS_DISTRIBUTION_P12_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_P12_PASSWORD }}
+          IOS_DISTRIBUTION_CERT_ID: ${{ secrets.IOS_DISTRIBUTION_CERT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "$IOS_DISTRIBUTION_P12_BASE64" ] || [ -z "$IOS_DISTRIBUTION_P12_PASSWORD" ] || [ -z "$IOS_DISTRIBUTION_CERT_ID" ]; then
+            echo "::error::Existing Wavo Apple Distribution signing identity is not configured. Add P12, password and certificate ID to GitHub Actions Secrets. No new Apple certificates will be created."
+            exit 1
+          fi
+          if [ "$IOS_DISTRIBUTION_CERT_ID" != "AJZTAG7VP4" ]; then
+            echo "::error::Configured Distribution certificate is not Wavo's audited active signing certificate. Recheck Apple provisioning profiles before updating the pinned ID."
+            exit 1
+          fi
+          echo "Existing Wavo signing identity is configured."
       - name: Select Xcode
         run: |
           if [ -d /Applications/Xcode_26.3.app ]; then
