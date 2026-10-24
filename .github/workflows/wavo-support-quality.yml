@@ -31,3 +31,5 @@ jobs:
           deno-version: v2.x
       - name: Check Support Edge Function and helpers
         run: deno check --node-modules-dir=auto supabase/functions/support-ai/index.ts
+      - name: Exercise full HTTP handler with fake Supabase and OpenAI
+        run: deno test --no-check tests/wavoSupportHandler.test.ts
