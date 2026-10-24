@@ -7,6 +7,7 @@ import { SUPPORT_RETRIEVAL_CASES } from "./supportRetrievalCases.mjs";
 import { buildSupportInstructions } from "../supabase/functions/support-ai/supportInstructions.mjs";
 import { SUPPORT_ANSWER_CASES } from "./supportAnswerCases.mjs";
 import { guardSupportReply } from "../supabase/functions/support-ai/supportReplyGuards.mjs";
+import { MAX_SUPPORT_BODY_BYTES, isValidSupportRequestId, readSupportBody, classifySupportRateLimit } from "../supabase/functions/support-ai/supportRequestGuards.mjs";
 
 test("defaults to the low-cost GPT-6 model; ignores invalid overrides", () => {
   assert.equal(DEFAULT_SUPPORT_MODEL, "gpt-6-luna");
@@ -213,4 +214,67 @@ test("Web Pro and unknown-platform prices are treated as unverified", () => {
   const unknown=guardSupportReply("Subscribe for $9.99","unknown","What is the subscription price?");
   assert.ok(unknown.includes("Which device"));
   assert.equal(guardSupportReply("You can check your Apple account.","ios","How do refunds work?"),"You can check your Apple account.");
+});
+
+test("Support rejects malformed request identifiers before database writes", () => {
+  assert.ok(isValidSupportRequestId("123e4567-e89b-42d3-a456-426614174000"));
+  for (const value of [
+    "------------------------------------",
+    "123e4567-e89b-12d3-a456-426614174000extra",
+    "00000000-0000-0000-0000-000000000000",
+    null, {}, 123,
+  ]) {
+    assert.equal(isValidSupportRequestId(value),false);
+  }
+});
+
+test("Support request parser rejects unbounded or invalid JSON bodies", async () => {
+  const url="https://example.invalid/functions/v1/support-ai";
+  const request=(body, headers={}) => new Request(url,{method:"POST",body,headers});
+  const valid=await readSupportBody(request(JSON.stringify({
+    requestId:"123e4567-e89b-42d3-a456-426614174000",
+    question:"I forgot my password",
+  })));
+  assert.equal(valid.ok,true);
+  assert.equal(valid.data.question,"I forgot my password");
+  assert.equal((await readSupportBody(request("{oops"))).code,"bad_json");
+  assert.equal((await readSupportBody(request("[]"))).code,"bad_json");
+  assert.equal((await readSupportBody(request("null"))).code,"bad_json");
+  assert.equal((await readSupportBody(request("x".repeat(MAX_SUPPORT_BODY_BYTES+1)))).status,413);
+  assert.equal((await readSupportBody(request("{}",{"Content-Length":String(MAX_SUPPORT_BODY_BYTES+10)}))).status,413);
+});
+
+test("Existing support limits count the claimed request and honor new-account caps", () => {
+  const values={minuteCount:6,hourCount:20,dayCount:10,globalDayCount:2000,sameQuestionCount:1,pendingCount:2};
+  assert.deepEqual(classifySupportRateLimit(values,{newAccount:true}),{blocked:false,errorCode:null});
+  assert.equal(classifySupportRateLimit({...values,minuteCount:7}).blocked,true);
+  assert.equal(classifySupportRateLimit({...values,dayCount:11},{newAccount:true}).blocked,true);
+  assert.equal(classifySupportRateLimit({...values,dayCount:11},{newAccount:false}).blocked,false);
+  assert.equal(classifySupportRateLimit({...values,pendingCount:3}).blocked,true);
+  assert.equal(classifySupportRateLimit({...values,globalDayCount:2001}).blocked,true);
+  assert.equal(classifySupportRateLimit({...values,sameQuestionCount:6}).errorCode,"duplicate_spam");
+  assert.equal(classifySupportRateLimit({...values,minuteCount:60,hourCount:500,dayCount:2000},{trustedTester:true}).blocked,false);
+  assert.equal(classifySupportRateLimit({...values,minuteCount:61},{trustedTester:true}).blocked,true);
+});
+
+test("Synthetic full request preflight yields grounded and bill-safe support replies", async () => {
+  const question="What is the price of Wavo Pro on iPhone?";
+  const req=new Request("https://example.invalid",{
+    method:"POST",
+    body:JSON.stringify({question,requestId:"123e4567-e89b-42d3-a456-426614174000",history:[{role:"user",content:"I'm on iOS"}],platform:"ios"}),
+  });
+  const parsed=await readSupportBody(req);
+  assert.equal(parsed.ok,true);
+  assert.ok(isValidSupportRequestId(parsed.data.requestId));
+  const rows=[{topic:"premium",content:"iOS subscriptions use Apple In-App Purchase",verified_at:"2026-10-07T00:00:00Z"},{topic:"product",content:"Wavo social messaging"},{topic:"platforms",content:"iOS and web"}];
+  const knowledge=selectRelevantKnowledge(rows,question,parsed.data.history,4);
+  assert.ok(knowledge.some(x=>x.topic==="premium"));
+  const prompt=buildSupportInstructions({
+    supportVersion:"v16", platform:"ios", accountContext:"Authenticated synthetic test account",
+    billingRule:billingGuidance("ios"), kb:knowledge.map(x=>x.topic+": "+x.content).join("\n"), currentDate:"2026-10-24",
+  });
+  assert.ok(prompt.includes("Apple In-App Purchase"));
+  const answer=guardSupportReply("You can subscribe to Pro for A$17.95 per month.", "ios", question);
+  assert.ok(answer.includes("Apple App Store purchase sheet"));
+  assert.ok(!answer.includes("17.95"));
 });
