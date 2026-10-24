@@ -78,3 +78,15 @@ Support now has a final client-independent response guard (`supportReplyGuards.m
 This is a last-resort rule-based guard, not a substitute for model evaluation. Monitor false positives and adjust after manual review. Synthetic tests cover these fallback behaviours.
 
 The comparison harness is installed but **no paid real-model evaluation has been run**. On a release checklist, code/type/build tests passing is distinct from actual answer-quality validation. Supabase production still has the earlier deployed Edge Function until a separate authenticated, reviewed rollout explicitly replaces it.
+
+## Request validation and rate-limit failure handling (2026-10-24)
+
+New `supportRequestGuards.mjs` adds:
+- A bounded **32 KiB JSON request reader**, including streamed bodies with no Content-Length header, so clients cannot force unlimited request-body buffering.
+- Strict UUID validation before inserting into the `support_ai_requests` UUID primary key.
+- A pure, regression-tested limit classifier preserving existing minute/hour/day/new-account/tester/concurrency thresholds.
+- The Edge Function **fails closed** with a 503 when request-count or profile queries fail, instead of treating a database failure as zero prior requests and spending API credits.
+- Clearer request-limit error copy that does not falsely imply that every limit resets within minutes (there are also daily limits).
+- The existing request accounting schema and customer request records were left unchanged.
+
+Automated tests exercise malformed JSON, oversized streamed data, invalid UUIDs, threshold boundaries and one synthetic request through validation, knowledge retrieval, prompt composition and safe reply filtering. **This is not a live authenticated Edge Function end-to-end test**. Supabase project inventory shows no dedicated Wavo staging project, so production v15 remains deployed until a separate test environment and real-model comparison are available.
