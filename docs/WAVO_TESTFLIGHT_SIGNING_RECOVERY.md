@@ -33,3 +33,17 @@ A certificate that was created on a past ephemeral GitHub runner may not be reco
 ## Support AI distinction
 
 The iOS TestFlight build embeds React UI changes (Support quick-start prompts and account-history loading protections). The actual Support AI v16 model and improved server handler run in **Supabase Edge Functions** and are **not activated by an iOS upload**. The live `support-ai` function was last confirmed at version 15. Backend v16 requires a separate staging quality review and explicit deployment.
+
+## Verified certificate dependencies (Apple read-only audit 2026-10-24)
+
+Audit run: https://github.com/jdarkyeka6/wavo-cleaned/actions/runs/40088354786
+
+- AJZTAG7VP4: used by ACTIVE Wavo App Store and Wavo Live Activity profiles. Preserve.
+- RL2774MQCA: used by ACTIVE SnapShift. Preserve.
+- DPJ24D5FLB: used by ACTIVE Fort Security and SnapShift. Preserve.
+
+Apple has 3 Distribution certificates, and all 3 are linked to active App Store provisioning profiles. There is no unreferenced old Wavo certificate to revoke. Certificates are team-wide, not tied to a TestFlight build. Removing old builds or invalid provisioning profiles cannot free the certificate limit.
+
+The development TestFlight workflow now requires a reusable Wavo .p12 with its private key, password and certificate ID before attempting a costly build. It only accepts the audited Wavo certificate ID AJZTAG7VP4, imports that identity into the temporary CI keychain, and never automatically creates or revokes any certificate.
+
+If the private key was lost on an old ephemeral CI runner, neither the certificate ID nor the App Store Connect .p8 API key can recreate it. A Mac/keychain backup, protected signing storage or deliberate signing rotation by the Apple Account Holder is required. Do not revoke certificates referenced by the other active apps without a coordinated migration.
