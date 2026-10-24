@@ -73,7 +73,7 @@ function setup({
             },
             then(resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) {
               return Promise.resolve({
-                count: counts[selectedCount] ?? 1,
+                count: selectedCount >= 0 && selectedCount < counts.length ? counts[selectedCount] : 1,
                 error: selectedCount === failedCount ? { code: "PGRST500" } : null,
               }).then(resolve, reject);
             },
