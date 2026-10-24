@@ -53,8 +53,30 @@ export function createSupportHandler({
   const platform = resolveSupportPlatform(requestedPlatform, req.headers.get("origin"));
   if (!isValidSupportRequestId(requestId)) return json({ error: "bad_request_id" }, 400); if (!question) return json({ error: "empty_question" }, 400); if (question.length > 2000) return json({ error: "input_too_long", message: "Keep each support message under 2,000 characters." }, 400);
   const questionHash = await sha256(question); const { error: claimError } = await admin.from("support_ai_requests").insert({ request_id: requestId, user_id: user.id, question_hash: questionHash, status: "pending", input_chars: question.length });
-  if (claimError) { if (claimError.code === "23505") return json({ error: "duplicate_request" }, 409); logger.error("support-ai claim", claimError); return json({ error: "claim_failed" }, 500); }
-  const finish = async (status: string, patch: Record<string, unknown> = {}) => { await admin.from("support_ai_requests").update({ status, completed_at: new Date().toISOString(), ...patch }).eq("request_id", requestId); };
+  if (claimError) {
+    if (claimError.code === "23505") return json({ error: "duplicate_request" }, 409);
+    logger.error("support-ai request claim failed", claimError.code || "unknown");
+    return json({ error: "claim_failed" }, 500);
+  }
+  const finish = async (status: string, patch: Record<string, unknown> = {}): Promise<boolean> => {
+    try {
+      const { data, error } = await admin.from("support_ai_requests")
+        .update({ status, completed_at: new Date().toISOString(), ...patch })
+        .eq("request_id", requestId)
+        .eq("user_id", user.id)
+        .eq("status", "pending")
+        .select("request_id")
+        .maybeSingle();
+      if (error || !data) {
+        logger.error("support-ai request completion could not be confirmed", error?.code || "no_matching_row");
+        return false;
+      }
+      return true;
+    } catch (error) {
+      logger.error("support-ai request completion failed", error instanceof Error ? error.name : "unknown");
+      return false;
+    }
+  };
   const [{ count: minuteCount, error: minuteError }, { count: hourCount, error: hourError }, { count: dayCount, error: dayError }, { count: globalDayCount, error: globalDayError }, { count: sameQuestionCount, error: repeatError }, { count: pendingCount, error: pendingError }, { data: profile, error: profileError }] = await Promise.all([
     admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).gte("created_at", agoIso(60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).gte("created_at", agoIso(60 * 60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).gte("created_at", agoIso(24 * 60 * 60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).gte("created_at", agoIso(24 * 60 * 60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).eq("question_hash", questionHash).gte("created_at", agoIso(10 * 60_000)), admin.from("support_ai_requests").select("request_id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "pending").gte( "created_at", agoIso(2 * 60_000)), admin.from("profiles").select("created_at,username,is_admin,support_unlimited").eq("id", user.id).maybeSingle(),
   ]);
@@ -155,6 +177,15 @@ export function createSupportHandler({
     output_tokens: Number(result?.usage?.output_tokens || 0),
     estimated_usd: estimateSupportCostUsd(model, result?.usage),
   }));
-  await finish("completed", { model: result?.model || model, output_tokens: Number(result?.usage?.output_tokens || 0) }); return json({ ok: true, reply });
+  if (!await finish("completed", {
+    model: result?.model || model,
+    output_tokens: Number(result?.usage?.output_tokens || 0),
+  })) {
+    return json({
+      error: "support_unavailable",
+      message: "Wavo Support couldn't complete this request safely. Please try again later.",
+    }, 503);
+  }
+  return json({ ok: true, reply });
   };
 }
