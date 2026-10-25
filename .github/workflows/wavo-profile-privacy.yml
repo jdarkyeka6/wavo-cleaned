@@ -9,6 +9,8 @@ on:
       - 'api/cancel-subscription.js'
       - 'server/**'
       - 'tests/stripeCustomerStore.test.mjs'
+      - 'tests/checkoutReturnOrigin.test.mjs'
+      - 'server/checkoutReturnOrigin.js'
       - 'security/**'
       - 'scripts/check-profile-privacy.mjs'
       - '.github/workflows/wavo-profile-privacy.yml'
@@ -19,6 +21,8 @@ on:
       - 'api/cancel-subscription.js'
       - 'server/**'
       - 'tests/stripeCustomerStore.test.mjs'
+      - 'tests/checkoutReturnOrigin.test.mjs'
+      - 'server/checkoutReturnOrigin.js'
       - 'security/**'
       - 'scripts/check-profile-privacy.mjs'
       - '.github/workflows/wavo-profile-privacy.yml'
@@ -32,4 +36,4 @@ jobs:
       - name: Check profile-access boundaries
         run: node scripts/check-profile-privacy.mjs
       - name: Check private billing identity handling
-        run: node --test tests/stripeCustomerStore.test.mjs
+        run: node --test tests/stripeCustomerStore.test.mjs tests/checkoutReturnOrigin.test.mjs
