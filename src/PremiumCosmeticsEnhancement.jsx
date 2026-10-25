@@ -83,9 +83,9 @@ export default function PremiumCosmeticsEnhancement() {
       setProfile(null)
       return null
     }
-    const { data, error } = await supabase.from('profiles').select('*').eq('id', id).single()
-    if (error) {
-      console.error('[wavo] cosmetics profile', error)
+    const { data, error } = await supabase.rpc('wavo_get_my_profile_v1')
+    if (error || data?.id !== id) {
+      console.error('[wavo] cosmetics profile', error || 'Profile session changed')
       return null
     }
     setProfile(data)
