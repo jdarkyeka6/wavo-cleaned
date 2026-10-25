@@ -7,8 +7,9 @@ const uniq = (items, key = "id") => {
 };
 
 export async function getProfile(userId) {
-  const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single();
+  const { data, error } = await supabase.rpc("wavo_get_my_profile_v1");
   if (error) throw error;
+  if (data?.id !== userId) throw new Error("Profile session changed; reload Wavo and sign in again.");
   return data;
 }
 
@@ -21,7 +22,7 @@ export async function getFriends(userId) {
   if (error) throw error;
   const ids = [...new Set((links || []).map((r) => (r.sender_id === userId ? r.receiver_id : r.sender_id)))];
   if (!ids.length) return [];
-  const { data, error: profileError } = await supabase.from("profiles").select("*").in("id", ids);
+  const { data, error: profileError } = await supabase.from("wavo_public_profiles_v1").select("*").in("id", ids);
   if (profileError) throw profileError;
   return data || [];
 }
@@ -36,7 +37,7 @@ export async function getIncomingFriendRequests(userId) {
   if (error) throw error;
   const senderIds = [...new Set((requests || []).map((r) => r.sender_id))];
   if (!senderIds.length) return [];
-  const { data: profiles, error: pError } = await supabase.from("profiles").select("*").in("id", senderIds);
+  const { data: profiles, error: pError } = await supabase.from("wavo_public_profiles_v1").select("*").in("id", senderIds);
   if (pError) throw pError;
   const map = Object.fromEntries((profiles || []).map((p) => [p.id, p]));
   return (requests || []).map((request) => ({ ...request, sender: map[request.sender_id] }));
