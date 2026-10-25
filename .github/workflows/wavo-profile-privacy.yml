@@ -1,0 +1,31 @@
+name: Wavo profile privacy checks
+on:
+  push:
+    branches:
+      - 'security/**'
+    paths:
+      - 'src/wavoData.js'
+      - 'src/PremiumProEnhancement.jsx'
+      - 'src/PremiumCosmeticsEnhancement.jsx'
+      - 'src/Admin.jsx'
+      - 'security/**'
+      - 'scripts/check-profile-privacy.mjs'
+      - '.github/workflows/wavo-profile-privacy.yml'
+  pull_request:
+    paths:
+      - 'src/wavoData.js'
+      - 'src/PremiumProEnhancement.jsx'
+      - 'src/PremiumCosmeticsEnhancement.jsx'
+      - 'src/Admin.jsx'
+      - 'security/**'
+      - 'scripts/check-profile-privacy.mjs'
+      - '.github/workflows/wavo-profile-privacy.yml'
+permissions:
+  contents: read
+jobs:
+  privacy-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check profile-access boundaries
+        run: node scripts/check-profile-privacy.mjs
