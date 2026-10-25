@@ -49,7 +49,7 @@ export default function ColourPolish() {
 
       if (unknown.length) {
         const { data, error } = await supabase
-          .from('profiles')
+          .from('wavo_public_profiles_v1')
           .select('id,username,equipped_badge,equipped_name_style')
           .in('username', unknown.slice(0, 80))
         if (!error) {
