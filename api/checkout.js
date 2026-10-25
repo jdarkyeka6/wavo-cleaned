@@ -1,6 +1,7 @@
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import { getStripeCustomerId, saveStripeCustomerId } from "../server/stripeCustomerStore.js";
+import { getCheckoutReturnOrigin } from "../server/checkoutReturnOrigin.js";
 
 const PLANS = {
   standard: { label: "Wavo Premium", amount: 499, tier: "premium" },
@@ -88,7 +89,7 @@ export default async function handler(req, res) {
       customerId = await saveStripeCustomerId(admin, user.id, customer.id);
     }
 
-    const origin = req.headers.origin || (req.headers.host ? `https://${req.headers.host}` : "https://www.wavo.lol");
+    const origin = getCheckoutReturnOrigin();
     const lineItem = selected.priceId
       ? { quantity: 1, price: selected.priceId }
       : {
