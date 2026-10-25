@@ -4,19 +4,21 @@ on:
     branches:
       - 'security/**'
     paths:
-      - 'src/wavoData.js'
-      - 'src/PremiumProEnhancement.jsx'
-      - 'src/PremiumCosmeticsEnhancement.jsx'
-      - 'src/Admin.jsx'
+      - 'src/**'
+      - 'api/checkout.js'
+      - 'api/cancel-subscription.js'
+      - 'server/**'
+      - 'tests/stripeCustomerStore.test.mjs'
       - 'security/**'
       - 'scripts/check-profile-privacy.mjs'
       - '.github/workflows/wavo-profile-privacy.yml'
   pull_request:
     paths:
-      - 'src/wavoData.js'
-      - 'src/PremiumProEnhancement.jsx'
-      - 'src/PremiumCosmeticsEnhancement.jsx'
-      - 'src/Admin.jsx'
+      - 'src/**'
+      - 'api/checkout.js'
+      - 'api/cancel-subscription.js'
+      - 'server/**'
+      - 'tests/stripeCustomerStore.test.mjs'
       - 'security/**'
       - 'scripts/check-profile-privacy.mjs'
       - '.github/workflows/wavo-profile-privacy.yml'
@@ -29,3 +31,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check profile-access boundaries
         run: node scripts/check-profile-privacy.mjs
+      - name: Check private billing identity handling
+        run: node --test tests/stripeCustomerStore.test.mjs
