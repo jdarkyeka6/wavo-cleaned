@@ -51,7 +51,7 @@ export default function UsernameSettings() {
       const { data: sessionData } = await supabase.auth.getSession();
       const id = sessionData?.session?.user?.id;
       if (!id) return;
-      const { data } = await supabase.from("profiles").select("username").eq("id", id).maybeSingle();
+      const { data } = await supabase.from("wavo_public_profiles_v1").select("username").eq("id", id).maybeSingle();
       if (!cancelled && data?.username) {
         setCurrent(data.username);
         setUsername(data.username);
