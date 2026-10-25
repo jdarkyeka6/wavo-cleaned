@@ -185,7 +185,7 @@ export default function GroupVideoCalls() {
 
   async function ensureProfile(peerId) {
     if (!peerId || profiles[peerId]) return
-    const { data } = await supabase.from('profiles').select('id,username,avatar_url').eq('id', peerId).maybeSingle()
+    const { data } = await supabase.from('wavo_public_profiles_v1').select('id,username,avatar_url').eq('id', peerId).maybeSingle()
     if (data) setProfiles((current) => ({ ...current, [peerId]: data }))
   }
 
