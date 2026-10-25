@@ -250,7 +250,7 @@ export default function PremiumCosmeticsEnhancement() {
       const unknown = [...new Set(names)].filter((name) => !visibleProfileCache.current.has(name))
       if (unknown.length) {
         const { data } = await supabase
-          .from('profiles')
+          .from('wavo_public_profiles_v1')
           .select('id,username,equipped_badge,equipped_name_style')
           .in('username', unknown.slice(0, 60))
         ;(data || []).forEach((row) => visibleProfileCache.current.set(row.username, row))
