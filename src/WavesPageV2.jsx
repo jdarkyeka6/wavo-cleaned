@@ -113,7 +113,7 @@ async function getGroupPosts(spaces) {
   const postIds = posts.map((post) => post.id)
   const profileIds = [...new Set(posts.map((post) => post.author_id))]
   const [profilesResult, reactionsResult] = await Promise.all([
-    supabase.from('profiles').select('id,username,avatar_url,status').in('id', profileIds),
+    supabase.from('wavo_public_profiles_v1').select('id,username,avatar_url,status').in('id', profileIds),
     supabase.from('post_reactions').select('*').in('post_id', postIds),
   ])
   if (profilesResult.error) throw profilesResult.error
