@@ -68,11 +68,9 @@ export default function Admin({ me, onBack }) {
   }, []);
 
   async function loadUsers() {
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (data) setUsers(data);
+    const { data, error } = await supabase.rpc("wavo_get_admin_profiles_v1");
+    if (error) { console.error("[wavo] admin users", error); return; }
+    if (Array.isArray(data)) setUsers(data);
   }
 
   async function loadMessages() {
