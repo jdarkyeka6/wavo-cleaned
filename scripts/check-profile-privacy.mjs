@@ -1,6 +1,8 @@
 // No external dependencies. Run with: node scripts/check-profile-privacy.mjs
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const read = (path) => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
 const modules = [
@@ -17,6 +19,38 @@ for (const path of modules) {
     path + ' still reads all columns from profiles'
   );
 }
+// All browser-facing directory projections must use the safe profile view.
+const publicFields = new Set([
+  'id', 'username', 'avatar_url', 'status', 'bio', 'created_at',
+  'equipped_theme', 'equipped_badge', 'equipped_name_style', 'show_online',
+  'last_active', 'is_premium', 'tier',
+]);
+const srcRoot = fileURLToPath(new URL('../src/', import.meta.url));
+const files = [];
+function visit(dir) {
+  for (const item of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, item.name);
+    if (item.isDirectory()) visit(full);
+    else if (item.isFile() && /\.(?:js|jsx|ts|tsx)$/.test(item.name)) files.push(full);
+  }
+}
+visit(srcRoot);
+for (const file of files) {
+  const source = readFileSync(file, 'utf8');
+  assert.doesNotMatch(
+    source,
+    /\.from\s*\(\s*['"]profiles['"]\s*\)\s*\.select\s*\(\s*['"]\*['"]\s*\)/,
+    file + ' reads the entire public.profiles row'
+  );
+  const selections = /\.from\s*\(\s*(['"])profiles\1\s*\)\s*\.select\s*\(\s*(['"])([^'"]+)\2\s*\)/g;
+  for (const match of source.matchAll(selections)) {
+    const columns = match[3].split(',').map((column) => column.trim());
+    if (columns.length && columns.every((column) => publicFields.has(column))) {
+      assert.fail(file + ' queries public-only profile columns from profiles, not the safe view: ' + match[3]);
+    }
+  }
+}
+
 const data = read('src/wavoData.js');
 assert.match(data, /rpc\(["']wavo_get_my_profile_v1["']\)/);
 assert.match(data, /from\(["']wavo_public_profiles_v1["']\)/);
