@@ -425,7 +425,8 @@ export default function PremiumProEnhancement() {
 
   const refreshProfile = useCallback(async () => {
     if (!userId) return null
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
+    const { data, error } = await supabase.rpc('wavo_get_my_profile_v1')
+    if (error || data?.id !== userId) { console.error('[wavo] premium profile', error || 'Profile session changed'); return null }
     setProfile(data || null); return data
   }, [userId])
 
