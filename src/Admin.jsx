@@ -112,7 +112,7 @@ export default function Admin({ me, onBack }) {
         ? supabase.from("messages").select("id, content, type, sender_id").in("id", msgIds)
         : Promise.resolve({ data: [] }),
       reporterIds.length
-        ? supabase.from("profiles").select("id, username").in("id", reporterIds)
+        ? supabase.from("wavo_public_profiles_v1").select("id, username").in("id", reporterIds)
         : Promise.resolve({ data: [] }),
     ]);
 
@@ -159,7 +159,7 @@ export default function Admin({ me, onBack }) {
     );
     if (otherIds.length) {
       const { data: profs } = await supabase
-        .from("profiles")
+        .from("wavo_public_profiles_v1")
         .select("id, username")
         .in("id", otherIds);
       setVaFriends(profs || []);
