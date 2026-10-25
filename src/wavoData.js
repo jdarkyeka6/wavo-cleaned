@@ -47,7 +47,7 @@ export async function searchProfiles(query, userId) {
   const term = query.trim();
   if (term.length < 2) return [];
   const { data, error } = await supabase
-    .from("profiles")
+    .from("wavo_public_profiles_v1")
     .select("id,username,avatar_url,status,last_active,bio")
     .ilike("username", `%${term}%`)
     .neq("id", userId)
@@ -102,7 +102,7 @@ export async function getSpaceMessages(groupId) {
   const ids = [...new Set((data || []).map((m) => m.sender_id || m.user_id).filter((id) => /^[0-9a-f-]{36}$/i.test(id || "")))];
   let profiles = [];
   if (ids.length) {
-    const { data: p, error: pError } = await supabase.from("profiles").select("id,username,avatar_url").in("id", ids);
+    const { data: p, error: pError } = await supabase.from("wavo_public_profiles_v1").select("id,username,avatar_url").in("id", ids);
     if (pError) throw pError;
     profiles = p || [];
   }
@@ -140,7 +140,7 @@ export async function getWaves() {
   const authorIds = [...new Set((waves || []).map((w) => w.author_id))];
   const waveIds = (waves || []).map((w) => w.id);
   const [profilesResult, reactionsResult] = await Promise.all([
-    authorIds.length ? supabase.from("profiles").select("id,username,avatar_url,status").in("id", authorIds) : Promise.resolve({ data: [] }),
+    authorIds.length ? supabase.from("wavo_public_profiles_v1").select("id,username,avatar_url,status").in("id", authorIds) : Promise.resolve({ data: [] }),
     waveIds.length ? supabase.from("wave_reactions").select("*").in("wave_id", waveIds) : Promise.resolve({ data: [] }),
   ]);
   if (profilesResult.error) throw profilesResult.error;
@@ -328,7 +328,7 @@ export async function getPosts(userId, friends = []) {
   const postIds = posts.map((p) => p.id);
   const profileIds = [...new Set(posts.map((p) => p.author_id))];
   const [profilesResult, reactionsResult] = await Promise.all([
-    supabase.from("profiles").select("id,username,avatar_url,status").in("id", profileIds),
+    supabase.from("wavo_public_profiles_v1").select("id,username,avatar_url,status").in("id", profileIds),
     supabase.from("post_reactions").select("*").in("post_id", postIds),
   ]);
   if (profilesResult.error) throw profilesResult.error;
