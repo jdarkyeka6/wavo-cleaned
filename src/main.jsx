@@ -17,6 +17,7 @@ import './waves-background-music.js'
 import AccountDeletion from './AccountDeletion.jsx'
 import AccountRecoveryEnhancement from './AccountRecoveryEnhancement.jsx'
 import App from './App.jsx'
+import PublicPageMetadata from './PublicPageMetadata.jsx'
 import AdminRoute from './AdminRoute.jsx'
 import BlackPlanEnhancement from './BlackPlanEnhancement.jsx'
 import CallContinuityBridge from './CallContinuityBridge.jsx'
@@ -124,6 +125,7 @@ createRoot(document.getElementById('root')).render(
         <VideoWavesPage />
       ) : (
       <BrowserRouter>
+        <PublicPageMetadata />
         <CallKitCoordinator />
         {!isNativeApp && <EmployeeWorkTracking />}
         <Routes>

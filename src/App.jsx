@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Bell,
   CalendarDays,
@@ -119,7 +120,9 @@ function Toast({ message, onClose }) {
 }
 
 function AuthScreen({ onReady }) {
-  const [mode, setMode] = useState("login");
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const mode = pathname.replace(/\/+$/, "") === "/signup" ? "signup" : "login";
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -143,7 +146,7 @@ function AuthScreen({ onReady }) {
         });
         if (authError) throw authError;
         if (!data.user) throw new Error("Signup failed");
-        setMode("login");
+        navigate("/login");
         setPassword("");
         setError("Account created. Log in to enter Wavo.");
       }
@@ -179,7 +182,7 @@ function AuthScreen({ onReady }) {
           {error && <div className="form-note">{error}</div>}
           <button className="primary-btn" disabled={busy}>{busy ? "Working…" : mode === "login" ? "Enter Wavo" : "Create account"}</button>
         </form>
-        <button className="text-btn" onClick={() => setMode(mode === "login" ? "signup" : "login")}>{mode === "login" ? "New here? Create an account" : "Already have an account? Log in"}</button>
+        <button className="text-btn" onClick={() => navigate(mode === "login" ? "/signup" : "/login")}>{mode === "login" ? "New here? Create an account" : "Already have an account? Log in"}</button>
       </section>
     </main>
   );
