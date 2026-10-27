@@ -1,0 +1,55 @@
+name: Wavo 2 foundation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wavo2-foundation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Verify Wavo 2 foundation and game rules
+        run: node --test tests/wavo2FeatureFlags.test.mjs tests/safeNotificationUrl.test.mjs tests/wavo2GameRules.test.mjs
+      - name: Check changed app files
+        run: npx eslint src/lib/wavo2FeatureFlags.js src/lib/safeNotificationUrl.js src/lib/wavo2GameRules.js src/phase3Data.js src/NotificationSetup.jsx
+      - name: Build web app
+        run: npm run build
+
+  game-sql-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test candidate game integrity guard in disposable Postgres
+        run: |
+          cat tests/sql/wavo2_guard_fixture.sql \
+              docs/sql/wavo2_board_game_guard_STAGING_ONLY.sql \
+              tests/sql/wavo2_guard_assertions.sql \
+            | docker exec -i "${{ job.services.postgres.id }}" \
+                psql -U postgres -d postgres -v ON_ERROR_STOP=1
