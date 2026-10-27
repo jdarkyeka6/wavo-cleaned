@@ -83,9 +83,9 @@ export default function PremiumCosmeticsEnhancement() {
       setProfile(null)
       return null
     }
-    const { data, error } = await supabase.from('profiles').select('*').eq('id', id).single()
-    if (error) {
-      console.error('[wavo] cosmetics profile', error)
+    const { data, error } = await supabase.rpc('wavo_get_my_profile_v1')
+    if (error || data?.id !== id) {
+      console.error('[wavo] cosmetics profile', error || 'Profile session changed')
       return null
     }
     setProfile(data)
@@ -250,7 +250,7 @@ export default function PremiumCosmeticsEnhancement() {
       const unknown = [...new Set(names)].filter((name) => !visibleProfileCache.current.has(name))
       if (unknown.length) {
         const { data } = await supabase
-          .from('profiles')
+          .from('wavo_public_profiles_v1')
           .select('id,username,equipped_badge,equipped_name_style')
           .in('username', unknown.slice(0, 60))
         ;(data || []).forEach((row) => visibleProfileCache.current.set(row.username, row))

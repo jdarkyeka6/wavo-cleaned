@@ -1,0 +1,39 @@
+name: Wavo profile privacy checks
+on:
+  push:
+    branches:
+      - 'security/**'
+    paths:
+      - 'src/**'
+      - 'api/checkout.js'
+      - 'api/cancel-subscription.js'
+      - 'server/**'
+      - 'tests/stripeCustomerStore.test.mjs'
+      - 'tests/checkoutReturnOrigin.test.mjs'
+      - 'server/checkoutReturnOrigin.js'
+      - 'security/**'
+      - 'scripts/check-profile-privacy.mjs'
+      - '.github/workflows/wavo-profile-privacy.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'api/checkout.js'
+      - 'api/cancel-subscription.js'
+      - 'server/**'
+      - 'tests/stripeCustomerStore.test.mjs'
+      - 'tests/checkoutReturnOrigin.test.mjs'
+      - 'server/checkoutReturnOrigin.js'
+      - 'security/**'
+      - 'scripts/check-profile-privacy.mjs'
+      - '.github/workflows/wavo-profile-privacy.yml'
+permissions:
+  contents: read
+jobs:
+  privacy-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check profile-access boundaries
+        run: node scripts/check-profile-privacy.mjs
+      - name: Check private billing identity handling
+        run: node --test tests/stripeCustomerStore.test.mjs tests/checkoutReturnOrigin.test.mjs

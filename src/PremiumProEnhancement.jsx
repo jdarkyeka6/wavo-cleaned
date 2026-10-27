@@ -103,7 +103,7 @@ async function resolveConversation(userId) {
       .find((value) => value.startsWith('@'))
     const username = (canonical ? canonical.slice(1) : dm.querySelector('.chat-topbar strong')?.textContent?.trim()) || ''
     if (!username) return null
-    const { data: friend } = await supabase.from('profiles').select('id,username').ilike('username', username).limit(1).maybeSingle()
+    const { data: friend } = await supabase.from('wavo_public_profiles_v1').select('id,username').ilike('username', username).limit(1).maybeSingle()
     if (!friend?.id) return null
     return { kind: 'dm', targetId: friend.id, label: friend.username, conversationId: [userId, friend.id].sort().join('_'), root: dm }
   }
@@ -253,7 +253,7 @@ function InboxFolders({ folders, tier }) {
     const folder = folders.find((f) => f.id === folderId)
     const ids = (folder?.items || []).filter((x) => x.kind === 'dm').map((x) => x.target_id)
     if (!ids.length) { rows.forEach((row) => { row.style.display = 'none' }); return }
-    const { data } = await supabase.from('profiles').select('username').in('id', ids)
+    const { data } = await supabase.from('wavo_public_profiles_v1').select('username').in('id', ids)
     const names = new Set((data || []).map((x) => x.username))
     rows.forEach((row) => { const username = row.querySelector('strong')?.textContent?.trim(); row.style.display = names.has(username) ? '' : 'none' })
   }, [folders, paid])
@@ -425,7 +425,8 @@ export default function PremiumProEnhancement() {
 
   const refreshProfile = useCallback(async () => {
     if (!userId) return null
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
+    const { data, error } = await supabase.rpc('wavo_get_my_profile_v1')
+    if (error || data?.id !== userId) { console.error('[wavo] premium profile', error || 'Profile session changed'); return null }
     setProfile(data || null); return data
   }, [userId])
 

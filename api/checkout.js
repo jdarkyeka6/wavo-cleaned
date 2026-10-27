@@ -1,5 +1,7 @@
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
+import { getStripeCustomerId, saveStripeCustomerId } from "../server/stripeCustomerStore.js";
+import { getCheckoutReturnOrigin } from "../server/checkoutReturnOrigin.js";
 
 const PLANS = {
   standard: { label: "Wavo Premium", amount: 499, tier: "premium" },
@@ -77,17 +79,17 @@ export default async function handler(req, res) {
       });
     }
 
-    let customerId = profile.stripe_customer_id;
+    // Account identifiers are private billing records, not public profile fields.
+    let customerId = await getStripeCustomerId(admin, user.id, profile.stripe_customer_id);
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: user.email,
         metadata: { supabase_uid: user.id, username: profile.username || "" },
-      });
-      customerId = customer.id;
-      await admin.from("profiles").update({ stripe_customer_id: customerId }).eq("id", user.id);
+      }, { idempotencyKey: `wavo-stripe-customer-${user.id}` });
+      customerId = await saveStripeCustomerId(admin, user.id, customer.id);
     }
 
-    const origin = req.headers.origin || (req.headers.host ? `https://${req.headers.host}` : "https://www.wavo.lol");
+    const origin = getCheckoutReturnOrigin();
     const lineItem = selected.priceId
       ? { quantity: 1, price: selected.priceId }
       : {

@@ -1,0 +1,4 @@
+-- Stage A is no longer review-only. Applied and verified on Wavo production.
+-- Authoritative versioned migration: supabase/migrations/20261025153352_wavo_create_private_stripe_customer_store_stage_a.sql
+-- It backfilled 7 Stripe customer IDs into a service-role-only RLS table.
+-- Do NOT apply Stage B until billing API has been deployed and tested.
