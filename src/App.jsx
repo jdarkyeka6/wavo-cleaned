@@ -664,13 +664,19 @@ export default function App() {
     const chatId = [userId, selectedFriend.id].sort().join("_");
     const cacheKey = `dm:${chatId}`;
     const cached = loadCachedMessages(userId, cacheKey);
-    if (cached.length) setMessages(cached);
+    // Clear the previous DM immediately when switching rows in the Duo sidebar.
+    setMessages(cached);
     setMessageText(getDraft(userId, cacheKey));
     markDmRead(userId, selectedFriend.id).catch(() => {});
-    const load = () => getDmMessages(userId, selectedFriend.id).then((r) => { setMessages(r.messages); cacheMessages(userId, cacheKey, r.messages); }).catch(() => {});
+    let active = true;
+    const load = () => getDmMessages(userId, selectedFriend.id).then((r) => {
+      if (!active) return;
+      setMessages(r.messages);
+      cacheMessages(userId, cacheKey, r.messages);
+    }).catch(() => {});
     load();
     const channel = supabase.channel(`wavo-dm:${chatId}`).on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` }, load).subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { active = false; supabase.removeChannel(channel); };
   }, [userId, selectedFriend]);
 
   useEffect(() => {
