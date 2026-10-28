@@ -1,17 +1,15 @@
 import { getPlatform, isNativeApp } from './platform'
+import { getNativeWindowClass, shouldResetViewportHeight } from './window-size'
 
 export const MOBILE_BREAKPOINT = 760
 
 let stableViewportHeight = 0
 let stableViewportWidth = 0
 
-// Layout must follow the available window, not the physical device type.
-export const EXPANDED_NATIVE_WIDTH = 700
-
 export function isExpandedNativeWindow() {
   if (!isNativeApp || typeof window === 'undefined') return false
   const width = document?.documentElement?.clientWidth || window.innerWidth
-  return width >= EXPANDED_NATIVE_WIDTH
+  return getNativeWindowClass(width, isNativeApp) === 'expanded'
 }
 
 export function getUiMode() {
@@ -54,7 +52,7 @@ function applyViewportVars(root) {
 
   // Folding, unfolding and rotating change the window geometry. Don't mistake
   // a substantial width change for the keyboard opening.
-  if (stableViewportWidth && Math.abs(visualWidth - stableViewportWidth) > 56) {
+  if (shouldResetViewportHeight(stableViewportWidth, visualWidth)) {
     stableViewportHeight = currentViewportHeight
   }
   stableViewportWidth = visualWidth
