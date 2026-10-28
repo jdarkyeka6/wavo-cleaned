@@ -3,6 +3,16 @@ import { getPlatform, isNativeApp } from './platform'
 export const MOBILE_BREAKPOINT = 760
 
 let stableViewportHeight = 0
+let stableViewportWidth = 0
+
+// Layout must follow the available window, not the physical device type.
+export const EXPANDED_NATIVE_WIDTH = 700
+
+export function isExpandedNativeWindow() {
+  if (!isNativeApp || typeof window === 'undefined') return false
+  const width = document?.documentElement?.clientWidth || window.innerWidth
+  return width >= EXPANDED_NATIVE_WIDTH
+}
 
 export function getUiMode() {
   if (isNativeApp) return 'mobile-app'
@@ -42,6 +52,12 @@ function applyViewportVars(root) {
   const visibleViewportHeight = Math.max(1, visualHeight + offsetTop)
   const currentViewportHeight = Math.max(visibleViewportHeight, innerHeight)
 
+  // Folding, unfolding and rotating change the window geometry. Don't mistake
+  // a substantial width change for the keyboard opening.
+  if (stableViewportWidth && Math.abs(visualWidth - stableViewportWidth) > 56) {
+    stableViewportHeight = currentViewportHeight
+  }
+  stableViewportWidth = visualWidth
   if (!stableViewportHeight) stableViewportHeight = currentViewportHeight
 
   const keyboardOverlap = Math.max(0, stableViewportHeight - visibleViewportHeight)
@@ -70,6 +86,7 @@ export function applyUiMode() {
   const platform = getPlatform()
 
   root.dataset.wavoUi = mode
+  root.dataset.wavoWindow = isExpandedNativeWindow() ? 'expanded' : 'compact'
   root.dataset.wavoPlatform = platform
   root.dataset.wavoNative = isNativeApp ? 'true' : 'false'
   root.classList.toggle('wavo-desktop-web', mode === 'desktop-web')
@@ -82,7 +99,7 @@ export function applyUiMode() {
 
   window.__WAVO_UI_MODE__ = mode
   window.__WAVO_PLATFORM__ = platform
-  window.dispatchEvent(new CustomEvent('wavo:ui-mode', { detail: { mode, platform } }))
+  window.dispatchEvent(new CustomEvent('wavo:ui-mode', { detail: { mode, platform, windowSize: root.dataset.wavoWindow } }))
   return mode
 }
 
