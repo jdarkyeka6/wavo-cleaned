@@ -410,7 +410,7 @@ function SpacesScreen({ spaces, selectedSpace, setSelectedSpace, messages, messa
   );
 }
 
-function InboxScreen({ friends, requests, selectedFriend, setSelectedFriend, messages, messageText, setMessageText, sendMessage, userId, actions, nicknames = {} }) {
+function InboxScreen({ friends, requests, selectedFriend, setSelectedFriend, messages, messageText, setMessageText, sendMessage, userId, actions, nicknames = {}, isExpandedNative = false }) {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -423,12 +423,41 @@ function InboxScreen({ friends, requests, selectedFriend, setSelectedFriend, mes
   }
 
   if (selectedFriend) {
-    return <ConversationExperience
+    const conversation = <ConversationExperience
       kind="dm" friend={selectedFriend} userId={userId} messages={messages}
       messageText={messageText} setMessageText={setMessageText} sendMessage={sendMessage}
       onBack={() => setSelectedFriend(null)} onTools={() => actions.openChatTools("dm", selectedFriend)}
       name={nicknames[selectedFriend.id] || selectedFriend.username} Avatar={Avatar}
     />;
+
+    // On a foldable's wide inner window, keep the inbox visible beside the
+    // conversation. On its outer window, return to the unchanged single pane.
+    if (!isExpandedNative) return conversation;
+
+    return (
+      <div className="wavo-expanded-chat" aria-label="Expanded inbox">
+        <aside className="wavo-expanded-chat-sidebar" aria-label="Conversations">
+          <div className="wavo-expanded-chat-sidebar-header">
+            <button type="button" className="wavo-expanded-chat-exit" onClick={() => setSelectedFriend(null)}>
+              <ChevronLeft size={18} /> Inbox
+            </button>
+            <strong>Messages</strong>
+          </div>
+          <div className="wavo-expanded-chat-people">
+            {friends.map((friend) => (
+              <button type="button" className="wavo-expanded-chat-person" key={friend.id}
+                aria-pressed={friend.id === selectedFriend.id}
+                onClick={() => setSelectedFriend(friend)}>
+                <Avatar profile={friend} size="sm" />
+                <span><strong>{nicknames[friend.id] || friend.username}</strong><small>{friend.status || "Conversation"}</small></span>
+                {friend.id === selectedFriend.id && <span className="wavo-expanded-chat-active" aria-hidden="true" />}
+              </button>
+            ))}
+          </div>
+        </aside>
+        <div className="wavo-expanded-chat-main">{conversation}</div>
+      </div>
+    );
   }
 
   return (
@@ -572,6 +601,7 @@ export default function App() {
   const [presetSpace, setPresetSpace] = useState(null);
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [selectedSpace, setSelectedSpace] = useState(null);
+  const [expandedNative, setExpandedNative] = useState(() => typeof document !== "undefined" && document.documentElement.dataset.wavoWindow === "expanded");
   const [messages, setMessages] = useState([]);
   const [messageText, setMessageText] = useState("");
   const [toast, setToast] = useState("");
@@ -581,6 +611,14 @@ export default function App() {
   const [undoSend, setUndoSend] = useState(null);
 
   const userId = session?.user?.id;
+
+  // Wavo can resize without a navigation event when iPhone Duo folds/unfolds.
+  useEffect(() => {
+    const update = () => setExpandedNative(document.documentElement.dataset.wavoWindow === "expanded");
+    update();
+    window.addEventListener("wavo:ui-mode", update);
+    return () => window.removeEventListener("wavo:ui-mode", update);
+  }, []);
 
   useEffect(() => {
     const setConnection = () => setOnline(navigator.onLine);
@@ -821,7 +859,7 @@ export default function App() {
       <PullToRefresh onRefresh={refresh}><div className="app-content">
         {tab === "home" && <HomeScreen {...data} userId={userId} actions={actions} />}
         {tab === "spaces" && <SpacesScreen spaces={data.spaces} selectedSpace={selectedSpace} setSelectedSpace={setSelectedSpace} messages={messages} messageText={messageText} setMessageText={setMessageText} sendMessage={sendCurrentMessage} plans={data.plans} polls={data.polls} activities={data.activities} userId={userId} actions={actions} />}
-        {tab === "inbox" && <InboxScreen friends={data.friends} requests={data.requests} selectedFriend={selectedFriend} setSelectedFriend={setSelectedFriend} messages={messages} messageText={messageText} setMessageText={setMessageText} sendMessage={sendCurrentMessage} userId={userId} actions={actions} nicknames={data.nicknames} />}
+        {tab === "inbox" && <InboxScreen friends={data.friends} requests={data.requests} selectedFriend={selectedFriend} setSelectedFriend={setSelectedFriend} messages={messages} messageText={messageText} setMessageText={setMessageText} sendMessage={sendCurrentMessage} userId={userId} actions={actions} nicknames={data.nicknames} isExpandedNative={expandedNative} />}
         {tab === "you" && <ProfileScreen profile={data.profile} posts={data.posts.filter((p) => p.author_id === userId)} userId={userId} onPostReact={actions.reactPost} onPostDelete={actions.deletePost} onNewPost={() => actions.openCreate("post")} privacy={data.privacy} locations={data.locations.filter((l) => l.owner_id === userId)} onPrivacy={updatePrivacy} onProfileSaved={refresh} onEnableNotifications={enableNotifications} onStopLocations={stopLocations} onLogout={() => supabase.auth.signOut()} />}
       </div></PullToRefresh>
       {!isDeepView && <BottomNav tab={tab} setTab={(next) => { setTab(next); if (next !== "spaces") setSelectedSpace(null); if (next !== "inbox") setSelectedFriend(null); }} />}
