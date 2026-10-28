@@ -1,0 +1,55 @@
+name: iPhone Duo compatibility (no release)
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'ios/**'
+      - '.github/workflows/iphone-duo-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  duo-compatibility:
+    # This is a build check only. Never signs, uploads, or deploys Wavo.
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use iOS 27.1 SDK for full iPhone Duo support
+        run: |
+          sudo xcode-select -s /Applications/Xcode_27.1.app
+          xcodebuild -version
+          xcodebuild -showsdks | grep 'iphonesimulator27.1'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run foldable viewport regression tests
+        run: node --test tests/iphone-duo-layout.test.mjs
+
+      - name: Build Wavo web assets
+        run: npm run build
+
+      - name: Sync native iOS assets
+        run: npx cap sync ios
+
+      - name: Compile iOS simulator without signing
+        run: |
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator27.1 \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/wavo-duo-build" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
