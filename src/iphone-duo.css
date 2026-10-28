@@ -151,3 +151,57 @@ html[data-wavo-ui="mobile-app"][data-wavo-window="expanded"] .wavo-expanded-chat
 @media (prefers-reduced-motion: reduce) {
   .wavo-expanded-chat-people { scroll-behavior: auto; }
 }
+
+
+/*
+ * iOS 27.1's expansive canvas works better with a slim navigation rail.
+ * This only affects ordinary screens; conversation screens keep their
+ * dedicated full-height composer and the expanded inbox sidebar.
+ */
+html[data-wavo-ui="mobile-app"][data-wavo-window="expanded"] .app-shell:not(:has(.chat-screen)) > .bottom-nav {
+  top: 50% !important;
+  bottom: auto !important;
+  left: calc(10px + var(--wavo-safe-left, 0px)) !important;
+  right: auto !important;
+  width: 78px !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: repeat(4, 60px) !important;
+  padding: 6px !important;
+  transform: translateY(-50%) !important;
+  border-radius: 24px !important;
+}
+
+html[data-wavo-ui="mobile-app"][data-wavo-window="expanded"] .app-shell:not(:has(.chat-screen)) > .bottom-nav > button {
+  width: 100% !important;
+  height: 60px !important;
+  min-height: 60px !important;
+  padding: 6px 2px !important;
+}
+
+html[data-wavo-ui="mobile-app"][data-wavo-window="expanded"] .app-shell:not(:has(.chat-screen)) .app-content > .screen,
+html[data-wavo-ui="mobile-app"][data-wavo-window="expanded"] .app-shell:not(:has(.chat-screen)) .app-content > [class$="-screen"]:not(.chat-screen) {
+  padding-left: calc(104px + var(--wavo-safe-left, 0px)) !important;
+  padding-right: calc(18px + var(--wavo-safe-right, 0px)) !important;
+  padding-bottom: calc(24px + var(--wavo-safe-bottom, 0px)) !important;
+}
+
+html[data-wavo-ui="mobile-app"][data-wavo-window="expanded"] .app-shell:not(:has(.chat-screen)) .home-screen {
+  padding-left: calc(104px + var(--wavo-safe-left, 0px)) !important;
+}
+
+/* Short inner-display heights (landscape, Split View) must keep navigation usable. */
+@media (max-height: 520px) {
+  html[data-wavo-ui="mobile-app"][data-wavo-window="expanded"] .app-shell:not(:has(.chat-screen)) > .bottom-nav {
+    top: auto !important;
+    bottom: calc(6px + var(--wavo-safe-bottom, 0px)) !important;
+    transform: none !important;
+    grid-template-rows: repeat(4, 48px) !important;
+  }
+  html[data-wavo-ui="mobile-app"][data-wavo-window="expanded"] .app-shell:not(:has(.chat-screen)) > .bottom-nav > button {
+    height: 48px !important;
+    min-height: 48px !important;
+  }
+}
