@@ -1,0 +1,34 @@
+name: Billing data privacy tests
+
+on:
+  push:
+    branches:
+      - 'security/billing-server-isolated-20261025'
+  pull_request:
+    paths:
+      - 'api/checkout.js'
+      - 'api/cancel-subscription.js'
+      - 'server/stripeCustomerStore.js'
+      - 'server/checkoutReturnOrigin.js'
+      - 'tests/stripeCustomerStore.test.mjs'
+      - 'tests/checkoutReturnOrigin.test.mjs'
+      - 'supabase/migrations/20261025153352_wavo_create_private_stripe_customer_store_stage_a.sql'
+      - '.github/workflows/wavo-billing-privacy.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  billing-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check private billing storage
+        run: node --test tests/stripeCustomerStore.test.mjs tests/checkoutReturnOrigin.test.mjs
+      - name: Validate API syntax
+        run: |
+          node --check api/checkout.js
+          node --check api/cancel-subscription.js
