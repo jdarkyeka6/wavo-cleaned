@@ -225,9 +225,17 @@ Deno.serve(async (req) => {
     senderUsername = sender?.username || "";
   }
 
-  let url = "/chats";
-  if (senderUsername && (!rawChatId || callId || !isUuid(rawChatId))) {
-    url = `/chats/${encodeURIComponent(senderUsername)}`;
+  // Use Wavo's in-app routes rather than forcing the iOS webview to reload.
+  let url = "/inbox";
+  if (isUuid(rawChatId) && !callId) {
+    const { data: group } = await admin
+      .from("groups")
+      .select("name")
+      .eq("id", rawChatId)
+      .maybeSingle();
+    if (group?.name) url = `/space/${encodeURIComponent(group.name)}`;
+  } else if (senderUsername) {
+    url = `/chat/${encodeURIComponent(senderUsername)}`;
   }
 
   const payload = {

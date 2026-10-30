@@ -44,7 +44,10 @@ function applyViewportVars(root) {
 
   if (!stableViewportHeight) stableViewportHeight = currentViewportHeight
 
-  const keyboardOverlap = Math.max(0, stableViewportHeight - visibleViewportHeight)
+  // WKWebView may pan the visual viewport down when the keyboard opens.
+  // offsetTop is a position, not extra drawable height; subtract the true
+  // viewport height so a panned keyboard is not misdetected as closed.
+  const keyboardOverlap = Math.max(0, stableViewportHeight - visualHeight)
   const keyboardOpen = keyboardOverlap > 120
 
   if (!keyboardOpen) {
@@ -53,7 +56,9 @@ function applyViewportVars(root) {
 
   // When the keyboard is open, follow the visual viewport so composers sit
   // immediately above it. Otherwise, own exactly the drawable app viewport.
-  const height = keyboardOpen ? visibleViewportHeight : currentViewportHeight
+  // When the keyboard is up the shell is separately translated by offsetTop.
+  // Adding that offset to its height places the composer below the keyboard.
+  const height = keyboardOpen ? Math.max(1, visualHeight) : currentViewportHeight
   const keyboard = keyboardOpen ? keyboardOverlap : 0
 
   root.style.setProperty('--wavo-viewport-width', `${visualWidth}px`)

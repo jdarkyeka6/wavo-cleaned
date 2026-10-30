@@ -30,8 +30,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
     const head = lower(parts[0])
 
     if (!parts.length || head === 'home') return { kind: 'home' }
-    if (head === 'inbox' || head === 'messages') return { kind: 'inbox' }
-    if (head === 'chat') return { kind: 'chat', value: clean(parts.slice(1).join('/')) || readSession(LAST_CHAT_KEY) }
+    if (head === 'inbox' || head === 'messages' || (head === 'chats' && parts.length === 1)) return { kind: 'inbox' }
+    if (head === 'chat' || head === 'chats') return { kind: 'chat', value: clean(parts.slice(1).join('/')) || readSession(LAST_CHAT_KEY) }
     if (head === 'spaces' || head === 'groups') return { kind: 'spaces' }
     if (head === 'space') return { kind: 'space', value: clean(parts.slice(1).join('/')) || readSession(LAST_SPACE_KEY) }
     if (head === 'profile' || head === 'you' || head === 'settings') return { kind: 'profile' }

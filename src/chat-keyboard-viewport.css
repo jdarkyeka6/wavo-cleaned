@@ -1,5 +1,6 @@
 :root {
-  --wavo-chat-viewport-offset-top: 0px;
+  --wavo-chat-visible-top: 0px;
+  --wavo-chat-visible-height: 100dvh;
 }
 
 /* iOS 26 can pan WKWebView's visual viewport when a chat input receives focus,
@@ -9,9 +10,9 @@
 html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"],
 html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"] body,
 html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"] #root {
-  height: var(--wavo-viewport-height, 100dvh) !important;
+  height: var(--wavo-chat-visible-height, 100dvh) !important;
   min-height: 0 !important;
-  max-height: var(--wavo-viewport-height, 100dvh) !important;
+  max-height: var(--wavo-chat-visible-height, 100dvh) !important;
   overflow: hidden !important;
   overscroll-behavior: none !important;
 }
@@ -19,18 +20,18 @@ html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"] #root {
 html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"] .app-shell:has(.chat-screen) {
   position: fixed !important;
   z-index: 1;
-  top: 0 !important;
+  top: var(--wavo-chat-visible-top, 0px) !important;
   left: 0 !important;
   right: 0 !important;
   bottom: auto !important;
   width: var(--wavo-viewport-width, 100vw) !important;
-  height: var(--wavo-viewport-height, 100dvh) !important;
+  height: var(--wavo-chat-visible-height, 100dvh) !important;
   min-height: 0 !important;
-  max-height: var(--wavo-viewport-height, 100dvh) !important;
+  max-height: var(--wavo-chat-visible-height, 100dvh) !important;
   overflow: hidden !important;
   padding-bottom: 0 !important;
-  transform: translate3d(0, var(--wavo-chat-viewport-offset-top, 0px), 0);
-  will-change: transform;
+  transform: none !important;
+  will-change: auto;
 }
 
 html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"] .chat-screen {
