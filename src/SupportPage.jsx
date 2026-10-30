@@ -13,6 +13,13 @@ const welcome = {
   content: "Hi, I’m Wavo Support AI. Ask me about Wavo accounts, features, bugs, notifications, Premium, safety, or troubleshooting. If I’m not sure, I’ll tell you instead of making something up.",
 };
 
+const SUPPORT_STARTERS = [
+  "I can't sign in to my account",
+  "My notifications aren't working",
+  "How do I report a bug?",
+  "What's included with Premium?",
+];
+
 const freshMessages = () => [{ ...welcome }];
 
 function randomId() {
@@ -266,7 +273,8 @@ export default function SupportPage() {
     }
   };
 
-  if (!ready) {
+  // Wait until the current user's saved Support tabs have been restored.
+  if (!ready || (session?.user?.id && historyLoadedFor !== session.user.id)) {
     return (
       <div className="support-shell support-centered">
         <div className="support-loading">Opening Wavo Support…</div>
@@ -322,7 +330,7 @@ export default function SupportPage() {
           <div className="support-mark"><Bot size={20} /></div>
           <div>
             <strong>Wavo Support</strong>
-            <span>AI help · usually instant</span>
+            <span>AI help · practical answers</span>
           </div>
         </div>
         <div className="support-safe"><ShieldCheck size={16} /> protected</div>
@@ -382,6 +390,27 @@ export default function SupportPage() {
               </div>
             </div>
           ))}
+
+          {messages.length === 1 && (
+            <div className="support-suggestions" aria-label="Popular support questions">
+              <span>Not sure where to start?</span>
+              <div className="support-suggestion-list">
+                {SUPPORT_STARTERS.map((starter) => (
+                  <button
+                    type="button"
+                    key={starter}
+                    disabled={Boolean(sendingTabId)}
+                    onClick={() => {
+                      setText(starter);
+                      inputRef.current?.focus();
+                    }}
+                  >
+                    {starter}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {sending && (
             <div className="support-row is-ai">
