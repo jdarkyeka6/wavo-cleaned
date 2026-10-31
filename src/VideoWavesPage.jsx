@@ -9,6 +9,7 @@ import { rankWavesFeed } from './wavesRecommendations'
 import { useWavesWatchSignals } from './wavesWatchSignals'
 import WavesCuratedManager from './WavesCuratedManager'
 import { isNativeApp } from './lib/platform'
+import { signVideoWavesPosts } from './lib/wavesSignedUrls'
 
 const VIDEO_LIMIT_BYTES = 500 * 1024 * 1024
 const VIDEO_LIMIT_MS = 5 * 60_000
@@ -44,29 +45,15 @@ function waveUrl(id, curated = false) {
   return window.location.origin + (standalone ? '/?wave=' : '/waves/video?wave=') + encodeURIComponent((curated ? 'curated:' : '') + id)
 }
 
-async function signMedia(path) {
-  if (!path) return null
-  const { data, error } = await supabase.storage.from('wave-media').createSignedUrl(path, 15 * 60)
-  if (error) throw error
-  return data?.signedUrl || null
-}
-
 async function loadVideoWaves(userId) {
-  // Reuse Wavo's existing friends/selected-recipient RLS and media access.
-  // No public discovery or assumption that private posts may be redistributed.
+  // Keep existing friend/recipient filtering and RLS; only reduce the number
+  // of storage signing requests after the allowed posts have been selected.
   const friends = await getFriends(userId)
   const posts = (await getPosts(userId, friends))
     .filter((post) => post.media_type === 'video' && post.media_path && post.visibility !== 'group')
     .slice(0, PAGE_SIZE)
 
-  const signed = await Promise.all(posts.map(async (post) => {
-    try {
-      return { ...post, kind: 'friend', media_url_signed: await signMedia(post.media_path) }
-    } catch {
-      return null
-    }
-  }))
-  return signed.filter((post) => post?.media_url_signed)
+  return signVideoWavesPosts(supabase.storage.from('wave-media'), posts)
 }
 
 function getVideoDuration(file) {
