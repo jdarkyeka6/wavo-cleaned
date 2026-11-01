@@ -38,3 +38,10 @@ html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"] .chat-screen {
   max-height: 100% !important;
   min-height: 0 !important;
 }
+
+/* The iOS keyboard already occupies the excluded visual viewport area.
+   Do not also reserve the home-indicator inset below the message composer. */
+html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"] .chat-screen .composer,
+html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"] .chat-screen .dm-composer {
+  padding-bottom: 8px !important;
+}
