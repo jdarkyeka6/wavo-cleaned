@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - fix/ios-chat-keyboard-gap-20261101
     paths:
       - .github/testflight-trigger
       - .github/workflows/ios-testflight.yml
