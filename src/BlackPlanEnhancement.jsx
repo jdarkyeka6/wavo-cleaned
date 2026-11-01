@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Check, Crown } from 'lucide-react'
 import { supabase } from './supabaseClient'
 import { PLANS } from './lib/pricing'
+import { isBlackMember } from './lib/blackMembership'
 import { isNativeApp } from './lib/platform'
 import {
   APPLE_PRODUCTS,
@@ -76,8 +77,7 @@ export default function BlackPlanEnhancement() {
   const [notice, setNotice] = useState('')
 
   const activePaid = useMemo(() => premiumIsActive(profile), [profile])
-  const source = String(profile?.entitlement_source || '').toLowerCase()
-  const isBlack = activePaid && (source === 'stripe_black' || source === 'apple_black')
+  const isBlack = isBlackMember(profile)
   const blockedByCurrentPlan = activePaid && !isBlack
   const native = isNativeIOS()
   const blackProduct = storeProducts.find((item) => item?.identifier === APPLE_PRODUCTS.black)
