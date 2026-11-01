@@ -52,7 +52,8 @@ export default async function handler(req, res) {
     const stillActive = profile.is_premium && (!profile.premium_until || new Date(profile.premium_until) > new Date());
     const rawTier = String(profile.tier || "free").toLowerCase();
     const source = String(profile.entitlement_source || "").toLowerCase();
-    const currentTier = stillActive && source === "stripe_black"
+    // Founder membership already includes Black, without a Stripe subscription.
+    const currentTier = stillActive && ["stripe_black", "apple_black", "founder"].includes(source)
       ? "black"
       : stillActive && source === "stripe_plus"
         ? "plus"
