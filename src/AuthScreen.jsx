@@ -81,12 +81,12 @@ export default function AuthScreen({ onReady }) {
     }
 
     setBusy(true);
-    const client = registrationClient();
     const username = form.username.trim().toLowerCase();
     const email = form.email.trim().toLowerCase();
     const authEmail = `${username}@wavo.app`;
 
     try {
+      const client = registrationClient();
       const { data, error } = await client.auth.signUp({
         email: authEmail,
         password: form.password,
