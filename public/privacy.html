@@ -29,8 +29,8 @@
 
     <h2>What we collect</h2>
     <ul>
-      <li><strong>Account information</strong>, including your chosen username and the authentication information needed to sign you in. Password authentication is handled by Supabase Auth; Wavo does not receive your password as readable plain text.</li>
-      <li><strong>Optional recovery email</strong> when you choose to add one for account recovery. Wavo stores the verified recovery address separately from your public-facing profile and uses it to send account-verification and password-reset messages.</li>
+      <li><strong>Account information</strong>, including your chosen username and the authentication information needed to sign you in. New signup also requests a first name, optional last name and date of birth. These registration details are kept separately from your public profile and are used for account administration and age eligibility. Password authentication is handled by Supabase Auth; Wavo does not store your password as readable plain text.</li>
+      <li><strong>Recovery email</strong> is required for new registrations and optional for older accounts. Wavo stores the address separately from your public-facing profile. It is not enabled for account recovery until you follow the verification link sent to that address.</li>
       <li><strong>Account-security records</strong>, such as one-time password-reset token hashes, expiry and usage status, and limited rate-limit records used to reduce automated reset abuse. Wavo stores hashes rather than the usable reset token itself.</li>
       <li><strong>Profile information</strong> you choose to add, such as a profile photo, bio or status.</li>
       <li><strong>Content and social activity</strong>, such as messages, group or Space content, posts, Waves, plans, polls, reactions, nicknames, friendships and files or media you upload.</li>
