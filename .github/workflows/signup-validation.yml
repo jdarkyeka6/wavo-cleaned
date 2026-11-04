@@ -1,0 +1,30 @@
+name: Signup validation
+
+on:
+  pull_request:
+    paths:
+      - 'src/AuthScreen.jsx'
+      - 'src/App.jsx'
+      - 'src/auth-signup.css'
+      - 'src/lib/signupValidation.js'
+      - 'tests/signup-validation.test.mjs'
+      - 'supabase/migrations/*signup*'
+      - '.github/workflows/signup-validation.yml'
+  push:
+    branches:
+      - 'feature/complete-signup-identity-age-email'
+
+jobs:
+  signup-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - name: Check signup validations
+        run: node --test tests/signup-validation.test.mjs
+      - name: Build Wavo
+        run: npm run build
