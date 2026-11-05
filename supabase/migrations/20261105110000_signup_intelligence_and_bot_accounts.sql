@@ -111,3 +111,20 @@ create trigger z_capture_signup_intelligence
   after insert or update of email_confirmed_at, raw_app_meta_data
   on auth.users
   for each row execute function public.capture_signup_intelligence();
+
+
+-- Existing accounts predate source attribution; show them as legacy/unknown
+-- instead of silently omitting them from the admin view.
+insert into public.signup_intelligence (
+  user_id, signup_source, email_verified_at, automation_signals
+)
+select
+  u.id,
+  'legacy_existing',
+  u.email_confirmed_at,
+  case when u.email_confirmed_at is null
+       then array['email_not_yet_verified','legacy_signup_no_attribution']::text[]
+       else array['legacy_signup_no_attribution']::text[] end
+from auth.users u
+join public.profiles p on p.id = u.id
+on conflict (user_id) do nothing;
