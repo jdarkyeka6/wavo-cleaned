@@ -120,6 +120,7 @@ export default function AuthScreen({ onReady }) {
             signup_utm_campaign: new URLSearchParams(window.location.search).get("utm_campaign") || "",
             signup_landing_path: window.location.pathname,
             signup_user_agent: navigator.userAgent.slice(0, 512),
+            signup_trap: form.signupTrap,
           },
         },
       });
@@ -224,6 +225,7 @@ export default function AuthScreen({ onReady }) {
               )}
 
               <div className="auth-section-title">Your account <span>How friends find you</span></div>
+              <label className="auth-signup-trap" aria-hidden="true">Leave this field empty<input tabIndex={-1} autoComplete="off" value={form.signupTrap} onChange={(event) => change("signupTrap", event.target.value)} /></label>
               <label>Username
                 <div className="auth-username-field"><span>@</span><input value={form.username} onChange={(event) => change("username", event.target.value.toLowerCase())} autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="username" maxLength={30} placeholder="username" required aria-invalid={Boolean(errors.username)} /></div>
                 <small className="auth-hint">3–24 letters, numbers or underscores. For test accounts, use +TEST_name.</small>
