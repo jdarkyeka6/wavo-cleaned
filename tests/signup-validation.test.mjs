@@ -9,11 +9,14 @@ const good = {
   password: "correct-horse", confirmPassword: "correct-horse", agreed: true,
 };
 
-test("13th birthday is eligible; day before is not", () => {
-  assert.equal(ageFromBirthDate("2013-11-04", today), 13);
-  assert.equal(ageFromBirthDate("2013-11-05", today), 12);
+test("ages 12+ have normal signup, under-12s see guardian review", () => {
+  assert.equal(ageFromBirthDate("2014-11-04", today), 12);
+  assert.equal(ageFromBirthDate("2014-11-05", today), 11);
+  assert.equal(validateSignup({ ...good, birthday: "2014-11-04" }, today).valid, true);
+  const younger = { ...good, birthday: "2014-11-05" };
+  assert.match(validateSignup(younger, today).errors.guardianApproved, /parent or guardian/);
+  assert.equal(validateSignup({ ...younger, guardianApproved: true }, today).valid, true);
   assert.equal(validateSignup(good, today).valid, true);
-  assert.match(validateSignup({ ...good, birthday: "2013-11-05" }, today).errors.birthday, /guardian approval/);
 });
 
 test("invalid and impossible dates do not pass", () => {
@@ -41,7 +44,12 @@ test("explicit +TEST_ signup convention validates without affecting normal usern
   assert.equal(validateSignup({ ...good, username: "alex+test" }, today).valid, false);
 });
 
-test("ages 8-12 are not enrolled without guardian approval", () => {
-  assert.match(validateSignup({ ...good, birthday: "2018-11-04" }, today).errors.birthday, /guardian approval/);
-  assert.match(validateSignup({ ...good, birthday: "2019-11-05" }, today).errors.birthday, /age 8/);
+test("approval step appears only for ages 8-11", () => {
+  for (const birthday of ["2018-11-04", "2015-11-04"]) {
+    const child = { ...good, birthday };
+    assert.match(validateSignup(child, today).errors.guardianApproved, /parent or guardian/);
+    assert.equal(validateSignup({ ...child, guardianApproved: true }, today).valid, true);
+  }
+  assert.equal(validateSignup({ ...good, birthday: "2014-11-04" }, today).valid, true);
+  assert.match(validateSignup({ ...good, birthday: "2019-11-05", guardianApproved: true }, today).errors.birthday, /age 8/);
 });

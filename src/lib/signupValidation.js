@@ -28,7 +28,9 @@ export function validateSignup(fields, today = new Date()) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.endsWith("@wavo.app")) errors.email = "Enter a real email address.";
   if (age === null || age > 120 || age < 0) errors.birthday = "Enter a valid date of birth.";
   else if (age < 8) errors.birthday = "Wavo registration starts at age 8.";
-  else if (age < 13) errors.birthday = "Ages 8–12 need parent or guardian approval. Registration is not available until that is ready.";
+  else if (age < 12 && fields.guardianApproved !== true) {
+    errors.guardianApproved = "Please show this to your parent or guardian and have them approve before continuing.";
+  }
   if (password.length < 8) errors.password = "Use at least 8 characters.";
   if (fields.confirmPassword !== password) errors.confirmPassword = "Passwords don't match.";
   if (!fields.agreed) errors.agreed = "Accept the terms and privacy policy to continue.";
