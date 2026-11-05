@@ -9,6 +9,7 @@ import {
   registerVoipForPush,
 } from './push'
 import { isNativeApp, isIOS } from './lib/platform'
+import { safeNotificationUrl } from './lib/safeNotificationUrl.js'
 import './notification-setup.css'
 
 const DISMISSED_KEY = 'wavo_notification_prompt_dismissed'
@@ -22,9 +23,6 @@ function isDesktopWeb() {
   return window.matchMedia?.('(pointer: fine)').matches && window.innerWidth >= 700
 }
 
-function safeNotificationUrl(value) {
-  return typeof value === 'string' && value.startsWith('/') ? value : null
-}
 
 export default function NotificationSetup() {
   const [userId, setUserId] = useState(null)
