@@ -123,9 +123,9 @@ export default function SignupIntelligence() {
         })}
       </div>
       <form className="signup-intel-bot-form" onSubmit={createBot}>
-        <div><h3><Bot size={17}/> Create an approved bot account</h3><p>Only admins can create these. Bots are visibly labelled and are not counted as human signups.</p></div>
+        <div><h3><Bot size={17}/> Create an approved bot account</h3><p>Only admins can create these. Their usernames must start with bot_, they are visibly identified, and they are excluded from human growth analytics.</p></div>
         <div className="signup-intel-form-grid">
-          <label>Bot username<input value={username} onChange={(e) => setUsername(e.target.value)} minLength={3} maxLength={24} pattern="[a-zA-Z0-9_]+" required placeholder="wavo_helper"/></label>
+          <label>Bot username (must start bot_)<input value={username} onChange={(e) => setUsername(e.target.value)} minLength={3} maxLength={24} pattern="bot_[a-zA-Z0-9_]{3,19}" required placeholder="bot_wavo_helper"/></label>
           <label>Display name<input value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={50} required placeholder="Wavo Helper"/></label>
           <label>Bot type<select value={botType} onChange={(e) => setBotType(e.target.value)}><option value="official_bot">Official bot</option><option value="integration_bot">Integration bot</option></select></label>
           <label>Description<input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={160} placeholder="What this bot does"/></label>
