@@ -70,6 +70,7 @@ import './home-fit-polish.css'
 import './mobile-layout-reset.css'
 import './desktop-chat-rail.css'
 import './chat-experience.css'
+import './iphone-duo.css'
 
 installAuthBootResilience()
 installUiMode()
