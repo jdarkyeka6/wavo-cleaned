@@ -63,3 +63,38 @@
   .auth-card-signup { padding: 22px 18px; border-radius: 22px; }
   .auth-two-column { grid-template-columns: 1fr; }
 }
+
+/* The guardian review appears only for children younger than twelve. */
+.auth-parent-step {
+  display: grid;
+  gap: 10px;
+  padding: 17px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(111, 135, 255, .08);
+}
+.auth-parent-step > strong,
+.auth-parent-review-details > strong { color: #edf4ff; font-size: 14px; }
+.auth-parent-step p { margin: 0; color: #c5d0e4; font-size: 13px; line-height: 1.55; }
+.auth-parent-review-trigger,
+.auth-parent-review-confirm {
+  min-height: 45px;
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 750;
+  text-align: center;
+  border-radius: 11px;
+  border: 1px solid #90acff;
+  color: #fff;
+  background: #425de1;
+  cursor: pointer;
+}
+.auth-parent-review-confirm { background: #2e6d62; border-color: #73c6ac; }
+.auth-parent-review-trigger:hover { background: #506bf0; }
+.auth-parent-review-confirm:hover { background: #337f71; }
+.auth-parent-review-details { display: grid; gap: 12px; padding-top: 8px; }
+.auth-parent-review-details a { color: #99c5ff; text-decoration: underline; }
+.auth-parent-review-details small { color: #a9b6cb; font-size: 11px; line-height: 1.5; }
+.auth-parent-review-approved { display: flex; align-items: center; gap: 10px; color: #aee0d0; font-size: 12px; }
+.auth-parent-review-approved button { color: #b9d0ff; text-decoration: underline; background: none; cursor: pointer; border: 0; }
