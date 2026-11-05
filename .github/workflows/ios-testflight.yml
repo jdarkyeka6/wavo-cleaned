@@ -4,15 +4,33 @@ on:
   push:
     branches:
       - main
+      # Ship the Support v16 TestFlight candidate without merging into live web.
+      - feature/wavo-support-smart-20261023
     paths:
+      # Trigger only after signing credentials have been configured.
       - .github/testflight-trigger
-      - .github/workflows/ios-testflight.yml
 jobs:
   build:
     runs-on: macos-15
     steps:
       - name: Check out the code
         uses: actions/checkout@v4
+      - name: Require reusable Wavo signing identity before building
+        env:
+          IOS_DISTRIBUTION_P12_BASE64: ${{ secrets.IOS_DISTRIBUTION_P12_BASE64 }}
+          IOS_DISTRIBUTION_P12_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_P12_PASSWORD }}
+          IOS_DISTRIBUTION_CERT_ID: ${{ secrets.IOS_DISTRIBUTION_CERT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "$IOS_DISTRIBUTION_P12_BASE64" ] || [ -z "$IOS_DISTRIBUTION_P12_PASSWORD" ] || [ -z "$IOS_DISTRIBUTION_CERT_ID" ]; then
+            echo "::error::Existing Wavo Apple Distribution signing identity is not configured. Add P12, password and certificate ID to GitHub Actions Secrets. No new Apple certificates will be created."
+            exit 1
+          fi
+          if [ "$IOS_DISTRIBUTION_CERT_ID" != "AJZTAG7VP4" ]; then
+            echo "::error::Configured Distribution certificate is not Wavo's audited active signing certificate. Recheck Apple provisioning profiles before updating the pinned ID."
+            exit 1
+          fi
+          echo "Existing Wavo signing identity is configured."
       - name: Select Xcode
         run: |
           if [ -d /Applications/Xcode_26.3.app ]; then
@@ -89,7 +107,7 @@ jobs:
           grep -Fq 'const aiEntitled = plus || pro' src/PlusPlanEnhancement.jsx || { echo "::error::Plus/Pro AI UI entitlement is missing"; exit 1; }
           grep -Fq 'Included with Plus' src/PremiumProEnhancement.jsx || { echo "::error::Paid plan current/included state regression"; exit 1; }
           grep -Fq 'platform: getPlatform()' src/SupportPage.jsx || { echo "::error::Support AI is not receiving the client platform"; exit 1; }
-          grep -Fq 'Do not mention website prices' supabase/functions/support-ai/index.ts || { echo "::error::Native Support AI purchase-steering guard is missing"; exit 1; }
+          grep -Fq 'Never mention or link to external checkout' supabase/functions/support-ai/supportBilling.mjs || { echo "::error::Native Support AI purchase-steering guard is missing"; exit 1; }
           if grep -q "api.openai.com" supabase/functions/moderate-content/index.ts; then
             echo "::error::Automatic message moderation still sends ordinary content to OpenAI"
             exit 1
@@ -165,4 +183,7 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          IOS_DISTRIBUTION_P12_BASE64: ${{ secrets.IOS_DISTRIBUTION_P12_BASE64 }}
+          IOS_DISTRIBUTION_P12_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_P12_PASSWORD }}
+          IOS_DISTRIBUTION_CERT_ID: ${{ secrets.IOS_DISTRIBUTION_CERT_ID }}
         run: bundle exec fastlane beta
