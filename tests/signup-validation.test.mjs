@@ -13,7 +13,7 @@ test("13th birthday is eligible; day before is not", () => {
   assert.equal(ageFromBirthDate("2013-11-04", today), 13);
   assert.equal(ageFromBirthDate("2013-11-05", today), 12);
   assert.equal(validateSignup(good, today).valid, true);
-  assert.match(validateSignup({ ...good, birthday: "2013-11-05" }, today).errors.birthday, /under-13/);
+  assert.match(validateSignup({ ...good, birthday: "2013-11-05" }, today).errors.birthday, /guardian approval/);
 });
 
 test("invalid and impossible dates do not pass", () => {
