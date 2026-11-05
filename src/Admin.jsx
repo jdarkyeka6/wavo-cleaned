@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
 import FounderDashboard from "./FounderDashboard";
+import SignupIntelligence from "./SignupIntelligence";
+import "./signup-intelligence.css";
 import {
   ArrowLeft,
   BarChart3,
@@ -489,6 +491,9 @@ export default function Admin({ me, onBack }) {
         <button className={tab === "growth" ? "active" : ""} onClick={() => setTab("growth")}>
           <Flame size={15} /> Growth
         </button>
+        <button className={tab === "signups" ? "active" : ""} onClick={() => setTab("signups")}>
+          <ShieldCheck size={15} /> Signups
+        </button>
         <button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>
           <BarChart3 size={15} /> Overview
         </button>
@@ -515,6 +520,7 @@ export default function Admin({ me, onBack }) {
 
       <div className="admin-body">
         {tab === "growth" && <FounderDashboard />}
+        {tab === "signups" && <SignupIntelligence />}
 
         {tab === "overview" && (
           <div className="stat-grid">
