@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
 import {
   Bell,
   CalendarDays,
@@ -59,6 +58,7 @@ import {
   votePoll,
 } from "./wavoData";
 import "./styles.css";
+import AuthScreen from "./AuthScreen";
 import ConversationExperience from "./ConversationExperience";
 import CommandPalette from "./CommandPalette";
 import "./mobile-ux.css";
@@ -116,84 +116,6 @@ function Toast({ message, onClose }) {
     <button className="toast" onClick={onClose}>
       {message}
     </button>
-  );
-}
-
-function AuthScreen({ onReady }) {
-  const { pathname } = useLocation();
-  const navigate = useNavigate();
-  const mode = pathname.replace(/\/+$/, "") === "/signup" ? "signup" : "login";
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  async function submit(e) {
-    e.preventDefault();
-    const requestedUsername = username.trim();
-    if (mode === "signup" && /^\+test_/i.test(requestedUsername) &&
-        !/^\+test_[a-z0-9_]{3,24}$/i.test(requestedUsername)) {
-      setError("Test account names use +TEST_name (3–24 letters, numbers or underscores).");
-      return;
-    }
-    setBusy(true);
-    setError("");
-    const email = `${username.trim().toLowerCase()}@wavo.app`;
-    try {
-      if (mode === "login") {
-        const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
-        if (authError) throw authError;
-        onReady?.(data.session);
-      } else {
-        const { data, error: authError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { data: { username: username.trim() } },
-        });
-        if (authError) throw authError;
-        if (!data.user) throw new Error("Signup failed");
-        navigate("/login");
-        setPassword("");
-        setError("Account created. Log in to enter Wavo.");
-      }
-    } catch (err) {
-      const msg = String(err?.message || "").toLowerCase();
-      setError(msg.includes("invalid login") ? "Incorrect username or password." : GENERIC_ERROR);
-      console.error("[wavo] auth", err);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <main className="auth-page">
-      <div className="auth-orbit auth-orbit-a" />
-      <div className="auth-orbit auth-orbit-b" />
-      <section className="auth-card">
-        <div className="wavo-mark">W</div>
-        <div>
-          <span className="eyebrow">YOUR PEOPLE, TOGETHER</span>
-          <h1>Welcome to Wavo.</h1>
-          <p className="muted">Talk, decide, plan and actually do things with the people you know.</p>
-        </div>
-        <form onSubmit={submit} className="stack-form">
-          <label>
-            Username
-            <input value={username} onChange={(e) => setUsername(e.target.value)} autoCapitalize="none" autoCorrect="off" required />
-          </label>
-          {mode === "signup" && /^\+test_/i.test(username.trim()) && (
-            <div className="form-note">This is a test account. It won't count toward Wavo's real-user statistics.</div>
-          )}
-          <label>
-            Password
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required />
-          </label>
-          {error && <div className="form-note">{error}</div>}
-          <button className="primary-btn" disabled={busy}>{busy ? "Working…" : mode === "login" ? "Enter Wavo" : "Create account"}</button>
-        </form>
-        <button className="text-btn" onClick={() => navigate(mode === "login" ? "/signup" : "/login")}>{mode === "login" ? "New here? Create an account" : "Already have an account? Log in"}</button>
-      </section>
-    </main>
   );
 }
 

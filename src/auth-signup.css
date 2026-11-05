@@ -1,0 +1,65 @@
+/* Signup-specific controls, separate from the rest of Wavo's forms. */
+.auth-card-signup {
+  width: min(100%, 540px);
+  gap: 19px;
+}
+.auth-intro { display: grid; gap: 8px; }
+.auth-form { gap: 16px; }
+.auth-section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+  color: #eef4ff;
+  font-size: 15px;
+  font-weight: 850;
+}
+.auth-section-title span { font-size: 11px; font-weight: 600; color: #8ba0c0; }
+.auth-two-column { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.auth-optional { font-weight: 500; color: #9eacc5; }
+.auth-form input:not([type="checkbox"]) {
+  min-width: 0;
+  width: 100%;
+  min-height: 46px;
+  font-size: 16px; /* Prevent mobile Safari from zooming the form on focus. */
+}
+.auth-form input[aria-invalid="true"] { border-color: #ff8c9e; }
+.auth-hint, .auth-field-error { display: block; font-size: 11px; line-height: 1.5; font-weight: 500; }
+.auth-hint { color: #94a5c2; }
+.auth-field-error { color: #ff9eac; }
+.auth-username-field, .auth-password-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0 11px;
+  background: rgba(255,255,255,.04);
+}
+.auth-username-field > span { color: #94beff; font-size: 17px; }
+.auth-username-field input, .auth-password-field input {
+  border: 0 !important;
+  background: transparent !important;
+  padding-left: 0;
+  padding-right: 0;
+  box-shadow: none !important;
+}
+.auth-password-field > button { color: #95c3ff; font-size: 12px; font-weight: 750; flex-shrink: 0; padding: 8px 0; }
+.auth-agreement {
+  display: flex !important;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px !important;
+  font-size: 12px !important;
+  line-height: 1.5;
+  font-weight: 500 !important;
+}
+.auth-agreement input { margin-top: 3px; width: 17px; height: 17px; flex-shrink: 0; accent-color: #6d8cff; }
+.auth-agreement a { color: #90c8ff; text-decoration: underline; text-underline-offset: 2px; }
+.auth-age-note { color: #9dacbf; font-size: 11px; line-height: 1.5 !important; }
+.auth-card-signup .primary-btn { min-height: 47px; }
+@media (max-width: 420px) {
+  .auth-card-signup { padding: 22px 18px; border-radius: 22px; }
+  .auth-two-column { grid-template-columns: 1fr; }
+}
