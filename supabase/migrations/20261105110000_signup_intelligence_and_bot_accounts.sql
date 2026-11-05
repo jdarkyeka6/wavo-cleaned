@@ -60,6 +60,10 @@ declare
   app_meta jsonb := coalesce(new.raw_app_meta_data, '{}'::jsonb);
   kind text := coalesce(app_meta->>'account_type', 'human');
 begin
+  -- Basic honeypot for unsophisticated autofill bots; not a substitute for CAPTCHA.
+  if nullif(meta->>'signup_trap', '') is not null then
+    raise exception 'signup_validation_failed';
+  end if;
   if kind not in ('human', 'official_bot', 'integration_bot') then
     kind := 'human';
   end if;
@@ -84,11 +88,19 @@ begin
     left(nullif(meta->>'signup_landing_path', ''), 300),
     left(nullif(meta->>'signup_user_agent', ''), 512),
     new.email_confirmed_at,
-    case
+    (case
       when kind in ('official_bot', 'integration_bot') then array['approved_bot_account']::text[]
       when new.email_confirmed_at is null then array['email_not_yet_verified']::text[]
       else '{}'::text[]
-    end,
+    end) ||
+    (case
+      when nullif(meta->>'signup_user_agent', '') is not null
+       and (select count(*) from public.signup_intelligence s
+            where s.user_agent = left(meta->>'signup_user_agent', 512)
+              and s.created_at > now() - interval '10 minutes') >= 3
+      then array['rapid_same_browser_signup_burst']::text[]
+      else '{}'::text[]
+    end),
     now()
   )
   on conflict (user_id) do update set
