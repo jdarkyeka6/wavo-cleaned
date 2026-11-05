@@ -60,7 +60,7 @@ export default function SignupIntelligence() {
     unverified: rows.filter((row) => !row.email_verified_at).length,
     bots: rows.filter((row) => ["official_bot", "integration_bot"].includes(profiles[row.user_id]?.account_type)).length,
     internal: rows.filter((row) => profiles[row.user_id]?.is_internal).length,
-    unknown: rows.filter((row) => !row.signup_source || row.signup_source === "unknown").length,
+    unknown: rows.filter((row) => !row.signup_source || ["unknown", "legacy_existing"].includes(row.signup_source)).length,
   }), [rows, profiles]);
 
   async function createBot(event) {
@@ -108,7 +108,8 @@ export default function SignupIntelligence() {
         {rows.map((row) => {
           const profile = profiles[row.user_id] || {};
           const isBot = ["official_bot", "integration_bot"].includes(profile.account_type);
-          const source = row.utm_source ? `${row.signup_source} · ${row.utm_source}` : row.signup_source;
+          const sourceLabel = row.signup_source === "legacy_existing" ? "legacy · source not recorded" : (row.signup_source || "unknown");
+          const source = row.utm_source ? `${sourceLabel} · ${row.utm_source}` : sourceLabel;
           return <div className="signup-intel-row" key={row.user_id}>
             <span><strong>@{profile.username || "unknown"}</strong><small>{new Date(row.created_at).toLocaleString()}</small></span>
             <span>{source || "unknown"}{row.referrer_host && <small>from {row.referrer_host}</small>}{row.utm_campaign && <small>campaign: {row.utm_campaign}</small>}</span>
