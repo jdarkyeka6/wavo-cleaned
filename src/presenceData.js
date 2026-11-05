@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { optionalBackend } from './lib/optionalBackend'
 
 const DEFAULTS = {
   availability: 'active',
@@ -14,25 +15,31 @@ const DEFAULTS = {
 }
 
 export async function getOwnPresence(userId) {
-  if (!userId) return null
+  if (!userId || optionalBackend.unavailable('presence')) return null
   const { data, error } = await supabase
     .from('wavo_presence')
     .select('*')
     .eq('user_id', userId)
     .maybeSingle()
-  if (error) throw error
+  if (error) {
+    if (optionalBackend.markMissing('presence', error)) return null
+    throw error
+  }
   return data || { user_id: userId, ...DEFAULTS }
 }
 
 export async function heartbeatPresence(userId) {
-  if (!userId) return
+  if (!userId || optionalBackend.unavailable('presence')) return
   const now = new Date().toISOString()
   const { data: existing, error: readError } = await supabase
     .from('wavo_presence')
     .select('user_id')
     .eq('user_id', userId)
     .maybeSingle()
-  if (readError) throw readError
+  if (readError) {
+    if (optionalBackend.markMissing('presence', readError)) return
+    throw readError
+  }
 
   if (existing) {
     const { error } = await supabase
@@ -54,7 +61,9 @@ export async function heartbeatPresence(userId) {
 
 export async function savePresence(userId, patch = {}) {
   if (!userId) throw new Error('You are not signed in.')
+  if (optionalBackend.unavailable('presence')) throw new Error('Presence is temporarily unavailable.')
   const current = await getOwnPresence(userId)
+  if (!current) throw new Error('Presence is temporarily unavailable.')
   const now = new Date().toISOString()
   const next = {
     user_id: userId,
@@ -78,7 +87,10 @@ export async function savePresence(userId, patch = {}) {
     .upsert(next, { onConflict: 'user_id' })
     .select('*')
     .single()
-  if (error) throw error
+  if (error) {
+    if (optionalBackend.markMissing('presence', error)) throw new Error('Presence is temporarily unavailable.')
+    throw error
+  }
   return data
 }
 
@@ -95,8 +107,12 @@ export async function setPresenceActivity(userId, { kind = 'status', text = '', 
 }
 
 export async function getVisiblePresence() {
+  if (optionalBackend.unavailable('presence')) return []
   const { data, error } = await supabase.rpc('get_visible_presence')
-  if (error) throw error
+  if (error) {
+    if (optionalBackend.markMissing('presence', error)) return []
+    throw error
+  }
   return data || []
 }
 

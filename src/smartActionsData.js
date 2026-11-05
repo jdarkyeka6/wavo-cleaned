@@ -1,9 +1,11 @@
 import { supabase } from './supabaseClient'
+import { optionalBackend } from './lib/optionalBackend'
 
 export async function createDmPoll(creatorId, receiverId, question, options = []) {
   const cleanQuestion = String(question || '').trim().slice(0, 240)
   const cleanOptions = [...new Set(options.map((value) => String(value || '').trim()).filter(Boolean))].slice(0, 6)
   if (!cleanQuestion || cleanOptions.length < 2) throw new Error('A poll needs a question and at least two options.')
+  if (optionalBackend.unavailable('dm_polls')) throw new Error('DM polls are temporarily unavailable.')
   const { data, error } = await supabase
     .from('dm_polls')
     .insert({
@@ -15,12 +17,15 @@ export async function createDmPoll(creatorId, receiverId, question, options = []
     })
     .select('*')
     .single()
-  if (error) throw error
+  if (error) {
+    if (optionalBackend.markMissing('dm_polls', error)) throw new Error('DM polls are temporarily unavailable.')
+    throw error
+  }
   return data
 }
 
 export async function getDmPolls(me, peer) {
-  if (!me || !peer) return []
+  if (!me || !peer || optionalBackend.unavailable('dm_polls')) return []
   const filter = `and(creator_id.eq.${me},receiver_id.eq.${peer}),and(creator_id.eq.${peer},receiver_id.eq.${me})`
   const { data: polls, error } = await supabase
     .from('dm_polls')
@@ -28,7 +33,10 @@ export async function getDmPolls(me, peer) {
     .or(filter)
     .order('created_at', { ascending: false })
     .limit(8)
-  if (error) throw error
+  if (error) {
+    if (optionalBackend.markMissing('dm_polls', error)) return []
+    throw error
+  }
   if (!polls?.length) return []
   const { data: votes, error: voteError } = await supabase
     .from('dm_poll_votes')
@@ -39,12 +47,16 @@ export async function getDmPolls(me, peer) {
 }
 
 export async function voteDmPoll(pollId, userId, optionIndex) {
+  if (optionalBackend.unavailable('dm_polls')) throw new Error('DM polls are temporarily unavailable.')
   const { data, error } = await supabase
     .from('dm_poll_votes')
     .upsert({ poll_id: pollId, user_id: userId, option_index: optionIndex, updated_at: new Date().toISOString() }, { onConflict: 'poll_id,user_id' })
     .select('*')
     .single()
-  if (error) throw error
+  if (error) {
+    if (optionalBackend.markMissing('dm_polls', error)) throw new Error('DM polls are temporarily unavailable.')
+    throw error
+  }
   return data
 }
 

@@ -304,7 +304,7 @@ export default function PeopleDashboard() {
     <section className="people-dashboard">
       <div className="pd-heading">
         <div><span className="pd-kicker">WHAT’S HAPPENING?</span><h2>Your people, right now.</h2></div>
-        <button className="pd-settings" onClick={() => setSettingsOpen(true)}><Settings2 size={17} /><span>Presence</span></button>
+        {own ? <button className="pd-settings" onClick={() => setSettingsOpen(true)}><Settings2 size={17} /><span>Presence</span></button> : <span className="pd-kicker" title="Presence backend is unavailable">Presence unavailable</span>}
       </div>
 
       <div className="pd-summary">
