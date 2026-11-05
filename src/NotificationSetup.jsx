@@ -91,13 +91,7 @@ export default function NotificationSetup() {
           setVisible(true)
         }
 
-        const actionListener = await PushNotifications.addListener(
-          'pushNotificationActionPerformed',
-          ({ notification }) => {
-            const url = safeNotificationUrl(notification?.data?.url)
-            if (url) window.location.assign(url)
-          },
-        )
+        // Notification taps are handled at native boot, before auth / push registration.
 
         const receivedListener = await PushNotifications.addListener(
           'pushNotificationReceived',
@@ -111,7 +105,6 @@ export default function NotificationSetup() {
         )
 
         return () => {
-          actionListener.remove()
           receivedListener.remove()
         }
       }
