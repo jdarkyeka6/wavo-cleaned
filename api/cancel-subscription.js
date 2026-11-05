@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
+import { getStripeCustomerId } from "../server/stripeCustomerStore.js";
 
 const ACTIVE_STATUSES = new Set(["active", "trialing"]);
 
@@ -40,12 +41,13 @@ export default async function handler(req, res) {
       .single();
 
     if (profileError) return res.status(500).json({ error: "Profile lookup failed: " + profileError.message });
-    if (!profile?.stripe_customer_id) {
+    const customerId = await getStripeCustomerId(admin, user.id, profile?.stripe_customer_id);
+    if (!customerId) {
       return res.status(404).json({ error: "No Stripe subscription is linked to this Wavo account." });
     }
 
     const subscriptions = await stripe.subscriptions.list({
-      customer: profile.stripe_customer_id,
+      customer: customerId,
       status: "all",
       limit: 100,
     });

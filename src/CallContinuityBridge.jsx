@@ -85,7 +85,7 @@ export default function CallContinuityBridge() {
       const me = auth?.user?.id
       if (!me) return
       const { data: peer, error: peerError } = await supabase
-        .from('profiles')
+        .from('wavo_public_profiles_v1')
         .select('id,username')
         .ilike('username', username)
         .limit(1)

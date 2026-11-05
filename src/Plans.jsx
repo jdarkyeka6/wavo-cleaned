@@ -74,7 +74,7 @@ export default function Plans({ group, userId, isAdmin }) {
     const ids = [...new Set((r || []).map((x) => x.user_id))];
     if (ids.length) {
       const { data: profs } = await supabase
-        .from("profiles")
+        .from("wavo_public_profiles_v1")
         .select("id, username")
         .in("id", ids);
       setNames(Object.fromEntries((profs || []).map((x) => [x.id, x.username])));

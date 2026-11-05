@@ -153,7 +153,7 @@ export default function PlusPlanEnhancement() {
       const chat = resolveCurrentChat()
       if (!chat) return
       if (chat.kind === 'dm') {
-        const { data: friend } = await supabase.from('profiles').select('id,username').ilike('username', chat.username).limit(1).maybeSingle()
+        const { data: friend } = await supabase.from('wavo_public_profiles_v1').select('id,username').ilike('username', chat.username).limit(1).maybeSingle()
         if (!friend?.id || cancelled) return
         const chatId = [userId, friend.id].sort().join('_')
         const { data } = await supabase.from('messages').select('id,sender_id,content,type,file_url,created_at').eq('chat_id', chatId).order('created_at', { ascending: true }).limit(160)

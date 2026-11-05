@@ -27,7 +27,7 @@ async function resolvePeer() {
   const username = usernameFromChat()
   if (!username) return null
   const { data, error } = await supabase
-    .from('profiles')
+    .from('wavo_public_profiles_v1')
     .select('id,username,avatar_url,status')
     .ilike('username', username)
     .limit(1)

@@ -79,7 +79,7 @@ export default function GroupMemberManager() {
     let profiles = []
     if (profileIds.length) {
       const { data, error } = await supabase
-        .from('profiles')
+        .from('wavo_public_profiles_v1')
         .select('id,username,avatar_url,status')
         .in('id', profileIds)
       if (error) throw error

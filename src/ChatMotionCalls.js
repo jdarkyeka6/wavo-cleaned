@@ -280,7 +280,7 @@ export default function ChatMotionCalls() {
 
   async function profileForUsername(username) {
     const { data, error: lookupError } = await supabase
-      .from('profiles')
+      .from('wavo_public_profiles_v1')
       .select('id, username, avatar_url, status')
       .ilike('username', username)
       .limit(1)
@@ -548,7 +548,7 @@ export default function ChatMotionCalls() {
           }
           if (row.status !== 'ringing' || activeCallRef.current || incomingCallRef.current) return
           try {
-            const { data: peer } = await supabase.from('profiles').select('id, username, avatar_url, status').eq('id', row.caller_id).maybeSingle()
+            const { data: peer } = await supabase.from('wavo_public_profiles_v1').select('id, username, avatar_url, status').eq('id', row.caller_id).maybeSingle()
             const next = { ...row, peer: peer || { id: row.caller_id, username: 'Wavo friend' } }
             incomingCallRef.current = next
             setIncomingCall(next)
@@ -574,7 +574,7 @@ export default function ChatMotionCalls() {
         const open = await getOpenCalls(user.id)
         const ringing = open.find((row) => row.callee_id === user.id && row.status === 'ringing')
         if (ringing && !activeCallRef.current && !incomingCallRef.current) {
-          const { data: peer } = await supabase.from('profiles').select('id, username, avatar_url, status').eq('id', ringing.caller_id).maybeSingle()
+          const { data: peer } = await supabase.from('wavo_public_profiles_v1').select('id, username, avatar_url, status').eq('id', ringing.caller_id).maybeSingle()
           const next = { ...ringing, peer: peer || { id: ringing.caller_id, username: 'Wavo friend' } }
           incomingCallRef.current = next
           setIncomingCall(next)
