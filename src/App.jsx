@@ -130,6 +130,12 @@ function AuthScreen({ onReady }) {
 
   async function submit(e) {
     e.preventDefault();
+    const requestedUsername = username.trim();
+    if (mode === "signup" && /^\+test_/i.test(requestedUsername) &&
+        !/^\+test_[a-z0-9_]{3,24}$/i.test(requestedUsername)) {
+      setError("Test account names use +TEST_name (3–24 letters, numbers or underscores).");
+      return;
+    }
     setBusy(true);
     setError("");
     const email = `${username.trim().toLowerCase()}@wavo.app`;
@@ -175,6 +181,9 @@ function AuthScreen({ onReady }) {
             Username
             <input value={username} onChange={(e) => setUsername(e.target.value)} autoCapitalize="none" autoCorrect="off" required />
           </label>
+          {mode === "signup" && /^\+test_/i.test(username.trim()) && (
+            <div className="form-note">This is a test account. It won't count toward Wavo's real-user statistics.</div>
+          )}
           <label>
             Password
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required />
