@@ -8,6 +8,25 @@ const client = createClient(
 
 function normaliseTestAccountCredentials(credentials = {}) {
   const rawUsername = String(credentials?.options?.data?.username || "").trim();
+
+  // +TEST_name is a signup-only marker. Keep it in auth metadata so the
+  // server-side profile trigger, not a client-provided is_internal flag,
+  // can classify this account. The actual login name stays "name".
+  const prefixedTest = /^\+test_([a-z0-9_]{3,24})$/i.exec(rawUsername);
+  if (prefixedTest) {
+    return {
+      ...credentials,
+      email: `${prefixedTest[1].toLowerCase()}@wavo.app`,
+      options: {
+        ...credentials.options,
+        data: {
+          ...(credentials.options?.data || {}),
+          username: rawUsername,
+        },
+      },
+    };
+  }
+
   const match = /^test:(.+)$/i.exec(rawUsername);
   if (!match) return credentials;
 
@@ -30,6 +49,10 @@ function normaliseTestAccountCredentials(credentials = {}) {
 
 function normaliseTestLoginCredentials(credentials = {}) {
   const email = String(credentials?.email || "").trim();
+  const prefixedTest = /^\+test_([a-z0-9_]{3,24})@wavo\.app$/i.exec(email);
+  if (prefixedTest) {
+    return { ...credentials, email: `${prefixedTest[1].toLowerCase()}@wavo.app` };
+  }
   const match = /^test:(.+)@wavo\.app$/i.exec(email);
   if (!match) return credentials;
 
