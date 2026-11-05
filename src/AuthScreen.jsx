@@ -28,7 +28,7 @@ function friendlyAuthError(error, signup) {
 
 const EMPTY = {
   firstName: "", lastName: "", birthday: "", username: "", email: "",
-  password: "", confirmPassword: "", agreed: false,
+  password: "", confirmPassword: "", agreed: false, guardianApproved: false,
 };
 
 export default function AuthScreen({ onReady }) {
@@ -39,12 +39,18 @@ export default function AuthScreen({ onReady }) {
   const [loginIdentifier, setLoginIdentifier] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showGuardianReview, setShowGuardianReview] = useState(false);
   const [errors, setErrors] = useState({});
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
 
   const change = (key, value) => {
-    setForm((previous) => ({ ...previous, [key]: value }));
+    setForm((previous) => ({
+      ...previous, [key]: value,
+      // Approval applies to the birthday the parent reviewed.
+      ...(key === "birthday" ? { guardianApproved: false } : {}),
+    }));
+    if (key === "birthday") setShowGuardianReview(false);
     setErrors((previous) => ({ ...previous, [key]: undefined }));
     setNotice("");
   };
@@ -99,6 +105,8 @@ export default function AuthScreen({ onReady }) {
             birthday: form.birthday,
             real_email: email,
             signup_version: "2",
+            // This records an on-device acknowledgement, not verified parent identity.
+            guardian_acknowledged: age !== null && age >= 8 && age < 12 && form.guardianApproved,
           },
         },
       });
@@ -172,6 +180,36 @@ export default function AuthScreen({ onReady }) {
                 {errors.birthday && <small className="auth-field-error">{errors.birthday}</small>}
               </label>
 
+              {age !== null && age >= 8 && age < 12 && (
+                <section className="auth-parent-step" aria-label="Parent or guardian review">
+                  <strong>Parent or guardian approval</strong>
+                  <p>You're under 12. Please show this signup to a parent or guardian.</p>
+                  {!form.guardianApproved ? (
+                    <>
+                      <button type="button" className="auth-parent-review-trigger" onClick={() => setShowGuardianReview(true)}>
+                        Show this to your parent or guardian
+                      </button>
+                      {showGuardianReview && (
+                        <div className="auth-parent-review-details">
+                          <strong>For a parent or guardian</strong>
+                          <p>Your child wants to use Wavo, a messaging and social app that lets people share messages, posts, media and plans. Wavo stores account details and allows users to interact with each other.</p>
+                          <p>Please review the <a href="/terms.html" target="_blank" rel="noreferrer">Terms of Service</a> and <a href="/privacy.html" target="_blank" rel="noreferrer">Privacy Policy</a> before deciding.</p>
+                          <button type="button" className="auth-parent-review-confirm" onClick={() => { change("guardianApproved", true); setShowGuardianReview(false); }}>
+                            I am the parent or guardian. I approve.
+                          </button>
+                          <small>This records an acknowledgement on this device. Wavo cannot verify your identity from a button alone.</small>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="auth-parent-review-approved" role="status">Parent/guardian acknowledgement recorded on this device.
+                      <button type="button" onClick={() => change("guardianApproved", false)}>Change</button>
+                    </div>
+                  )}
+                  {errors.guardianApproved && <small className="auth-field-error">{errors.guardianApproved}</small>}
+                </section>
+              )}
+
               <div className="auth-section-title">Your account <span>How friends find you</span></div>
               <label>Username
                 <div className="auth-username-field"><span>@</span><input value={form.username} onChange={(event) => change("username", event.target.value.toLowerCase())} autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="username" maxLength={30} placeholder="username" required aria-invalid={Boolean(errors.username)} /></div>
@@ -196,7 +234,7 @@ export default function AuthScreen({ onReady }) {
                 <span>I agree to Wavo's <a href="/terms.html" target="_blank" rel="noreferrer">Terms</a> and <a href="/privacy.html" target="_blank" rel="noreferrer">Privacy Policy</a>.</span>
               </label>
               {errors.agreed && <small className="auth-field-error">{errors.agreed}</small>}
-              <p className="auth-age-note">Wavo is designed for ages 8+. Ages 8–12 need verified parent or guardian approval; registration for this age group is not open until that process is ready.</p>
+              <p className="auth-age-note">Wavo is designed for ages 8+. Ages 8–11 are asked to show signup to a parent or guardian. On-device acknowledgement is not independent identity verification.</p>
             </>
           ) : (
             <>
