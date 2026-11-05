@@ -1,9 +1,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const allowedOrigins = new Set(["https://wavo.lol", "https://www.wavo.lol"]);
-const corsHeaders = (origin: string | null) => ({
-  "Access-Control-Allow-Origin": origin && allowedOrigins.has(origin) ? origin : "https://wavo.lol",
+const corsHeaders = (_origin: string | null) => ({
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Vary": "Origin",
@@ -37,7 +36,7 @@ Deno.serve(async (req) => {
   const displayName = String(body.displayName || "").trim();
   const description = String(body.description || "").trim().slice(0, 160);
   const accountType = String(body.accountType || "official_bot");
-  if (!/^[a-z0-9_]{3,24}$/.test(username) || !displayName || displayName.length > 50) {
+  if (!/^bot_[a-z0-9_]{3,19}$/.test(username) || !displayName || displayName.length > 50) {
     return json({ ok: false, error: "invalid_username_or_display_name" }, 400);
   }
   if (!["official_bot", "integration_bot"].includes(accountType)) {
