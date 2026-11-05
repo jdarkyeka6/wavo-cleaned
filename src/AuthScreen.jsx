@@ -107,6 +107,19 @@ export default function AuthScreen({ onReady }) {
             signup_version: "2",
             // This records an on-device acknowledgement, not verified parent identity.
             guardian_acknowledged: age !== null && age >= 8 && age < 12 && form.guardianApproved,
+            // Attribution fields are analytics hints, not trusted identity or permissions.
+            signup_source: new URLSearchParams(window.location.search).get("utm_source")
+              ? "campaign"
+              : (document.referrer ? "referral_or_search" : "direct"),
+            signup_referrer_host: (() => {
+              try { return document.referrer ? new URL(document.referrer).hostname : ""; }
+              catch { return ""; }
+            })(),
+            signup_utm_source: new URLSearchParams(window.location.search).get("utm_source") || "",
+            signup_utm_medium: new URLSearchParams(window.location.search).get("utm_medium") || "",
+            signup_utm_campaign: new URLSearchParams(window.location.search).get("utm_campaign") || "",
+            signup_landing_path: window.location.pathname,
+            signup_user_agent: navigator.userAgent.slice(0, 512),
           },
         },
       });
