@@ -107,6 +107,20 @@ export default function AuthScreen({ onReady }) {
             signup_version: "2",
             // This records an on-device acknowledgement, not verified parent identity.
             guardian_acknowledged: age !== null && age >= 8 && age < 12 && form.guardianApproved,
+            // Attribution fields are analytics hints, not trusted identity or permissions.
+            signup_source: new URLSearchParams(window.location.search).get("utm_source")
+              ? "campaign"
+              : (document.referrer ? "referral_or_search" : "direct"),
+            signup_referrer_host: (() => {
+              try { return document.referrer ? new URL(document.referrer).hostname : ""; }
+              catch { return ""; }
+            })(),
+            signup_utm_source: new URLSearchParams(window.location.search).get("utm_source") || "",
+            signup_utm_medium: new URLSearchParams(window.location.search).get("utm_medium") || "",
+            signup_utm_campaign: new URLSearchParams(window.location.search).get("utm_campaign") || "",
+            signup_landing_path: window.location.pathname,
+            signup_user_agent: navigator.userAgent.slice(0, 512),
+            signup_trap: form.signupTrap,
           },
         },
       });
@@ -211,6 +225,7 @@ export default function AuthScreen({ onReady }) {
               )}
 
               <div className="auth-section-title">Your account <span>How friends find you</span></div>
+              <label className="auth-signup-trap" aria-hidden="true">Leave this field empty<input tabIndex={-1} autoComplete="off" value={form.signupTrap} onChange={(event) => change("signupTrap", event.target.value)} /></label>
               <label>Username
                 <div className="auth-username-field"><span>@</span><input value={form.username} onChange={(event) => change("username", event.target.value.toLowerCase())} autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="username" maxLength={30} placeholder="username" required aria-invalid={Boolean(errors.username)} /></div>
                 <small className="auth-hint">3–24 letters, numbers or underscores. For test accounts, use +TEST_name.</small>

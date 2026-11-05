@@ -98,3 +98,8 @@
 .auth-parent-review-details small { color: #a9b6cb; font-size: 11px; line-height: 1.5; }
 .auth-parent-review-approved { display: flex; align-items: center; gap: 10px; color: #aee0d0; font-size: 12px; }
 .auth-parent-review-approved button { color: #b9d0ff; text-decoration: underline; background: none; cursor: pointer; border: 0; }
+
+
+/* Honeypot input: invisible to people, but exposed to simple form autofill bots. */
+.auth-signup-trap{position:absolute!important;left:-10000px!important;top:auto!important;width:1px!important;height:1px!important;overflow:hidden!important;}
+.auth-signup-trap input{position:absolute!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important;}
