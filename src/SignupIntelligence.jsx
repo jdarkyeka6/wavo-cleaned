@@ -59,6 +59,7 @@ export default function SignupIntelligence() {
     total: rows.length,
     unverified: rows.filter((row) => !row.email_verified_at).length,
     bots: rows.filter((row) => ["official_bot", "integration_bot"].includes(profiles[row.user_id]?.account_type)).length,
+    internal: rows.filter((row) => profiles[row.user_id]?.is_internal).length,
     unknown: rows.filter((row) => !row.signup_source || row.signup_source === "unknown").length,
   }), [rows, profiles]);
 
@@ -114,6 +115,7 @@ export default function SignupIntelligence() {
             <span>{row.utm_medium || "no medium"}<small>{row.landing_path || "landing path unavailable"} · {deviceLabel(row.user_agent)}</small></span>
             <span className="signup-intel-tags">
               {isBot ? <em className="bot"> <Bot size={12}/> {profile.account_type.replace("_", " ")} </em> : <em className="human"><UserRound size={12}/> human account</em>}
+              {profile.is_internal && !isBot && <em className="pending">internal / test</em>}
               {row.email_verified_at ? <em className="verified"><CheckCircle2 size={12}/> verified</em> : <em className="pending">email pending</em>}
               {row.automation_signals?.filter((s) => s !== "approved_bot_account").map((signal) => <small key={signal}>{signal.replaceAll("_", " ")}</small>)}
             </span>
