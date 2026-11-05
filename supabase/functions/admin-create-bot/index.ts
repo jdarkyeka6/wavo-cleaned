@@ -1,16 +1,18 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const cors = {
-  "Access-Control-Allow-Origin": "https://www.wavo.lol",
+const allowedOrigins = new Set(["https://wavo.lol", "https://www.wavo.lol"]);
+const corsHeaders = (origin: string | null) => ({
+  "Access-Control-Allow-Origin": origin && allowedOrigins.has(origin) ? origin : "https://wavo.lol",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+  "Vary": "Origin",
+});
 const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
+  new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(null), "Content-Type": "application/json" } });
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req.headers.get("Origin")) });
   if (req.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, 405);
 
   const url = Deno.env.get("SUPABASE_URL");
@@ -59,7 +61,7 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: createError?.message || "bot_creation_failed" }, 400);
   }
   const { error: updateError } = await admin.from("profiles")
-    .update({ account_type: accountType })
+    .update({ account_type: accountType, is_internal: true, bio: description || "Official Wavo bot account" })
     .eq("id", created.user.id);
   if (updateError) {
     await admin.auth.admin.deleteUser(created.user.id);
