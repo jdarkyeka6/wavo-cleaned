@@ -9,6 +9,13 @@ const PLANS = {
   black: { label: "Wavo Black", amount: 9999, tier: "black" },
 };
 
+// Coupons must be pre-created in the matching Stripe environment.
+const WELCOME_OFFERS = {
+  half1: { env: "WAVO_WELCOME_HALF1_COUPON_ID", percent: 50, duration: "once" },
+  twoforone: { env: "WAVO_WELCOME_TWOFORONE_COUPON_ID", percent: 50, duration: "repeating", months: 2 },
+  quarter2: { env: "WAVO_WELCOME_QUARTER2_COUPON_ID", percent: 25, duration: "repeating", months: 2 },
+};
+
 const TIER_RANK = { free: 0, premium: 1, plus: 2, pro: 3, vip: 3, black: 4 };
 
 export default async function handler(req, res) {
@@ -39,6 +46,13 @@ export default async function handler(req, res) {
     const requested = String(body?.plan || "standard");
     const plan = PLANS[requested] ? requested : "standard";
     const selected = PLANS[plan];
+    const welcomeOffer = typeof body?.welcomeOffer === "string" ? body.welcomeOffer : "";
+    if (welcomeOffer && process.env.WAVO_WELCOME_OFFERS_ENABLED !== "true") {
+      return res.status(400).json({ error: "Welcome deals are not available yet." });
+    }
+    if (welcomeOffer && (!WELCOME_OFFERS[welcomeOffer] || plan === "student")) {
+      return res.status(400).json({ error: "This plan is not eligible for that welcome deal." });
+    }
 
     const { data: profile, error: profErr } = await admin
       .from("profiles")
@@ -88,6 +102,21 @@ export default async function handler(req, res) {
       await admin.from("profiles").update({ stripe_customer_id: customerId }).eq("id", user.id);
     }
 
+    let checkoutCoupon = null;
+    if (welcomeOffer) {
+      const history = await stripe.subscriptions.list({ customer: customerId, status: "all", limit: 1 });
+      if (history.data.length) return res.status(400).json({ error: "Welcome offers are for first-time subscribers only." });
+      const spec = WELCOME_OFFERS[welcomeOffer];
+      const couponId = process.env[spec.env];
+      if (!couponId) return res.status(503).json({ error: "This welcome deal is being set up. Please try again later." });
+      const coupon = await stripe.coupons.retrieve(couponId);
+      if (!coupon.valid || coupon.percent_off !== spec.percent || coupon.duration !== spec.duration ||
+          (spec.months && coupon.duration_in_months !== spec.months)) {
+        return res.status(503).json({ error: "This welcome deal is temporarily unavailable." });
+      }
+      checkoutCoupon = coupon.id;
+    }
+
     const origin = req.headers.origin || (req.headers.host ? `https://${req.headers.host}` : "https://www.wavo.lol");
     const lineItem = selected.priceId
       ? { quantity: 1, price: selected.priceId }
@@ -108,8 +137,9 @@ export default async function handler(req, res) {
       success_url: `${origin}/?premium=1&tier=${selected.tier}`,
       cancel_url: `${origin}/?premium=0`,
       client_reference_id: user.id,
-      subscription_data: { metadata: { supabase_uid: user.id, plan, tier: selected.tier } },
-      allow_promotion_codes: true,
+      subscription_data: { metadata: { supabase_uid: user.id, plan, tier: selected.tier, ...(welcomeOffer ? { welcome_offer: welcomeOffer } : {}) } },
+      ...(checkoutCoupon ? { discounts: [{ coupon: checkoutCoupon }] } : {}),
+      allow_promotion_codes: !checkoutCoupon,
     });
 
     return res.status(200).json({ url: session.url });
