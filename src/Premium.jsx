@@ -179,7 +179,7 @@ export default function Premium({
             >
               {busy
                 ? "Opening…"
-                : `Get Premium — ${showWelcome ? `${welcomePriceForMonth(chosen.price, welcomeOffer, 1).toFixed(2)} first month` : formatMonthly(chosen.price)}`}
+                : `Get Premium — ${showWelcome ? `A${welcomePriceForMonth(chosen.price, welcomeOffer, 1).toFixed(2)} first month` : formatMonthly(chosen.price)}`}
             </button>
             {error && <p className="premium-error">{error}</p>}
             <p className="premium-fineprint">
