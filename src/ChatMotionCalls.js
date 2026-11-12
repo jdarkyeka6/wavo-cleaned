@@ -511,6 +511,13 @@ export default function ChatMotionCalls() {
         return
       }
 
+      if (!callsAllowed) {
+        topbar.querySelector('.wavo-video-call-button')?.remove()
+        topbar.classList.remove('wavo-call-ready')
+        button = null
+        return
+      }
+
       if (!topbar.querySelector('.wavo-video-call-button')) {
         button = document.createElement('button')
         button.type = 'button'
@@ -535,9 +542,10 @@ export default function ChatMotionCalls() {
       if (button) button.remove()
       document.querySelector('.chat-topbar')?.classList.remove('wavo-call-ready')
     }
-  }, [])
+  }, [callsAllowed])
 
   useEffect(() => {
+    if (!callsAllowed) { setIncomingCall(null); return undefined }
     let mounted = true
     let incomingChannel = null
     let outgoingChannel = null
