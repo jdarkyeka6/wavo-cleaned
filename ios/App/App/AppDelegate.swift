@@ -2,6 +2,7 @@ import UIKit
 import Capacitor
 import PushKit
 import CallKit
+import StoreKit
 
 @objc(WavoCallKitPlugin)
 public class WavoCallKitPlugin: CAPPlugin, CAPBridgedPlugin {
@@ -91,6 +92,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, C
     private let voipTokenDefaultsKey = "wavo_voip_device_token"
     private let pendingActionDefaultsKey = "wavo_callkit_pending_action"
 
+    // Apple does not permit active CallKit functionality in the mainland China
+    // App Store. Check both the App Store storefront and device region; neither
+    // should activate CallKit in China. Storefront country codes are ISO 3166-1
+    // alpha-3 ("CHN"), whereas Locale uses alpha-2 ("CN").
+    private var callKitAllowed: Bool {
+        let storefrontIsChina = SKPaymentQueue.default().storefront?.countryCode.uppercased() == "CHN"
+        let deviceRegionIsChina = Locale.autoupdatingCurrent.regionCode?.uppercased() == "CN"
+        return !storefrontIsChina && !deviceRegionIsChina
+    }
+
     var voipDeviceToken: String? {
         UserDefaults.standard.string(forKey: voipTokenDefaultsKey)
     }
@@ -100,12 +111,21 @@ class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, C
     }
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        configureCallKit()
-        configurePushKit()
+        if callKitAllowed {
+            configureCallKit()
+            configurePushKit()
+        } else {
+            // Do not register for VoIP pushes in China: incoming PushKit VoIP
+            // notifications ordinarily require immediate CallKit reporting.
+            // China incoming-call alerts require a regular APNs fallback.
+            UserDefaults.standard.removeObject(forKey: voipTokenDefaultsKey)
+            UserDefaults.standard.removeObject(forKey: pendingActionDefaultsKey)
+        }
         return true
     }
 
     private func configureCallKit() {
+        guard callKitAllowed else { return }
         let configuration = CXProviderConfiguration(localizedName: "Wavo")
         configuration.supportsVideo = true
         configuration.maximumCallGroups = 1
@@ -118,6 +138,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, C
     }
 
     private func configurePushKit() {
+        guard callKitAllowed else { return }
         let registry = PKPushRegistry(queue: DispatchQueue.main)
         registry.delegate = self
         registry.desiredPushTypes = [.voIP]
@@ -214,6 +235,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, C
     }
 
     private func handleVoipPayload(_ payload: [AnyHashable: Any], completion: @escaping () -> Void) {
+        guard callKitAllowed else {
+            completion()
+            return
+        }
         let event = (payload["event"] as? String) ?? "incoming"
         guard let callId = payload["callUUID"] as? String,
               let uuid = UUID(uuidString: callId) else {
@@ -313,6 +338,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, C
     }
 
     func requestAnswerCallFromWeb(callId: String) {
+        guard callKitAllowed else { return }
         guard let uuid = UUID(uuidString: callId) else { return }
         if answeredCalls.contains(uuid) { return }
 
@@ -327,6 +353,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, C
     }
 
     func requestEndCallFromWeb(callId: String) {
+        guard callKitAllowed else { return }
         guard let uuid = UUID(uuidString: callId) else { return }
         webRequestedEnds.insert(uuid)
 
