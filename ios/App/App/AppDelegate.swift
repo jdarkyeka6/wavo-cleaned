@@ -23,6 +23,7 @@ public class WavoCallKitPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func getState(_ call: CAPPluginCall) {
         var result: [String: Any] = [:]
+        result["callsAllowed"] = appDelegate?.callsAllowed ?? false
         if let token = appDelegate?.voipDeviceToken {
             result["voipToken"] = token
         }
@@ -96,7 +97,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, C
     // App Store. Check both the App Store storefront and device region; neither
     // should activate CallKit in China. Storefront country codes are ISO 3166-1
     // alpha-3 ("CHN"), whereas Locale uses alpha-2 ("CN").
-    private var callKitAllowed: Bool {
+    var callsAllowed: Bool {
         let storefrontIsChina = SKPaymentQueue.default().storefront?.countryCode.uppercased() == "CHN"
         let deviceRegionIsChina = Locale.autoupdatingCurrent.regionCode?.uppercased() == "CN"
         return !storefrontIsChina && !deviceRegionIsChina
@@ -111,7 +112,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, C
     }
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        if callKitAllowed {
+        if callsAllowed {
             configureCallKit()
             configurePushKit()
         } else {
@@ -125,7 +126,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, C
     }
 
     private func configureCallKit() {
-        guard callKitAllowed else { return }
+        guard callsAllowed else { return }
         let configuration = CXProviderConfiguration(localizedName: "Wavo")
         configuration.supportsVideo = true
         configuration.maximumCallGroups = 1
@@ -138,7 +139,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, C
     }
 
     private func configurePushKit() {
-        guard callKitAllowed else { return }
+        guard callsAllowed else { return }
         let registry = PKPushRegistry(queue: DispatchQueue.main)
         registry.delegate = self
         registry.desiredPushTypes = [.voIP]
@@ -235,7 +236,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, C
     }
 
     private func handleVoipPayload(_ payload: [AnyHashable: Any], completion: @escaping () -> Void) {
-        guard callKitAllowed else {
+        guard callsAllowed else {
             completion()
             return
         }
@@ -338,7 +339,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, C
     }
 
     func requestAnswerCallFromWeb(callId: String) {
-        guard callKitAllowed else { return }
+        guard callsAllowed else { return }
         guard let uuid = UUID(uuidString: callId) else { return }
         if answeredCalls.contains(uuid) { return }
 
@@ -353,7 +354,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, C
     }
 
     func requestEndCallFromWeb(callId: String) {
-        guard callKitAllowed else { return }
+        guard callsAllowed else { return }
         guard let uuid = UUID(uuidString: callId) else { return }
         webRequestedEnds.insert(uuid)
 
