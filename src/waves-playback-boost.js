@@ -76,7 +76,18 @@ document.addEventListener('click', (event) => {
   } catch {}
 }, true)
 
-const mutationObserver = new MutationObserver(() => installObserver())
+// Coalesce DOM changes into one scan per frame instead of rescanning for
+// every React mutation. Observe only added nodes, not attribute updates.
+let scanScheduled = false
+const mutationObserver = new MutationObserver((records) => {
+  if (!records.some((record) => record.addedNodes.length || record.removedNodes.length)) return
+  if (scanScheduled) return
+  scanScheduled = true
+  requestAnimationFrame(() => {
+    scanScheduled = false
+    installObserver()
+  })
+})
 
 function start() {
   installObserver()
