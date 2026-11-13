@@ -1,6 +1,6 @@
-name: SwipeStart to TestFlight
+name: Aether Particle Lab to TestFlight
 
-# Triggered 2026-09-02 for full-screen card focus mode.
+# 2026-11-13: Deploy the repurposed SwipeStart bundle as Aether Particle Lab to TestFlight.
 on:
   workflow_dispatch: {}
   push:
@@ -19,7 +19,7 @@ jobs:
   build:
     runs-on: macos-15
     steps:
-      - name: Check out SwipeStart
+      - name: Check out Aether Particle Lab
         uses: actions/checkout@v4
         with:
           repository: jdarkyeka6/startup-generator
@@ -58,7 +58,7 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" ios/App/App/Info.plist 2>/dev/null || \
           /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" ios/App/App/Info.plist
 
-      - name: Install SwipeStart app icon
+      - name: Install Aether Particle Lab icon
         working-directory: swipestart
         run: |
           python3 scripts/make-ios-icon.py ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png
@@ -78,7 +78,7 @@ jobs:
           bundler-cache: true
           working-directory: swipestart/ios/App
 
-      - name: Build, sign and upload SwipeStart
+      - name: Build, sign and upload Aether Particle Lab
         working-directory: swipestart/ios/App
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
