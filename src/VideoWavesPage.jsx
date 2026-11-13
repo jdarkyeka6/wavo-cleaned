@@ -13,6 +13,12 @@ import { isNativeApp } from './lib/platform'
 const VIDEO_LIMIT_BYTES = 500 * 1024 * 1024
 const VIDEO_LIMIT_MS = 5 * 60_000
 const PAGE_SIZE = 50
+// Keep enough approved videos queued ahead of fast swipes, while mounting only
+// the players around the visible clip so long feeds stay lightweight.
+const MIN_FEED_BUFFER = 30
+const NEXT_PAGE_AHEAD = 12
+const PLAYER_BEHIND = 3
+const PLAYER_AHEAD = 4
 
 function initial(name) {
   return (name?.trim()?.[0] || 'W').toUpperCase()
@@ -414,6 +420,7 @@ export default function VideoWavesPage() {
   const refreshIdRef = useRef(0)
   userIdRef.current = userId
   const shownPosts = posts.filter((post) => channel === 'all' || (channel === 'friends' ? post.kind === 'friend' : post.kind === 'curated' && post.channel_slug === channel))
+  const activeIndex = Math.max(0, shownPosts.findIndex((post) => postKey(post) === activeId))
 
   useEffect(() => {
     document.title = 'Waves | Wavo'
@@ -499,6 +506,7 @@ export default function VideoWavesPage() {
     setError('')
     nextPageRef.current = 1
     hasMoreRef.current = false
+    loadingMoreRef.current = false
     exhaustedChannelsRef.current = new Set()
     let completed = 0
     let failed = 0
@@ -607,12 +615,13 @@ export default function VideoWavesPage() {
   }, [userId, booting])
 
   async function loadMore() {
-    if (!userId || !hasMoreRef.current || loadingMoreRef.current || loading) return
+    if (channel === 'friends' || !userId || !hasMoreRef.current || loadingMoreRef.current || loading) return
     const viewer = userId
+    const requestId = refreshIdRef.current
     loadingMoreRef.current = true
     try {
-      const next = await loadCuratedWaves(nextPageRef.current)
-      if (userIdRef.current !== viewer) return
+      const next = await withFeedTimeout(loadCuratedWaves(nextPageRef.current), 'next Waves page')
+      if (userIdRef.current !== viewer || requestId !== refreshIdRef.current) return
       nextPageRef.current += 1
       if (!next.length || nextPageRef.current >= 500) hasMoreRef.current = false
       if (channel !== 'all' && channel !== 'friends' && !next.some((post) => post.channel_slug === channel)) {
@@ -626,9 +635,13 @@ export default function VideoWavesPage() {
         return [...current, ...ranked]
       })
     } catch (err) {
-      console.warn('[waves] more videos unavailable', err)
-      setToast('Could not load more Waves. Try changing channels.')
-    } finally { loadingMoreRef.current = false }
+      if (requestId === refreshIdRef.current) {
+        console.warn('[waves] more videos unavailable', err)
+        setToast('Could not load more Waves. Scroll again to retry.')
+      }
+    } finally {
+      if (requestId === refreshIdRef.current) loadingMoreRef.current = false
+    }
   }
 
   useEffect(() => {
@@ -640,7 +653,12 @@ export default function VideoWavesPage() {
       return
     }
     const position = shownPosts.findIndex((post) => postKey(post) === activeId)
-    if (position >= 0 && position >= shownPosts.length - 5) void loadMore()
+    // Prime several small pages on entry. After that, always fetch with a
+    // substantial head start rather than waiting until the last five clips.
+    if (shownPosts.length < MIN_FEED_BUFFER ||
+        (position >= 0 && position >= shownPosts.length - NEXT_PAGE_AHEAD)) {
+      void loadMore()
+    }
   }, [activeId, posts, channel, loading])
 
   useEffect(() => {
@@ -734,11 +752,20 @@ export default function VideoWavesPage() {
         {userId && <button className="video-waves-primary" onClick={() => setUploadOpen(true)}>Post a video</button>}
       </>}
     </div>}
-    <section className="video-waves-feed" ref={feedRef} aria-label="Video Waves">
-      {shownPosts.map((post) => <div key={postKey(post)} data-video-wave-id={postKey(post)} className="video-wave-snap">
-        <VideoCard post={post} userId={userId} active={activeId === postKey(post)} muted={muted} setMuted={setMuted}
-          onLike={like} onShare={setToast} onReply={setReplyPost}
-          saved={savedIds.includes(postKey(post))} onSave={() => toggleSaved(post)} onSignal={recordSignal} onReport={setReportPost} />
+    <section className="video-waves-feed" ref={feedRef} aria-label="Video Waves"
+      onScroll={(event) => {
+        const element = event.currentTarget
+        // Scroll-wheel, touch and trackpad movement should all trigger loading,
+        // even if the active-card IntersectionObserver misses a fast swipe.
+        if (element.scrollHeight - element.scrollTop - element.clientHeight <
+            element.clientHeight * NEXT_PAGE_AHEAD) void loadMore()
+      }}>
+      {shownPosts.map((post, index) => <div key={postKey(post)} data-video-wave-id={postKey(post)} className="video-wave-snap">
+        {index >= activeIndex - PLAYER_BEHIND && index <= activeIndex + PLAYER_AHEAD
+          ? <VideoCard post={post} userId={userId} active={activeId === postKey(post)} muted={muted} setMuted={setMuted}
+              onLike={like} onShare={setToast} onReply={setReplyPost}
+              saved={savedIds.includes(postKey(post))} onSave={() => toggleSaved(post)} onSignal={recordSignal} onReport={setReportPost} />
+          : null}
       </div>)}
     </section>
     {uploadOpen && <Upload userId={userId} onClose={() => setUploadOpen(false)} onCreated={refresh} />}
