@@ -411,6 +411,7 @@ export default function VideoWavesPage() {
   const interestsRef = useRef({ signals: [], choices: [] })
   const exhaustedChannelsRef = useRef(new Set())
   const userIdRef = useRef(userId)
+  const refreshIdRef = useRef(0)
   userIdRef.current = userId
   const shownPosts = posts.filter((post) => channel === 'all' || (channel === 'friends' ? post.kind === 'friend' : post.kind === 'curated' && post.channel_slug === channel))
 
@@ -482,46 +483,128 @@ export default function VideoWavesPage() {
     if (slug === 'all' && channel !== 'all') void refresh()
   }
 
-  async function refresh() {
+  // Put a definite ceiling on any individual feed fetch. A stalled private
+  // query must not leave the whole page on a spinner indefinitely.
+  function withFeedTimeout(promise, label, milliseconds = 12000) {
+    let timer
+    const limit = new Promise((_, reject) => {
+      timer = window.setTimeout(() => reject(new Error(label + ' timed out')), milliseconds)
+    })
+    return Promise.race([promise, limit]).finally(() => window.clearTimeout(timer))
+  }
+
+  function refresh() {
+    const requestId = ++refreshIdRef.current
     setLoading(true)
     setError('')
-    try {
-      // Guests get the published curated feed; account-only friend posts stay private.
-      const [friendsResult, curatedResult] = await Promise.allSettled([userId ? loadVideoWaves(userId) : Promise.resolve([]), loadCuratedWaves()])
-      if (friendsResult.status === 'rejected' && curatedResult.status === 'rejected') throw friendsResult.reason
-      if (friendsResult.status === 'rejected') console.warn('[waves] friend feed unavailable', friendsResult.reason)
-      if (curatedResult.status === 'rejected') console.warn('[waves] curated feed unavailable', curatedResult.reason)
-      const friends = friendsResult.status === 'fulfilled' ? friendsResult.value : []
-      const curated = curatedResult.status === 'fulfilled' ? curatedResult.value : []
-      const [signalsResult, choicesResult] = userId ? await Promise.all([
-        supabase.from('waves_video_signals')
-          .select('video_key,channel_slug,tags,watched_ms,plays,completions,skips,rewatches,liked,saved,updated_at')
-          .eq('user_id', userId).order('updated_at', { ascending: false }).limit(1000),
-        supabase.from('waves_channel_choices').select('channel_slug,visits').eq('user_id', userId),
-      ]) : [{ data: [], error: null }, { data: [], error: null }]
-      if (signalsResult.error) console.warn('[waves] preferences unavailable', signalsResult.error.message)
-      if (choicesResult.error) console.warn('[waves] channel choices unavailable', choicesResult.error.message)
-      interestsRef.current = { signals: signalsResult.data || [], choices: choicesResult.data || [] }
-      nextPageRef.current = 1
-      hasMoreRef.current = curatedResult.status === 'fulfilled' && curated.length > 0
-      exhaustedChannelsRef.current = new Set()
-      const rows = rankWavesFeed(friends, curated, signalsResult.data || [], choicesResult.data || [], savedIds)
+    nextPageRef.current = 1
+    hasMoreRef.current = false
+    exhaustedChannelsRef.current = new Set()
+    let completed = 0
+    let failed = 0
+    let firstBatchShown = false
+    let friends = []
+    let curated = []
+
+    const publishAvailable = () => {
+      if (requestId !== refreshIdRef.current) return
+      const rows = rankWavesFeed(
+        friends, curated, interestsRef.current.signals,
+        interestsRef.current.choices, savedIds,
+      )
+      if (!rows.length) {
+        if (completed === 2) {
+          setLoading(false)
+          setPosts([])
+          setActiveId(null)
+          if (failed === 2) setError('Could not load video Waves. Check your connection and try again.')
+        }
+        return
+      }
+
+      // The curated feed and friends' private posts are independent: whichever
+      // finishes first can render, without waiting for the other or preferences.
+      setLoading(false)
+      if (firstBatchShown) {
+        // Don't jump the playing video around when a later batch arrives.
+        setPosts((current) => {
+          const existing = new Set(current.map(postKey))
+          const additions = rows.filter((post) => !existing.has(postKey(post)))
+          return additions.length ? [...current, ...additions] : current
+        })
+        return
+      }
+
+      firstBatchShown = true
       setPosts(rows)
       const requested = new URLSearchParams(window.location.search).get('wave')
-      const selected = rows.find((row) => (row.kind === 'curated' ? 'curated:' : '') + row.id === requested)
-      setActiveId(selected ? postKey(selected) : rows[0] ? postKey(rows[0]) : null)
+      const selected = rows.find((row) =>
+        (row.kind === 'curated' ? 'curated:' : '') + row.id === requested
+      )
+      setActiveId(selected ? postKey(selected) : postKey(rows[0]))
       if (selected) requestAnimationFrame(() => {
         const cards = feedRef.current?.querySelectorAll('[data-video-wave-id]') || []
         const card = [...cards].find((element) => element.dataset.videoWaveId === postKey(selected))
         card?.scrollIntoView({ block: 'start' })
       })
-    } catch (loadError) {
-      console.error('[wavo] video waves', loadError)
-      setError('Could not load your video Waves. Try again.')
-    } finally { setLoading(false) }
+    }
+
+    const loadBatch = (label, request, onSuccess) => {
+      void withFeedTimeout(request, label)
+        .then((value) => {
+          if (requestId !== refreshIdRef.current) return
+          onSuccess(value)
+        })
+        .catch((loadError) => {
+          if (requestId !== refreshIdRef.current) return
+          failed += 1
+          console.warn('[waves] ' + label + ' unavailable', loadError)
+        })
+        .finally(() => {
+          if (requestId !== refreshIdRef.current) return
+          completed += 1
+          publishAvailable()
+        })
+    }
+
+    loadBatch('friend feed', userId ? loadVideoWaves(userId) : Promise.resolve([]), (value) => {
+      friends = value
+    })
+    loadBatch('curated feed', loadCuratedWaves(), (value) => {
+      curated = value
+      hasMoreRef.current = curated.length > 0
+    })
+
+    // Personalisation enriches future pages, but is not required to display
+    // the first videos. Keep friend visibility enforced by the existing queries.
+    if (userId) {
+      const signalsRequest = supabase.from('waves_video_signals')
+        .select('video_key,channel_slug,tags,watched_ms,plays,completions,skips,rewatches,liked,saved,updated_at')
+        .eq('user_id', userId).order('updated_at', { ascending: false }).limit(1000)
+      const choicesRequest = supabase.from('waves_channel_choices')
+        .select('channel_slug,visits').eq('user_id', userId)
+      void withFeedTimeout(Promise.all([signalsRequest, choicesRequest]), 'Waves preferences')
+        .then(([signals, choices]) => {
+          if (requestId !== refreshIdRef.current) return
+          if (signals.error) console.warn('[waves] preferences unavailable', signals.error.message)
+          if (choices.error) console.warn('[waves] channel choices unavailable', choices.error.message)
+          interestsRef.current = {
+            signals: signals.data || [],
+            choices: choices.data || [],
+          }
+        })
+        .catch((preferenceError) => {
+          console.warn('[waves] preferences deferred', preferenceError)
+        })
+    } else {
+      interestsRef.current = { signals: [], choices: [] }
+    }
   }
 
-  useEffect(() => { if (!booting) refresh() }, [userId, booting])
+  useEffect(() => {
+    if (!booting) refresh()
+    return () => { refreshIdRef.current += 1 }
+  }, [userId, booting])
 
   async function loadMore() {
     if (!userId || !hasMoreRef.current || loadingMoreRef.current || loading) return
