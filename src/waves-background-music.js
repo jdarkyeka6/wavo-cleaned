@@ -164,7 +164,9 @@ function styleButton(button) {
 
 function refreshButton(button) {
   if (!button) return
-  button.textContent = enabled ? '♫ On' : '♫ Off'
+  const label = enabled ? '♫ On' : '♫ Off'
+  // Avoid triggering our own subtree MutationObserver on every scan.
+  if (button.textContent !== label) button.textContent = label
   button.setAttribute('aria-label', enabled ? 'Turn Waves background music off' : 'Turn Waves background music on')
   button.title = enabled ? 'Background music on' : 'Background music off'
   button.setAttribute('aria-pressed', enabled ? 'true' : 'false')
@@ -230,7 +232,17 @@ document.addEventListener('pointerdown', (event) => {
 
 document.addEventListener('visibilitychange', () => updateGain(true))
 
-const observer = new MutationObserver(scan)
+// Batch DOM-change notifications. Rendering a music toggle should never
+// monopolise the main thread or starve the Waves React app.
+let scanPending = false
+const observer = new MutationObserver(() => {
+  if (scanPending) return
+  scanPending = true
+  requestAnimationFrame(() => {
+    scanPending = false
+    scan()
+  })
+})
 function start() {
   scan()
   observer.observe(document.documentElement, { childList: true, subtree: true })
