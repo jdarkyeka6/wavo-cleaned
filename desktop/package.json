@@ -1,0 +1,46 @@
+{
+  "name": "wavo-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Wavo for Windows",
+  "main": "main.cjs",
+  "author": "Wavo",
+  "repository": "https://github.com/jdarkyeka6/wavo-cleaned",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win nsis --x64 --publish never",
+    "release:win": "electron-builder --win nsis --x64 --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
+  },
+  "devDependencies": {
+    "electron": "^45.3.1",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "lol.wavo.desktop",
+    "productName": "Wavo",
+    "asar": true,
+    "directories": { "output": "dist" },
+    "files": ["main.cjs", "assets/favicon.svg", "package.json"],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "assets/favicon.svg"
+    },
+    "nsis": {
+      "artifactName": "Wavo-Setup.exe",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Wavo",
+      "uninstallDisplayName": "Wavo"
+    },
+    "publish": [{
+      "provider": "github",
+      "owner": "jdarkyeka6",
+      "repo": "wavo-cleaned"
+    }]
+  }
+}
