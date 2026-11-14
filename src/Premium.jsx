@@ -4,6 +4,8 @@ import { useCosmeticCatalogue } from "./useCosmetics";
 import { nameStyleProps } from "./lib/cosmeticStyles";
 import { isNativeApp } from "./lib/platform";
 import { PLANS, DEFAULT_PLAN, CURRENCY, formatMonthly } from "./lib/pricing";
+import WelcomeOfferPicker from "./WelcomeOfferPicker";
+import { canOfferWelcomeDeal, welcomePriceForMonth } from "./lib/welcomeOffers";
 
 /**
  * Premium.
@@ -75,6 +77,7 @@ export default function Premium({
 }) {
   const { list } = useCosmeticCatalogue();
   const [plan, setPlan] = useState(DEFAULT_PLAN);
+  const [welcomeOffer, setWelcomeOffer] = useState("half1");
 
   // Never render any Premium/purchase UI inside the native iOS app —
   // Apple's anti-steering rules forbid it. Web (wavo.lol) is unaffected.
@@ -82,6 +85,7 @@ export default function Premium({
 
   const nameStyles = list.filter((c) => c.kind === "name_style");
   const chosen = PLANS[plan] ?? PLANS[DEFAULT_PLAN];
+  const showWelcome = canOfferWelcomeDeal(plan);
   const { free: FREE, premium: PREMIUM } = featureLists(list);
 
   return (
@@ -167,19 +171,20 @@ export default function Premium({
                 </button>
               ))}
             </div>
+            {showWelcome && <WelcomeOfferPicker price={chosen.price} selected={welcomeOffer} onChange={setWelcomeOffer} />}
             <button
               className="premium-cta"
-              onClick={() => onSubscribe(plan)}
+              onClick={() => onSubscribe(plan, showWelcome ? welcomeOffer : undefined)}
               disabled={busy}
             >
               {busy
                 ? "Opening…"
-                : `Get Premium — ${formatMonthly(chosen.price)}`}
+                : `Get Premium — ${showWelcome ? `A${welcomePriceForMonth(chosen.price, welcomeOffer, 1).toFixed(2)} first month` : formatMonthly(chosen.price)}`}
             </button>
             {error && <p className="premium-error">{error}</p>}
             <p className="premium-fineprint">
               Billed monthly in {CURRENCY}. Ask a parent before you subscribe.
-              Cancel any time.
+              Cancel any time. Welcome offers are subject to first-time eligibility.
             </p>
           </>
         )}

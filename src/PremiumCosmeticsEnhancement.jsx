@@ -208,7 +208,7 @@ export default function PremiumCosmeticsEnhancement() {
     if (req?.kind === 'premium' && !isNativeApp) setShowPremium(true)
   }
 
-  async function startCheckout(plan) {
+  async function startCheckout(plan, welcomeOffer) {
     if (isNativeApp) return
     const planId = typeof plan === 'string' && PLANS[plan] ? plan : DEFAULT_PLAN
     setCheckoutBusy(true)
@@ -220,7 +220,7 @@ export default function PremiumCosmeticsEnhancement() {
       const response = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ plan: planId }),
+        body: JSON.stringify({ plan: planId, ...(welcomeOffer ? { welcomeOffer } : {}) }),
       })
       const raw = await response.text()
       let payload = null
