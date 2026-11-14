@@ -61,6 +61,7 @@ export async function markDmRead(userId, friendId) {
   const chatId = [userId, friendId].sort().join("_");
   const { error } = await supabase.from("messages").update({ is_read: true, read_at: new Date().toISOString() }).eq("chat_id", chatId).eq("receiver_id", userId).eq("is_read", false);
   if (error) throw error;
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("wavo:dm-read", { detail: { friendId } }));
 }
 
 export async function markAllNotificationsRead(userId) {

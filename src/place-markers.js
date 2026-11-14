@@ -30,8 +30,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
     const head = lower(parts[0])
 
     if (!parts.length || head === 'home') return { kind: 'home' }
-    if (head === 'inbox' || head === 'messages') return { kind: 'inbox' }
-    if (head === 'chat') return { kind: 'chat', value: clean(parts.slice(1).join('/')) || readSession(LAST_CHAT_KEY) }
+    if (head === 'inbox' || head === 'messages' || (head === 'chats' && parts.length === 1)) return { kind: 'inbox' }
+    if (head === 'chat' || head === 'chats') return { kind: 'chat', value: clean(parts.slice(1).join('/')) || readSession(LAST_CHAT_KEY) }
     if (head === 'spaces' || head === 'groups') return { kind: 'spaces' }
     if (head === 'space') return { kind: 'space', value: clean(parts.slice(1).join('/')) || readSession(LAST_SPACE_KEY) }
     if (head === 'profile' || head === 'you' || head === 'settings') return { kind: 'profile' }
@@ -70,6 +70,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
   function chatUsername() {
     const topbar = document.querySelector('.chat-screen .chat-topbar')
     if (!topbar) return ''
+    if (topbar.dataset.wavoUsername) return topbar.dataset.wavoUsername
     const handle = [...topbar.querySelectorAll('span')]
       .map((node) => clean(node.textContent))
       .find((value) => value.startsWith('@'))
@@ -141,7 +142,9 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
         return false
       }
       if (!inboxReady()) {
-        clickNav('Inbox')
+        const back = document.querySelector('.chat-screen .chat-back-button, .space-conversation-screen .back-button')
+        if (back) back.click()
+        else clickNav('Inbox')
         return false
       }
       const button = friendButton(wanted)
@@ -168,7 +171,9 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
         return false
       }
       if (!spacesReady()) {
-        clickNav('Spaces')
+        const back = document.querySelector('.chat-screen .chat-back-button, .space-conversation-screen .back-button')
+        if (back) back.click()
+        else clickNav('Spaces')
         return false
       }
       const button = spaceButton(wanted)
@@ -197,7 +202,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
   }
 
   function syncFromDom({ replace = false } = {}) {
-    if (restoreIntent) return
+    if (restoreIntent || (!parseIntent() && !['/login', '/signup'].includes(currentPath()))) return
 
     if (document.querySelector('.wpc-modal')) {
       setPath('/subscriptions', { replace })
@@ -236,10 +241,16 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
   function run() {
     frame = 0
     if (restoreIntent) {
+      if (!document.querySelector('.app-shell')) {
+        restoreStartedAt = Date.now()
+        return
+      }
       const done = fulfil(restoreIntent)
       if (done || Date.now() - restoreStartedAt > RESTORE_TIMEOUT) {
         restoreIntent = null
         syncFromDom({ replace: true })
+      } else if (document.querySelector('.app-shell')) {
+        window.setTimeout(schedule, 200)
       }
       return
     }

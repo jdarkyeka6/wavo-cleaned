@@ -64,6 +64,8 @@ import CommandPalette from "./CommandPalette";
 import "./mobile-ux.css";
 import { OfflineBanner, Onboarding, UniversalSearch, QuickAccess, ChatTools, ReactionSettings, PullToRefresh } from "./MobileUX";
 import { cacheAppData, loadCachedAppData, cacheMessages, loadCachedMessages, getDraft, setDraft, getUxPrefs, updateUxPrefs, rememberRecent, queueOutbox, getOutbox, removeOutboxItem } from "./offline";
+import { useInboxActivity } from "./useInboxActivity";
+import { sortInboxFriends } from "./lib/inboxActivity";
 import { getChatPins, setChatPinned, getNicknames, setNickname, deleteDmMessage, deleteSpaceMessage, scheduleDmMessage, markDmRead } from "./uxData";
 
 const GENERIC_ERROR = "Sorry, something went wrong. Please try again.";
@@ -341,10 +343,12 @@ function SpacesScreen({ spaces, selectedSpace, setSelectedSpace, messages, messa
   );
 }
 
-function InboxScreen({ friends, requests, selectedFriend, setSelectedFriend, messages, messageText, setMessageText, sendMessage, userId, actions, nicknames = {} }) {
+function InboxScreen({ friends, requests, selectedFriend, setSelectedFriend, messages, messageText, setMessageText, sendMessage, userId, actions, nicknames = {}, activity = {} }) {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const sortedFriends = sortInboxFriends(friends, activity);
 
   async function runSearch(e) {
     e.preventDefault();
@@ -363,14 +367,14 @@ function InboxScreen({ friends, requests, selectedFriend, setSelectedFriend, mes
   }
 
   return (
-    <div className="screen">
+    <div className="screen wavo-inbox-screen">
       <div className="screen-title"><div><span className="eyebrow">MESSAGES</span><h1>Inbox</h1><p>Persistent conversations with people you actually added.</p></div></div>
       {requests.length > 0 && <section><div className="section-heading"><h2>Friend requests</h2></div><div className="request-list">{requests.map((r) => <div className="friend-row" key={r.id}><Avatar profile={r.sender} size="sm" /><div><strong>{r.sender?.username}</strong><span>wants to connect</span></div><button className="chip active" onClick={() => actions.respondRequest(r.id, "accepted")}>Accept</button><button className="chip" onClick={() => actions.respondRequest(r.id, "declined")}>Decline</button></div>)}</div></section>}
-      <details className="compact-action-menu add-friend-menu">
-        <summary><UserPlus size={18} /><span>Add someone</span></summary>
-        <div className="add-friend-card"><form onSubmit={runSearch}><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search username" /><button>{searching ? "…" : "Search"}</button></form>{results.map((p) => <div className="friend-row search-result" key={p.id}><Avatar profile={p} size="sm" /><div><strong>{p.username}</strong><span>{p.status || "Wavo user"}</span></div><button onClick={() => actions.addFriend(p.id)}>Add</button></div>)}</div>
-      </details>
-      <section><div className="section-heading"><h2>Friends</h2><span className="tiny-pill">{friends.length}</span></div>{friends.length ? <div className="friend-list">{friends.map((friend) => <button className="friend-row friend-button" key={friend.id} onClick={() => setSelectedFriend(friend)}><Avatar profile={friend} size="md" /><div><strong>{friend.username}</strong><span>{friend.status || "Tap to message"}</span></div><MessageCircle size={18} /></button>)}</div> : <div className="empty-card"><MessageCircle /><strong>No conversations yet</strong><span>Add a friend above, then messages stay here instead of disappearing.</span></div>}</section>
+      <div className="wavo-add-friend">
+        <button type="button" className="wavo-add-friend-toggle" aria-expanded={addOpen} aria-controls="wavo-add-friend-form" onClick={() => setAddOpen(open => !open)}><UserPlus size={18} /><span>Add someone</span></button>
+        {addOpen && <div className="add-friend-card" id="wavo-add-friend-form"><form onSubmit={runSearch}><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search username" /><button>{searching ? "…" : "Search"}</button></form>{results.map((p) => <div className="friend-row search-result" key={p.id}><Avatar profile={p} size="sm" /><div><strong>{p.username}</strong><span>{p.status || "Wavo user"}</span></div><button onClick={() => actions.addFriend(p.id)}>Add</button></div>)}</div>}
+      </div>
+      <section><div className="section-heading"><h2>Friends</h2><span className="tiny-pill">{friends.length}</span></div>{friends.length ? <div className="friend-list">{sortedFriends.map((friend) => { const unread = Boolean(activity[friend.id]?.unread); return <button className={`friend-row friend-button${unread ? " has-unread" : ""}`} key={friend.id} aria-label={`${friend.username}${unread ? ", unread messages" : ""}`} onClick={() => setSelectedFriend(friend)}><Avatar profile={friend} size="md" /><div><strong>{friend.username}</strong><span className="wavo-inbox-subtitle">{unread ? "New message" : friend.status || "Tap to message"}</span></div>{unread ? <span className="wavo-unread-dot" aria-hidden="true" /> : <MessageCircle size={18} />}</button>; })}</div> : <div className="empty-card"><MessageCircle /><strong>No conversations yet</strong><span>Add a friend above, then messages stay here instead of disappearing.</span></div>}</section>
     </div>
   );
 }
@@ -512,6 +516,7 @@ export default function App() {
   const [undoSend, setUndoSend] = useState(null);
 
   const userId = session?.user?.id;
+  const inboxActivity = useInboxActivity(userId, data.friends, selectedFriend?.id);
 
   useEffect(() => {
     const setConnection = () => setOnline(navigator.onLine);
@@ -559,7 +564,7 @@ export default function App() {
     const cached = loadCachedMessages(userId, cacheKey);
     if (cached.length) setMessages(cached);
     setMessageText(getDraft(userId, cacheKey));
-    markDmRead(userId, selectedFriend.id).catch(() => {});
+    if (document.visibilityState === "visible") markDmRead(userId, selectedFriend.id).catch(() => {});
     const load = () => getDmMessages(userId, selectedFriend.id).then((r) => { setMessages(r.messages); cacheMessages(userId, cacheKey, r.messages); }).catch(() => {});
     load();
     const channel = supabase.channel(`wavo-dm:${chatId}`).on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` }, load).subscribe();
@@ -752,7 +757,7 @@ export default function App() {
       <PullToRefresh onRefresh={refresh}><div className="app-content">
         {tab === "home" && <HomeScreen {...data} userId={userId} actions={actions} />}
         {tab === "spaces" && <SpacesScreen spaces={data.spaces} selectedSpace={selectedSpace} setSelectedSpace={setSelectedSpace} messages={messages} messageText={messageText} setMessageText={setMessageText} sendMessage={sendCurrentMessage} plans={data.plans} polls={data.polls} activities={data.activities} userId={userId} actions={actions} />}
-        {tab === "inbox" && <InboxScreen friends={data.friends} requests={data.requests} selectedFriend={selectedFriend} setSelectedFriend={setSelectedFriend} messages={messages} messageText={messageText} setMessageText={setMessageText} sendMessage={sendCurrentMessage} userId={userId} actions={actions} nicknames={data.nicknames} />}
+        {tab === "inbox" && <InboxScreen friends={data.friends} requests={data.requests} selectedFriend={selectedFriend} setSelectedFriend={setSelectedFriend} messages={messages} messageText={messageText} setMessageText={setMessageText} sendMessage={sendCurrentMessage} userId={userId} actions={actions} nicknames={data.nicknames} activity={inboxActivity} />}
         {tab === "you" && <ProfileScreen profile={data.profile} posts={data.posts.filter((p) => p.author_id === userId)} userId={userId} onPostReact={actions.reactPost} onPostDelete={actions.deletePost} onNewPost={() => actions.openCreate("post")} privacy={data.privacy} locations={data.locations.filter((l) => l.owner_id === userId)} onPrivacy={updatePrivacy} onProfileSaved={refresh} onEnableNotifications={enableNotifications} onStopLocations={stopLocations} onLogout={() => supabase.auth.signOut()} />}
       </div></PullToRefresh>
       {!isDeepView && <BottomNav tab={tab} setTab={(next) => { setTab(next); if (next !== "spaces") setSelectedSpace(null); if (next !== "inbox") setSelectedFriend(null); }} />}

@@ -19,4 +19,7 @@ jobs:
       - run: node --test tests/offline-queue.test.mjs
       - run: node --test tests/conversation-watch.test.mjs
       - run: node --test tests/push-destination.test.mjs
+      - run: node --test tests/app-routes.test.mjs
+      - run: node --test tests/inbox-activity.test.mjs
       - run: npm run build
+      - run: node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; const html=fs.readFileSync('dist/index.html','utf8'); assert.match(html,/src=\"\\/assets\\//); assert.doesNotMatch(html,/(?:src|href)=\"\\.\\/assets\\//);"
