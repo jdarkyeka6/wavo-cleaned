@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - fix/china-callkit-review
     paths:
       - .github/testflight-trigger
       - .github/workflows/ios-testflight.yml

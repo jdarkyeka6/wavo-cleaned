@@ -2,6 +2,7 @@ import { createElement as h, useEffect, useRef, useState } from 'react'
 import { Mic, MicOff, Phone, PhoneOff, Video, VideoOff, X } from 'lucide-react'
 import { supabase } from './supabaseClient'
 import { createCall, getOpenCalls, updateCallStatus } from './callData'
+import { getCallKitState, callKitSupported } from './callKitBridge'
 import './chat-motion-calls.css'
 
 const ICE_SERVERS = [
@@ -22,6 +23,15 @@ function isTerminalStatus(status) {
 }
 
 export default function ChatMotionCalls() {
+  const [callsAllowed, setCallsAllowed] = useState(!callKitSupported())
+  useEffect(() => {
+    if (!callKitSupported()) return
+    let live = true
+    getCallKitState().then(state => {
+      if (live) setCallsAllowed(state?.callsAllowed === true)
+    }).catch(() => { if (live) setCallsAllowed(false) })
+    return () => { live = false }
+  }, [])
   const [activeCall, setActiveCall] = useState(null)
   const [incomingCall, setIncomingCall] = useState(null)
   const [phase, setPhase] = useState('idle')
@@ -300,6 +310,7 @@ export default function ChatMotionCalls() {
   }
 
   async function startOutgoingCall() {
+    if (!callsAllowed) { setError('Calls are unavailable for this App Store region.'); return }
     if (activeCallRef.current || incomingCallRef.current) return
     setError('')
     setPhase('preparing')
@@ -338,6 +349,7 @@ export default function ChatMotionCalls() {
   startCallRef.current = startOutgoingCall
 
   async function acceptIncoming() {
+    if (!callsAllowed) return
     const pending = incomingCallRef.current
     if (!pending) return
     setError('')
@@ -499,6 +511,13 @@ export default function ChatMotionCalls() {
         return
       }
 
+      if (!callsAllowed) {
+        topbar.querySelector('.wavo-video-call-button')?.remove()
+        topbar.classList.remove('wavo-call-ready')
+        button = null
+        return
+      }
+
       if (!topbar.querySelector('.wavo-video-call-button')) {
         button = document.createElement('button')
         button.type = 'button'
@@ -523,9 +542,10 @@ export default function ChatMotionCalls() {
       if (button) button.remove()
       document.querySelector('.chat-topbar')?.classList.remove('wavo-call-ready')
     }
-  }, [])
+  }, [callsAllowed])
 
   useEffect(() => {
+    if (!callsAllowed) { setIncomingCall(null); return undefined }
     let mounted = true
     let incomingChannel = null
     let outgoingChannel = null
