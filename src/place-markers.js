@@ -142,7 +142,9 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
         return false
       }
       if (!inboxReady()) {
-        clickNav('Inbox')
+        const back = document.querySelector('.chat-screen .chat-back-button, .space-conversation-screen .back-button')
+        if (back) back.click()
+        else clickNav('Inbox')
         return false
       }
       const button = friendButton(wanted)
@@ -169,7 +171,9 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
         return false
       }
       if (!spacesReady()) {
-        clickNav('Spaces')
+        const back = document.querySelector('.chat-screen .chat-back-button, .space-conversation-screen .back-button')
+        if (back) back.click()
+        else clickNav('Spaces')
         return false
       }
       const button = spaceButton(wanted)
@@ -198,7 +202,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
   }
 
   function syncFromDom({ replace = false } = {}) {
-    if (restoreIntent || !parseIntent()) return
+    if (restoreIntent || (!parseIntent() && !['/login', '/signup'].includes(currentPath()))) return
 
     if (document.querySelector('.wpc-modal')) {
       setPath('/subscriptions', { replace })
@@ -237,6 +241,10 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined' && !window[
   function run() {
     frame = 0
     if (restoreIntent) {
+      if (!document.querySelector('.app-shell')) {
+        restoreStartedAt = Date.now()
+        return
+      }
       const done = fulfil(restoreIntent)
       if (done || Date.now() - restoreStartedAt > RESTORE_TIMEOUT) {
         restoreIntent = null
