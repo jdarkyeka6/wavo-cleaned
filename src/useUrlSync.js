@@ -39,7 +39,7 @@ export function useUrlSync({
     if (didInit.current) return;
     didInit.current = true;
 
-    const path = location.pathname;
+    const path = location.pathname;\n    // Support legacy /chat/:username links after a full browser refresh.\n    if (path.startsWith("/chat/")) {\n      navigate(`/chats/${path.slice("/chat/".length)}`, { replace: true });\n      return;\n    }
 
     if (path === "/signup") {
       setShowAuth(true);
