@@ -1,0 +1,165 @@
+name: Wavo TestFlight (shared certificate)
+on:
+  workflow_dispatch: {}
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          if [ -d /Applications/Xcode_26.3.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.3.app
+          else
+            echo "Xcode_26.3 not on this runner; using the default:"
+            ls -d /Applications/Xcode*.app || true
+          fi
+          xcodebuild -version
+      - name: Rebuild exact Wavo App Store icon
+        run: |
+          set -euo pipefail
+          icon_dir="ios/App/App/Assets.xcassets/AppIcon.appiconset"
+          source_b64="$icon_dir/WavoIconSource.b64"
+          source_png="$RUNNER_TEMP/wavo-icon-source.png"
+          icon="$icon_dir/AppIcon.appiconset/AppIcon-512@2x.png"
+          if [ ! -f "$icon" ]; then
+            icon="$icon_dir/AppIcon-512@2x.png"
+          fi
+          test -f "$source_b64" || { echo "::error::Missing exact Wavo icon source"; exit 1; }
+          base64 -D < "$source_b64" > "$source_png"
+          sips -z 1024 1024 "$source_png" --out "$icon" >/dev/null
+          echo "Rebuilt AppIcon from the exact user-supplied Wavo artwork."
+      - name: Validate final App Store icon
+        run: |
+          set -euo pipefail
+          icon="ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png"
+          test -f "$icon" || { echo "::error::Missing final app icon: $icon"; exit 1; }
+          width=$(sips -g pixelWidth "$icon" | awk '/pixelWidth/ {print $2}')
+          height=$(sips -g pixelHeight "$icon" | awk '/pixelHeight/ {print $2}')
+          alpha=$(sips -g hasAlpha "$icon" | awk '/hasAlpha/ {print $2}')
+          if [ "$width" != "1024" ] || [ "$height" != "1024" ]; then
+            echo "::error::App icon must be 1024x1024: $icon is ${width}x${height}"
+            exit 1
+          fi
+          if [ "$alpha" = "yes" ]; then
+            echo "::error::App Store icon must not contain alpha transparency"
+            exit 1
+          fi
+          echo "Final primary App Store icon is present, opaque and 1024x1024."
+      - name: Validate App Review account controls
+        run: |
+          set -euo pipefail
+          grep -q "AccountDeletion" src/main.jsx || { echo "::error::Account deletion UI is not mounted"; exit 1; }
+          grep -q "functions.invoke('delete-account'" src/AccountDeletion.jsx || { echo "::error::Account deletion UI is not wired to the server deletion flow"; exit 1; }
+          grep -q "Delete your account" public/privacy.html || { echo "::error::Privacy policy does not document account deletion"; exit 1; }
+          grep -q "Privacy Policy" src/ProfileSupportEnhancement.jsx || { echo "::error::Signed-in app has no direct Privacy Policy control"; exit 1; }
+          grep -q "terms.html" src/ProfileSupportEnhancement.jsx || { echo "::error::Signed-in app has no direct Terms control"; exit 1; }
+          grep -q "at least equivalent" public/privacy.html || { echo "::error::Privacy policy is missing service-provider protection language"; exit 1; }
+          grep -q "contact@builtbyjake.site" src/SupportPage.jsx || { echo "::error::Public Support page has no contact email"; exit 1; }
+          test -f docs/APP_REVIEW_BUILD_38.md || { echo "::error::App Review notes are missing"; exit 1; }
+          test -f supabase/functions/delete-account/index.ts || { echo "::error::delete-account Edge Function source is missing"; exit 1; }
+          echo "App Review account, support, privacy and legal requirements are present in the release source."
+      - name: Validate native IAP and AI consent model
+        run: |
+          set -euo pipefail
+          grep -q "premium: 'lol.wavo.premium.monthly'" src/storePurchases.js || { echo "::error::Premium Apple product is missing"; exit 1; }
+          grep -q "plus: 'lol.wavo.plus.monthly'" src/storePurchases.js || { echo "::error::Plus Apple product is missing"; exit 1; }
+          grep -q "pro: 'lol.wavo.pro.monthly'" src/storePurchases.js || { echo "::error::Pro Apple product is missing"; exit 1; }
+          grep -q "Use Apple In-App Purchase" src/storePurchases.js || { echo "::error::Native web-checkout guard is missing"; exit 1; }
+          grep -q "NativeStoreKitBridge" src/main.jsx || { echo "::error::Native StoreKit reconciliation/disclosure is not mounted"; exit 1; }
+          grep -q "Restore Purchases" src/PremiumProEnhancement.jsx || { echo "::error::Restore Purchases UI is missing"; exit 1; }
+          grep -q "Manage Subscription" src/PremiumProEnhancement.jsx || { echo "::error::Manage Subscription UI is missing"; exit 1; }
+          grep -q "Apple In-App Purchase" docs/APP_REVIEW_BUILD_38.md || { echo "::error::Review notes do not describe Apple IAP"; exit 1; }
+          if grep -qi "free-only" public/terms.html docs/APP_REVIEW_BUILD_38.md; then
+            echo "::error::Stale free-only App Store wording remains"
+            exit 1
+          fi
+          grep -q "OpenAI" src/SupportPage.jsx || { echo "::error::AI provider disclosure is missing from Support"; exit 1; }
+          grep -q "grantThirdPartyAiConsent" src/SupportPage.jsx || { echo "::error::Explicit Support AI consent is missing"; exit 1; }
+          grep -q "ensureThirdPartyAiConsent" src/premiumProData.js || { echo "::error::Paid AI features are not consent-gated"; exit 1; }
+          grep -Fq '["plus","pro","vip"].includes(tier)' supabase/functions/wavo-pro-ai/index.ts || { echo "::error::Native Plus is not entitled to Wavo AI"; exit 1; }
+          grep -Fq "source === 'stripe_plus'" src/premiumProData.js || { echo "::error::Legacy Stripe Plus entitlement mapping is missing"; exit 1; }
+          grep -Fq 'const aiEntitled = plus || pro' src/PlusPlanEnhancement.jsx || { echo "::error::Plus/Pro AI UI entitlement is missing"; exit 1; }
+          grep -Fq 'Included with Plus' src/PremiumProEnhancement.jsx || { echo "::error::Paid plan current/included state regression"; exit 1; }
+          grep -Fq 'platform: getPlatform()' src/SupportPage.jsx || { echo "::error::Support AI is not receiving the client platform"; exit 1; }
+          grep -Fq 'Do not mention website prices' supabase/functions/support-ai/index.ts || { echo "::error::Native Support AI purchase-steering guard is missing"; exit 1; }
+          if grep -q "api.openai.com" supabase/functions/moderate-content/index.ts; then
+            echo "::error::Automatic message moderation still sends ordinary content to OpenAI"
+            exit 1
+          fi
+          grep -q "disables Google Analytics inside the native iOS app" public/privacy.html || { echo "::error::Native analytics disclosure is missing"; exit 1; }
+          echo "Native IAP, Plus/Pro entitlements, Support AI steering, AI consent and privacy checks passed."
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install npm dependencies
+        run: npm install
+      - name: Check the app config is present
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          missing=""
+          [ -z "$VITE_SUPABASE_URL" ] && missing="$missing VITE_SUPABASE_URL"
+          [ -z "$VITE_SUPABASE_ANON_KEY" ] && missing="$missing VITE_SUPABASE_ANON_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secret(s):$missing"
+            exit 1
+          fi
+          echo "Supabase config present."
+      - name: Build the current Wavo source
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_GIPHY_API_KEY: ${{ secrets.VITE_GIPHY_API_KEY }}
+        run: npm run build
+      - name: Verify the bundle carries the config
+        run: |
+          if ! grep -rq "supabase.co" dist/assets/*.js; then
+            echo "::error::Built bundle contains no Supabase URL - the app would black-screen."
+            exit 1
+          fi
+          echo "Bundle contains the Supabase URL."
+      - name: Sync web build into iOS
+        run: npx cap sync ios
+      - name: Set up Ruby and Fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: ios/App
+      - name: Bundle and validate iOS privacy manifest
+        working-directory: ios/App
+        run: |
+          plutil -lint App/PrivacyInfo.xcprivacy
+          bundle exec ruby <<'RUBY'
+          require 'xcodeproj'
+          project = Xcodeproj::Project.open('App.xcodeproj')
+          target = project.targets.find { |candidate| candidate.name == 'App' }
+          abort('App target missing') unless target
+          group = project.main_group.find_subpath('App', false)
+          abort('App group missing') unless group
+          ref = group.files.find { |file| file.path == 'PrivacyInfo.xcprivacy' } || group.new_file('PrivacyInfo.xcprivacy')
+          unless target.resources_build_phase.files_references.include?(ref)
+            target.resources_build_phase.add_file_reference(ref, true)
+          end
+          target.build_configurations.each do |config|
+            config.build_settings.delete('ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES')
+            config.build_settings['ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS'] = 'NO'
+          end
+          project.save
+          RUBY
+      - name: Build and upload to TestFlight
+        working-directory: ios/App
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+        run: bundle exec fastlane beta_shared
