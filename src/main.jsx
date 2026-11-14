@@ -18,6 +18,7 @@ import AccountDeletion from './AccountDeletion.jsx'
 import AccountRecoveryEnhancement from './AccountRecoveryEnhancement.jsx'
 import App from './App.jsx'
 import PublicPageMetadata from './PublicPageMetadata.jsx'
+import { AppRoute, RouteErrorBoundary } from './RouteFallback.jsx'
 import AdminRoute from './AdminRoute.jsx'
 import BlackPlanEnhancement from './BlackPlanEnhancement.jsx'
 import CallContinuityBridge from './CallContinuityBridge.jsx'
@@ -120,6 +121,7 @@ function WavoApp() {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
+    <RouteErrorBoundary>
     {isConfigured ? (
       isStandaloneWavesHost() ? (
         <VideoWavesPage />
@@ -133,12 +135,13 @@ createRoot(document.getElementById('root')).render(
           <Route path="/waves/video" element={<VideoWavesPage />} />
           <Route path="/support" element={<SupportPage />} />
           <Route path="/admin" element={<AdminRoute />} />
-          <Route path="*" element={<WavoApp />} />
+          <Route path="*" element={<AppRoute><WavoApp /></AppRoute>} />
         </Routes>
       </BrowserRouter>
       )
     ) : (
       <ConfigError />
     )}
+    </RouteErrorBoundary>
   </StrictMode>,
 )
