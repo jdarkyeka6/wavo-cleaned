@@ -145,6 +145,30 @@ export function ChatComposer({ userId, friend = null, space = null, value, onCha
     return () => window.removeEventListener("wavo:chat-drop", onDrop);
   }, [friend?.id, space?.id]);
 
+  function pasteImages(event) {
+    const clipboard = event.clipboardData;
+    const files = Array.from(clipboard?.files || []).filter((file) => file.type.startsWith("image/"));
+    const images = files.length ? files : Array.from(clipboard?.items || [])
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile()).filter(Boolean);
+    if (!images.length) return;
+    event.preventDefault();
+    if (busy) { setError("Please finish the current upload first."); return; }
+    const valid = images.filter((file) => file.size > 0 && file.size <= MAX_SUPABASE_FILE_BYTES);
+    const remaining = Math.max(0, 20 - droppedFiles.length);
+    const accepted = valid.slice(0, remaining).map((file) => {
+      if (file.name) return file;
+      const extension = file.type.split("/")[1]?.split("+")[0] || "png";
+      return new File([file], "clipboard-" + Date.now() + "." + extension, { type: file.type });
+    });
+    if (accepted.length) {
+      setDroppedFiles((current) => [...current, ...accepted].slice(0, 20));
+      setToolsOpen(false);
+    }
+    setError(valid.length !== images.length ? "Images must be non-empty and no larger than 25 MB." :
+      valid.length > remaining ? "You can attach up to 20 files at once." : "");
+  }
+
   async function sendDroppedFiles() {
     if (busy || !droppedFiles.length) return;
     setBusy(true);
@@ -460,7 +484,7 @@ export function ChatComposer({ userId, friend = null, space = null, value, onCha
         </section>
       )}
 
-      <form className="composer dm-composer restored-composer" onSubmit={(event) => { setToolsOpen(false); onSubmit(event); }}>
+      <form className="composer dm-composer restored-composer" onPaste={pasteImages} onSubmit={(event) => { setToolsOpen(false); onSubmit(event); }}>
         <input ref={mediaInputRef} className="attachment-input" type="file" onChange={chooseFile} accept="image/*,video/*" />
         <input ref={fileInputRef} className="attachment-input" type="file" onChange={chooseFile} accept=".pdf,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip" />
         <button type="button" className={`composer-tool plus-trigger ${toolsOpen ? "open" : ""}`} onClick={() => { setGifOpen(false); setToolsOpen((open) => !open); }} disabled={busy} aria-label="Add to chat"><Plus size={21} /></button>
