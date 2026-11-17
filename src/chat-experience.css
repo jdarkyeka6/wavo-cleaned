@@ -38,7 +38,9 @@
 .wavo-message-actions > button:hover, .wavo-reply-quote:hover { border-color: rgba(130,132,250,.65); background: #293a58; }
 .wavo-reply-quote { display: flex; margin: 0 0 7px; width: 100%; border-left: 3px solid #8f73e9; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-screen .dm-row { display: flex !important; gap: 8px; align-items: center; flex-wrap: nowrap; }
-.chat-screen .dm-row.mine { flex-direction: row-reverse; }
+.chat-screen .dm-row.mine { flex-direction: row !important; justify-content: flex-end !important; }
+.chat-screen .dm-row:not(.mine) { justify-content: flex-start !important; }
+@media (min-width: 900px) { .chat-screen .dm-row.mine > .wavo-message-actions { order: -1; } }
 .chat-screen .dm-row .dm-bubble { width: fit-content !important; flex: 0 1 auto; max-width: min(78%, 580px) !important; overflow-wrap: anywhere; }
 .space-chat-card .space-message { width: 100%; }
 .space-chat-card .space-message .wavo-message-sender { color: #9eb3ce; font-size: 11px; }
@@ -152,3 +154,28 @@
 .wavo-command-results p { padding:14px; color:#b6cbe3; }
 .wavo-command-dialog footer { padding:9px 14px; border-top:1px solid #34435d; color:#aebdda; font-size:11px; }
 @media(max-width:899px) { .wavo-command-trigger { display:none; } }
+
+/* Keep quick navigation off the composer; Ctrl/Cmd+K remains available. */
+body:has(.chat-screen, .space-chat-card) .wavo-command-trigger { display: none !important; }
+
+@media (min-width: 900px) {
+  /* The portal host can exist before any tools render. Do not allocate a blank column. */
+  html[data-wavo-ui="desktop-web"] :is(.chat-screen,.space-chat-card):not(:has(> .wpp-chat-host > .wpp-chat-power)) {
+    grid-template-columns: minmax(0, 1fr) 0px !important;
+  }
+  html[data-wavo-ui="desktop-web"] :is(.chat-screen,.space-chat-card):not(:has(> .wpp-chat-host > .wpp-chat-power)) > :is(.wpp-chat-host,.wavo-rail-ui) {
+    display: none !important;
+  }
+  html[data-wavo-ui="desktop-web"] .chat-screen:not(:has(> .wpp-chat-host > .wpp-chat-power)) .wavo-plus-ai-host {
+    right: 16px !important;
+  }
+  html[data-wavo-ui="desktop-web"] .chat-screen:not(:has(> .wpp-chat-host > .wpp-chat-power)) :is(.wavo-info-panel,.wavo-thread-panel) {
+    right: 8px; width: min(370px, calc(100% - 16px));
+  }
+  html[data-wavo-ui="desktop-web"] .chat-screen[data-wavo-rail-collapsed="true"]:has(> .wpp-chat-host > .wpp-chat-power) .chat-topbar {
+    padding-right: 58px !important;
+  }
+  html[data-wavo-ui="desktop-web"] .chat-screen:has(.wavo-plus-ai-host .wavo-ai-trigger) .dm-messages {
+    padding-bottom: 65px !important;
+  }
+}

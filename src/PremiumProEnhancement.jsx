@@ -98,6 +98,8 @@ async function resolveConversation(userId) {
   if (!userId) return null
   const dm = document.querySelector('.chat-screen')
   if (dm) {
+    const targetId = dm.dataset.wavoTargetId
+    if (targetId) return { kind: 'dm', targetId, label: dm.dataset.wavoTargetLabel || '', conversationId: [userId, targetId].sort().join('_'), root: dm }
     const canonical = [...dm.querySelectorAll('.chat-topbar span')]
       .map((node) => node.textContent?.trim() || '')
       .find((value) => value.startsWith('@'))

@@ -231,7 +231,7 @@ export default function ConversationExperience({ kind, friend, space, userId, me
   const openThread = (message) => setThread(message.reply_to ? messages.find((m) => m.id === message.reply_to) || message : message)
   const nameLabel = name || target?.username || target?.name || 'Conversation'
 
-  return <div className={kind === 'dm' ? 'chat-screen' : 'space-chat-card'} onDragEnter={enter} onDragOver={(e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault() }} onDragLeave={leave} onDrop={drop}>
+  return <div className={kind === 'dm' ? 'chat-screen' : 'space-chat-card'} data-wavo-target-id={targetId} data-wavo-target-label={target?.username || target?.name || ''} onDragEnter={enter} onDragOver={(e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault() }} onDragLeave={leave} onDrop={drop}>
     {kind === 'dm'
       ? <header className="chat-topbar"><button className="chat-back-button" onClick={onBack} aria-label="Back to Inbox"><ChevronLeft size={20}/><span>Inbox</span></button><Avatar profile={friend} size="sm"/><div><strong>{nameLabel}</strong><span>{friend?.status || 'Wavo friend'}</span></div><button className="wavo-chat-info-button" type="button" onClick={() => setInfo(!info)} aria-label="Conversation information"><Info size={18}/></button><button className="mobile-tools-button" onClick={onTools} aria-label="Chat tools">•••</button></header>
       : <div className="section-heading"><div><span className="eyebrow">PERSISTENT CHAT</span><h2>Conversation</h2></div><button className="wavo-chat-info-button" type="button" onClick={() => setInfo(!info)} aria-label="Space conversation information"><Info size={18}/></button></div>}
