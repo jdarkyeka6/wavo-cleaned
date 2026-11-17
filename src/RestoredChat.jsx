@@ -113,7 +113,32 @@ export function MessageContent({ message, mine = false }) {
     );
   }
 
-  return <p>{message?.content}</p>;
+  const content = String(message?.content || "");
+  const parts = content.split(/(https?:\/\/[^\s<>"']+)/gi);
+  const links = [];
+  const rendered = parts.map((part, index) => {
+    if (index % 2 === 0) return part;
+    const href = part.replace(/[.,!?;:)\]]+$/, "");
+    try {
+      const url = new URL(href);
+      if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return part;
+      if (!links.some((link) => link.href === url.href)) links.push(url);
+      return <span key={index}><a href={url.href} target="_blank" rel="noopener noreferrer" style={{color:"inherit",textDecoration:"underline",overflowWrap:"anywhere"}}>{href}</a>{part.slice(href.length)}</span>;
+    } catch { return part; }
+  });
+  if (!links.length) return <p>{content}</p>;
+  return <div style={{minWidth:0,overflowWrap:"anywhere"}}>
+    <p>{rendered}</p>
+    {links.slice(0, 3).map((url) => <a key={url.href} href={url.href} target="_blank" rel="noopener noreferrer"
+      style={{display:"flex",alignItems:"center",gap:10,padding:10,marginTop:8,border:"1px solid currentColor",borderRadius:12,color:"inherit",textDecoration:"none",maxWidth:320}}>
+      <span aria-hidden="true" style={{fontSize:24}}>🔗</span>
+      <span style={{minWidth:0,flex:1,display:"grid",gap:3}}>
+        <strong style={{overflowWrap:"anywhere"}}>{url.hostname}</strong>
+        <small style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{url.pathname === "/" ? "Website" : url.pathname}</small>
+        <small>Open website ↗</small>
+      </span>
+    </a>)}
+  </div>;
 }
 
 export function ChatComposer({ userId, friend = null, space = null, value, onChange, onSubmit, replyTo = null, onCancelReply }) {
