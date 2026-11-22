@@ -52,6 +52,7 @@ import UiEnhancements from './UiEnhancements.jsx'
 import UsernameSettings from './UsernameSettings.jsx'
 import WavoTogether from './WavoTogether.jsx'
 import VideoWavesPage from './VideoWavesPage.jsx'
+import WindowsDownload from './WindowsDownload.jsx'
 import { installAuthBootResilience } from './auth-boot-resilience.js'
 import { isConfigured } from './lib/config'
 import { installUiMode } from './lib/layout'
@@ -131,6 +132,7 @@ createRoot(document.getElementById('root')).render(
         <Routes>
           <Route path="/waves" element={<VideoWavesPage />} />
           <Route path="/waves/video" element={<VideoWavesPage />} />
+          <Route path="/download/windows" element={<WindowsDownload />} />
           <Route path="/support" element={<SupportPage />} />
           <Route path="/admin" element={<AdminRoute />} />
           <Route path="*" element={<WavoApp />} />

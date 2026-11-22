@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Wavo">
+  <defs>
+    <linearGradient id="bolt" x1="17" y1="14" x2="47" y2="49" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b226ff"/><stop offset="0.5" stop-color="#7b37ff"/><stop offset="1" stop-color="#2f9bff"/>
+    </linearGradient>
+    <linearGradient id="tile" x1="10" y1="6" x2="55" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff"/><stop offset="1" stop-color="#eeeeef"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000" flood-opacity=".16"/>
+    </filter>
+  </defs>
+  <rect x="3" y="3" width="58" height="58" rx="15" fill="url(#tile)" stroke="#d7d7db" filter="url(#shadow)"/>
+  <path d="M25.1 13.5h18.1c1.35 0 2.08 1.57 1.21 2.6l-7.07 8.43H47.4c1.42 0 2.12 1.72 1.13 2.72L29.65 50.3c-1.1 1.34-3.27.56-3.27-1.18V36.66h-9.72c-1.44 0-2.13-1.77-1.09-2.76l7.66-8.92h-8.68c-1.39 0-2.1-1.66-1.17-2.69L23.8 14.04c.34-.35.8-.54 1.3-.54Z" fill="url(#bolt)"/>
+</svg>
