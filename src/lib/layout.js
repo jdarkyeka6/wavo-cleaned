@@ -53,7 +53,7 @@ function applyViewportVars(root) {
 
   // When the keyboard is open, follow the visual viewport so composers sit
   // immediately above it. Otherwise, own exactly the drawable app viewport.
-  const height = keyboardOpen ? visibleViewportHeight : currentViewportHeight
+  // The visual viewport height excludes the on-screen keyboard. Adding\n  // offsetTop here and then translating the chat shell by offsetTop again\n  // double-counts iOS WKWebView's focus pan and leaves a blank keyboard gap.\n  const height = keyboardOpen ? Math.max(1, visualHeight) : currentViewportHeight
   const keyboard = keyboardOpen ? keyboardOverlap : 0
 
   root.style.setProperty('--wavo-viewport-width', `${visualWidth}px`)

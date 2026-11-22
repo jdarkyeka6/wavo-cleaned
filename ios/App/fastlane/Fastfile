@@ -61,83 +61,35 @@ platform :ios do
       lock_when_sleeps: false
     )
 
-    cert_args = {
-      api_key: api_key,
-      generate_apple_certs: true,
-      keychain_path: File.expand_path("~/Library/Keychains/#{keychain_name}-db"),
-      keychain_password: keychain_pw
-    }
+    # Reuse the existing Apple Distribution identity, including its private key.
+    # An API key alone cannot retrieve the private key from Apple.
+    # Fail safely instead of creating or revoking certificates.
+    require "base64"
+    require "tempfile"
+    p12_b64 = ENV["APPLE_DISTRIBUTION_P12_BASE64"].to_s.strip
+    p12_password = ENV["APPLE_DISTRIBUTION_P12_PASSWORD"].to_s
+    if p12_b64.empty? || p12_password.empty?
+      UI.user_error!("Reusable signing identity not configured. Add APPLE_DISTRIBUTION_P12_BASE64 and APPLE_DISTRIBUTION_P12_PASSWORD secrets. No certificates will be created or revoked.")
+    end
 
+    p12_file = Tempfile.new(["wavo-distribution", ".p12"])
     begin
-      cert(**cert_args)
-    rescue => e
-      msg = e.message.to_s
-      unless msg.downcase.include?("maximum number") && msg.downcase.include?("distribution certificate")
-        raise
-      end
-
-      require "time"
-
-      allowed_types = [
-        Spaceship::ConnectAPI::Certificate::CertificateType::DISTRIBUTION,
-        Spaceship::ConnectAPI::Certificate::CertificateType::IOS_DISTRIBUTION
-      ]
-
-      distribution_certs = Spaceship::ConnectAPI::Certificate.all.select do |candidate|
-        allowed_types.include?(candidate.certificate_type)
-      end
-
-      if distribution_certs.empty?
-        UI.user_error!("Apple reported the Distribution certificate limit, but no distribution certificates were returned for revocation.")
-      end
-
-      oldest = distribution_certs.min_by do |candidate|
-        begin
-          Time.parse(candidate.expiration_date.to_s)
-        rescue StandardError
-          Time.at(0)
-        end
-      end
-
-      UI.important(
-        "Distribution certificate limit reached. Revoking oldest distribution certificate " \
-        "#{oldest.display_name || oldest.name || oldest.id} (#{oldest.certificate_type}, expires #{oldest.expiration_date || 'unknown'}), then retrying."
+      p12_file.binmode
+      p12_file.write(Base64.strict_decode64(p12_b64))
+      p12_file.flush
+      import_certificate(
+        certificate_path: p12_file.path,
+        certificate_password: p12_password,
+        keychain_name: keychain_name,
+        keychain_password: keychain_pw
       )
-
-      revoked_id = oldest.id
-      oldest.delete!
-
-      # Apple can take noticeably longer than the DELETE request to release the
-      # Distribution-certificate slot. Do not revoke a second certificate just
-      # because the portal is eventually consistent. Poll until the specific
-      # certificate disappears, then give Apple a short extra settling window.
-      revocation_visible = false
-      12.times do |attempt|
-        sleep 5
-        remaining = Spaceship::ConnectAPI::Certificate.all.select do |candidate|
-          allowed_types.include?(candidate.certificate_type)
-        end
-        unless remaining.any? { |candidate| candidate.id == revoked_id }
-          revocation_visible = true
-          UI.success("Apple now reports the revoked Distribution certificate as gone.")
-          break
-        end
-        UI.message("Waiting for Apple certificate revocation to propagate (#{(attempt + 1) * 5}s / 60s)…")
-      end
-
-      if revocation_visible
-        # The Certificates API can stop listing the revoked certificate before
-        # Apple's certificate-creation quota has actually released the slot.
-        # A five-second delay was not enough in CI. Give the backend a full
-        # propagation window before asking for a replacement certificate.
-        UI.message("Certificate disappeared from the API. Waiting 90 seconds for Apple's creation quota to release the slot…")
-        sleep 90
-      else
-        UI.important("The revoked certificate is still visible after 60 seconds. Waiting 90 more seconds before one final creation attempt; no additional certificates will be revoked.")
-        sleep 90
-      end
-
-      cert(**cert_args)
+    ensure
+      p12_file.close!
+    end
+    # Verify the imported identity contains a usable signing private key.
+    identities = sh("security find-identity -v -p codesigning #{File.expand_path("~/Library/Keychains/#{keychain_name}-db")}", log: false)
+    unless identities.include?("Apple Distribution") || identities.include?("iPhone Distribution")
+      UI.user_error!("No valid Apple Distribution signing identity with private key was imported.")
     end
 
     sigh(
