@@ -97,14 +97,23 @@ export default function ChatMotionCalls() {
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error('Camera and microphone are not available on this device.')
     }
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: {
-        facingMode: 'user',
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-      },
-    })
+    let stream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: {
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      })
+    } catch (error) {
+      // No camera, blocked camera, or camera already in use must not prevent
+      // microphone calls. A microphone denial still fails normally.
+      if (!['NotFoundError', 'NotReadableError', 'OverconstrainedError', 'NotAllowedError'].includes(error?.name)) throw error
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+    }
+    setCameraOff(stream.getVideoTracks().length === 0)
     localStreamRef.current = stream
     if (localVideoRef.current) localVideoRef.current.srcObject = stream
     return stream
