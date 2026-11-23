@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { pickDriveUploadCandidate } from "./lib/driveResolveCandidate.js";
 
 function json(res, status, body) {
   return res.status(status).json(body);
@@ -72,6 +73,7 @@ export default async function handler(req, res) {
   const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&spaces=drive&pageSize=100&orderBy=createdTime%20desc&fields=${fields}`;
   const cutoff = Date.now() - 30 * 60 * 1000;
 
+  let sawAmbiguity = false;
   for (let attempt = 0; attempt < 8; attempt += 1) {
     if (attempt > 0) await wait(750);
 
@@ -82,17 +84,15 @@ export default async function handler(req, res) {
       return json(res, 502, { error: "Wavo couldn't confirm that Drive upload." });
     }
 
-    const candidates = (payload.files || []).filter((file) => {
-      const sameSize = Number(file?.size || -1) === size;
-      const created = new Date(file?.createdTime || 0).getTime();
-      return sameSize && Number.isFinite(created) && created >= cutoff;
+    const candidate = pickDriveUploadCandidate(payload.files, {
+      userId: user.id, fileName, size, cutoff,
     });
-
-    // Prefer the exact filename, but size + ownership + source + recency is a
-    // safe fallback for iOS filenames that Drive normalises after upload.
-    const match = candidates.find((file) => cleanName(file?.name) === fileName) || candidates[0];
-    if (match?.id) return json(res, 200, { fileId: match.id });
+    if (candidate.fileId) return json(res, 200, { fileId: candidate.fileId });
+    sawAmbiguity ||= candidate.ambiguous;
   }
 
+  if (sawAmbiguity) {
+    return json(res, 409, { error: "Several recent uploads match. Wavo can't safely identify this attachment; please retry the upload." });
+  }
   return json(res, 404, { error: "The file reached Google Drive, but Wavo couldn't identify it after retrying." });
 }

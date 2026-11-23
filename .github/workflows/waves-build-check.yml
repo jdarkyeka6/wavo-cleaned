@@ -15,6 +15,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: node --test tests/drive-resolve-candidate.test.mjs
       - run: node --test tests/wavesRecommendations.test.mjs
       - run: node --test tests/offline-queue.test.mjs
       - run: node --test tests/conversation-watch.test.mjs
