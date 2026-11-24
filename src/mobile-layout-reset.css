@@ -414,3 +414,36 @@ html[data-wavo-ui="mobile-app"][data-wavo-chat-keyboard="open"]
   .space-conversation-screen .composer {
   padding-bottom: 8px !important;
 }
+
+
+/* Auth screens must own their scroll independently of the fixed chat shell.
+ * The signup card is taller than a phone viewport, especially with the keyboard. */
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) #root > .auth-page {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0 !important;
+  max-height: 100%;
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  padding: calc(20px + env(safe-area-inset-top, 0px)) 14px calc(32px + env(safe-area-inset-bottom, 0px)) !important;
+  scroll-padding-bottom: 32px;
+}
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) #root > .auth-page > .auth-card {
+  flex: 0 0 auto;
+  margin-block: auto;
+  max-width: 100%;
+  min-width: 0;
+}
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) #root > .auth-page > .auth-card-signup {
+  margin-block: 0;
+}
+:is(html[data-wavo-ui="mobile-app"], html[data-wavo-ui="mobile-web"]) .auth-page input:not([type="checkbox"]) {
+  font-size: 16px !important;
+}
